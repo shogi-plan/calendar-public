@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>2人用予定調整カレンダー＋通話ルーム</title>
+<style>
+  body {
+    font-family: sans-serif;
+    margin: 0; padding: 1em;
+    font-size: 16px;
+  }
+  .title-container {
+    text-align: center;
+    margin-bottom: 1em;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    margin-bottom: 1em;
+    justify-content: center;
+    align-items: center;
+  }
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.2em;
+  }
+  input, select, button {
+    font-size: 1em;
+    padding: 0.4em 0.7em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    text-align: center;
+    padding: 0.3em;
+    vertical-align: top;
+    user-select: none;
+    word-break: break-word;
+  }
+  th {
+    position: sticky;
+    top: 0;
+    background: #f0f0f0;
+    z-index: 10;
+  }
+  th.weekend, td.weekend {
+    color: red;
+  }
+  th.holiday, td.holiday {
+    color: red;
+  }
+  td.selected {
+    border: 3px solid orange !important;
+    background-color: inherit !important;
+  }
+  td.both {
+    background-color: #ccffcc !important;
+  }
+  .userA {
+    color: blue;
+    font-weight: bold;
+  }
+  .userB {
+    color: green;
+    font-weight: bold;
+  }
+  .chat {
+    margin-top: 2em;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .chat-log {
+    border: 1px solid #ccc;
+    height: 200px;
+    overflow-y: auto;
+    padding: 0.5em;
+    background: #fafafa;
+  }
+  .chat-message {
+    margin-bottom: 0.5em;
+    white-space: pre-wrap;
+  }
+  @media screen and (max-width: 600px) {
+    table, thead, tbody, th, td, tr {
+      font-size: 12px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="title-container">
+  <h1>2人用予定調整カレンダー＋通話</h1>
+</div>
+
+<div class="controls">
+  <label>A：<input type="text" id="userAName" placeholder="名前" value="ユーザーA" /></label>
+  <label>B：<input type="text" id="userBName" placeholder="名前" value="ユーザーB" /></label>
+  <label><span style="font-size: 1.5em; font-weight: bold;">入力ユーザー切り替え：</span>
+    <select id="userSelect">
+      <option value="">選択して下さい</option>
+      <option value="A">A</option>
+      <option value="B">B</option>
+    </select>
+  </label>
+</div>
+
+<div class="controls">
+  <button id="btn-mark-ok">選択セルに○</button>
+  <button id="btn-mark-no">選択セルに×</button>
+  <button id="btn-clear-cell">選択セルを削除</button>
+  <button id="btn-clear-all">全データ削除</button>
+</div>
+
+<div class="controls">
+  <button id="btn-prev-week">前の週</button>
+  <button id="btn-today">今日へ戻る</button>
+  <button id="btn-next-week">次の週</button>
+</div>
+
+<table id="calendar"></table>
+
+<div class="chat">
+  <h2>チャット</h2>
+  <div class="chat-log" id="chatLog"></div>
+  <div class="controls" style="margin-top: 0.5em; gap: 0.5em;">
+    <input type="text" id="chatInput" placeholder="メッセージを入力" style="flex: 1; min-width: 0;" />
+    <button id="btn-send">送信</button>
+  </div>
+  <div class="controls" style="margin-top: 0.5em; gap: 0.5em;">
+    <button id="btn-call-start">通話開始</button>
+    <button id="btn-call-end">通話終了</button>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+// Firebase設定（省略不可のため各自設定してください）
+const firebaseConfig = {
+      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
+      authDomain: "calendar-chousei.firebaseapp.com",
+      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "calendar-chousei",
+      storageBucket: "calendar-chousei.firebasestorage.app",
+      messagingSenderId: "368704703397",
+      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+  };
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const userANameInput = document.getElementById('userAName');
+const userBNameInput = document.getElementById('userBName');
+const userSelect = document.getElementById('userSelect');
+const calendar = document.getElementById('calendar');
+const chatLog = document.getElementById('chatLog');
+const chatInput = document.getElementById('chatInput');
+
+const btnMarkOk = document.getElementById('btn-mark-ok');
+const btnMarkNo = document.getElementById('btn-mark-no');
+const btnClearCell = document.getElementById('btn-clear-cell');
+const btnClearAll = document.getElementById('btn-clear-all');
+const btnPrevWeek = document.getElementById('btn-prev-week');
+const btnToday = document.getElementById('btn-today');
+const btnNextWeek = document.getElementById('btn-next-week');
+const btnSend = document.getElementById('btn-send');
+
+const btnCallStart = document.getElementById('btn-call-start');
+const btnCallEnd = document.getElementById('btn-call-end');
+
+let currentUser = "";
+let roleLocked = false;
+let selectedCells = new Set();
+let currentWeekOffset = 0;
+let holidays = {};
+
+const roomId = window.location.pathname.replace(/[^\w]/g, '_') || 'room_default';
+
+// ---------- 日付・祝日関係 ----------
+
+function formatDate(date) {
+  return date.toISOString().split('T')[0];
+}
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+async function fetchHolidays() {
+  try {
+    const res = await fetch('https://holidays-jp.github.io/api/v1/date.json');
+    if (!res.ok) throw new Error('祝日API取得失敗');
+    holidays = await res.json();
+    renderCalendar();
+  } catch (e) {
+    console.error(e);
+    holidays = {};
+    renderCalendar();
+  }
+}
+
+// ---------- カレンダー描画 ----------
+
+function renderCalendar() {
+  calendar.innerHTML = '';
+  const thead = document.createElement('thead');
+  const trHead = document.createElement('tr');
+  thead.appendChild(trHead);
+  trHead.appendChild(document.createElement('th')); // 時間列ヘッダ空欄
+
+  const monday = getMonday(new Date());
+  monday.setDate(monday.getDate() + currentWeekOffset * 7);
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const mm = d.getMonth() + 1;
+    const dd = d.getDate();
+    const ymd = formatDate(d);
+
+    const th = document.createElement('th');
+    th.innerHTML = `${mm}/${dd}<br>(${weekdays[d.getDay()]})`;
+
+    if (d.getDay() === 0 || d.getDay() === 6) th.classList.add('weekend');
+    if (holidays[ymd]) {
+      th.classList.add('holiday');
+      th.title = holidays[ymd];
+    }
+
+    trHead.appendChild(th);
+  }
+  calendar.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (let h = 9; h <= 20; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      const tr = document.createElement('tr');
+      const tdTime = document.createElement('td');
+      tdTime.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      tr.appendChild(tdTime);
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        const ymd = formatDate(d);
+        const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        const key = `${ymd}_${timeStr}`;
+        const td = document.createElement('td');
+        td.dataset.key = key;
+
+        if (d.getDay() === 0 || d.getDay() === 6) td.classList.add('weekend');
+        if (holidays[ymd]) td.classList.add('holiday');
+
+        td.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (selectedCells.has(key)) {
+            selectedCells.delete(key);
+            td.classList.remove('selected');
+          } else {
+            selectedCells.add(key);
+            td.classList.add('selected');
+          }
+        });
+
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+  }
+  calendar.appendChild(tbody);
+  updateScheduleTable();
+}
+
+// ---------- スケジュール同期 ----------
+
+async function updateScheduleTable() {
+  const monday = getMonday(new Date());
+  monday.setDate(monday.getDate() + currentWeekOffset * 7);
+  const schedulesRef = ref(db, 'schedules');
+  const snapshot = await get(schedulesRef);
+  const schedules = snapshot.exists() ? snapshot.val() : {};
+
+  const tds = calendar.querySelectorAll('tbody td[data-key]');
+  tds.forEach(td => {
+    const key = td.dataset.key;
+    const data = schedules[key] || {};
+    td.innerHTML = '';
+
+    let hasA = false, hasB = false;
+    if (data.A) {
+      const divA = document.createElement('div');
+      divA.textContent = `A: ${data.A}`;
+      divA.classList.add('userA');
+      td.appendChild(divA);
+      if (data.A === '○') hasA = true;
+    }
+    if (data.B) {
+      const divB = document.createElement('div');
+      divB.textContent = `B: ${data.B}`;
+      divB.classList.add('userB');
+      td.appendChild(divB);
+      if (data.B === '○') hasB = true;
+    }
+    td.classList.toggle('both', hasA && hasB);
+  });
+}
+
+// ---------- セル操作 ----------
+
+async function applyToSelectedCells(value) {
+  if (selectedCells.size === 0) return;
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  const updates = {};
+  selectedCells.forEach(key => {
+    updates[`schedules/${key}/${currentUser}`] = value;
+  });
+  await update(ref(db), updates);
+  selectedCells.clear();
+}
+
+async function clearSelectedCells() {
+  if (selectedCells.size === 0) return;
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  const updates = {};
+  selectedCells.forEach(key => {
+    updates[`schedules/${key}/${currentUser}`] = null;
+  });
+  await update(ref(db), updates);
+  selectedCells.clear();
+}
+
+async function clearAllData() {
+  if (!confirm('本当に全てのデータを削除しますか？')) return;
+  await remove(ref(db, 'schedules'));
+  await remove(ref(db, 'chatLog'));
+  await remove(ref(db, `rooms/${roomId}`)); // ユーザー割当・通話シグナリング削除
+  selectedCells.clear();
+  currentUser = "";
+  roleLocked = false;
+  userSelect.value = "";
+}
+
+// ---------- チャット ----------
+
+async function sendMessage() {
+  const text = chatInput.value.trim();
+  if (!text) return;
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  const userName = currentUser === 'A' ? userANameInput.value.trim() || 'ユーザーA' : userBNameInput.value.trim() || 'ユーザーB';
+  const newMsgRef = ref(db, 'chatLog');
+  const snapshot = await get(newMsgRef);
+  const chatData = snapshot.exists() ? snapshot.val() : [];
+  chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
+  await set(newMsgRef, chatData);
+  chatInput.value = '';
+}
+
+function renderChat(chatData) {
+  chatLog.innerHTML = '';
+  chatData.slice(-100).forEach(entry => {
+    const div = document.createElement('div');
+    div.classList.add('chat-message');
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = `${entry.name}: `;
+    nameSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
+    nameSpan.style.fontWeight = 'bold';
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = entry.text;
+    textSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
+
+    div.appendChild(nameSpan);
+    div.appendChild(textSpan);
+    chatLog.appendChild(div);
+  });
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// ---------- ユーザー選択ロジック ----------
+
+userSelect.addEventListener('change', async () => {
+  if (roleLocked) {
+    userSelect.value = currentUser;
+    return;
+  }
+  const selected = userSelect.value;
+  if (selected !== 'A' && selected !== 'B') return;
+
+  const assignRef = ref(db, `rooms/${roomId}/assignment`);
+  const snap = await get(assignRef);
+  const assign = snap.exists() ? snap.val() : {};
+
+  if (selected === 'A') {
+    if (!assign.A) {
+      await update(assignRef, { A: true });
+      currentUser = 'A';
+      userSelect.value = 'A';
+      roleLocked = true;
+    } else {
+      alert('ユーザーAは既に接続されています。');
+      userSelect.value = '';
+    }
+  } else if (selected === 'B') {
+    if (!assign.B && assign.A) {
+      await update(assignRef, { B: true });
+      currentUser = 'B';
+      userSelect.value = 'B';
+      roleLocked = true;
+    } else if (!assign.A) {
+      alert('まずユーザーAが接続してください。');
+      userSelect.value = '';
+    } else {
+      alert('ユーザーBは既に接続されています。');
+      userSelect.value = '';
+    }
+  }
+  renderCalendar();
+});
+
+// ページロード時に割当状況を取得しユーザー選択肢を調整
+async function initializeUserSelection() {
+  const assignRef = ref(db, `rooms/${roomId}/assignment`);
+  const snap = await get(assignRef);
+  const assign = snap.exists() ? snap.val() : {};
+  if (!assign.A) {
+    // Aが空いている => 選択肢は「選択して下さい」「A」「B」
+    userSelect.innerHTML = `
+      <option value="">選択して下さい</option>
+      <option value="A">A</option>
+      <option value="B" disabled>B (先にAが接続してください)</option>
+    `;
+  } else if (!assign.B) {
+    // Aが埋まっててB空いている => 「選択して下さい」「B」のみ
+    userSelect.innerHTML = `
+      <option value="">選択して下さい</option>
+      <option value="A" disabled>A (使用中)</option>
+      <option value="B">B</option>
+    `;
+  } else {
+    // 両方埋まっている場合
+    userSelect.innerHTML = `
+      <option value="">選択して下さい</option>
+      <option value="A" disabled>A (使用中)</option>
+      <option value="B" disabled>B (使用中)</option>
+    `;
+    alert('ユーザーは既に両方接続されています。');
+  }
+  userSelect.value = "";
+  roleLocked = false;
+  currentUser = "";
+}
+
+initializeUserSelection();
+
+// ユーザー名変更時にカレンダー更新
+userANameInput.addEventListener('input', renderCalendar);
+userBNameInput.addEventListener('input', renderCalendar);
+
+// ---------- 全データ削除ボタン ----------
+
+btnClearAll.addEventListener('click', async () => {
+  await clearAllData();
+  renderCalendar();
+  renderChat([]);
+  await initializeUserSelection();
+});
+
+// ---------- カレンダー操作ボタン ----------
+
+btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
+btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
+btnClearCell.addEventListener('click', clearSelectedCells);
+btnPrevWeek.addEventListener('click', () => {
+  currentWeekOffset--;
+  renderCalendar();
+});
+btnToday.addEventListener('click', () => {
+  currentWeekOffset = 0;
+  renderCalendar();
+});
+btnNextWeek.addEventListener('click', () => {
+  currentWeekOffset++;
+  renderCalendar();
+});
+
+// ---------- チャット送信 ----------
+
+btnSend.addEventListener('click', sendMessage);
+
+// ---------- Firebaseリアルタイム更新監視 ----------
+
+onValue(ref(db, 'schedules'), () => updateScheduleTable());
+onValue(ref(db, 'chatLog'), snapshot => {
+  const chatData = snapshot.exists() ? snapshot.val() : [];
+  renderChat(chatData);
+});
+
+// ---------- クリックで選択解除 ----------
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('td')) {
+    selectedCells.forEach(key => {
+      const td = calendar.querySelector(`td[data-key="${key}"]`);
+      if (td) td.classList.remove('selected');
+    });
+    selectedCells.clear();
+  }
+});
+
+// ---------- WebRTC 通話関連 ----------
+
+// シグナリング用Firebaseパス
+const signalingRef = ref(db, `rooms/${roomId}/signaling`);
+
+let localConnection = null;
+let remoteConnection = null;
+let localStream = null;
+let remoteStream = null;
+
+const servers = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' }
+  ]
+};
+
+const localVideo = document.createElement('video');
+const remoteVideo = document.createElement('video');
+localVideo.autoplay = true;
+localVideo.muted = true;
+remoteVideo.autoplay = true;
+
+let isCallActive = false;
+
+// 映像をページに表示（任意。必要あればhtmlに埋め込みも可）
+localVideo.style.width = "150px";
+localVideo.style.border = "1px solid black";
+remoteVideo.style.width = "150px";
+remoteVideo.style.border = "1px solid black";
+const chatDiv = document.querySelector('.chat');
+chatDiv.appendChild(localVideo);
+chatDiv.appendChild(remoteVideo);
+
+// ICE candidateをFirebaseに送る
+async function sendIceCandidate(candidate) {
+  if (!candidate) return;
+  await push(signalingRef, {
+    type: 'candidate',
+    candidate,
+    from: currentUser
+  });
+}
+
+// WebRTC接続セットアップ
+async function startCall() {
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  if (isCallActive) {
+    alert('通話中です');
+    return;
+  }
+
+  localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  localVideo.srcObject = localStream;
+
+  localConnection = new RTCPeerConnection(servers);
+  remoteConnection = new RTCPeerConnection(servers);
+
+  localStream.getTracks().forEach(track => localConnection.addTrack(track, localStream));
+
+  localConnection.onicecandidate = event => {
+    if (event.candidate) sendIceCandidate(event.candidate);
+  };
+
+  remoteConnection.onicecandidate = event => {
+    if (event.candidate) sendIceCandidate(event.candidate);
+  };
+
+  remoteConnection.ontrack = event => {
+    remoteStream = event.streams[0];
+    remoteVideo.srcObject = remoteStream;
+  };
+
+  localConnection.onnegotiationneeded = async () => {
+    try {
+      const offer = await localConnection.createOffer();
+      await localConnection.setLocalDescription(offer);
+      await set(ref(db, `rooms/${roomId}/offer`), { sdp: offer.sdp, type: offer.type, from: currentUser });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  isCallActive = true;
+}
+
+// Firebaseでoffer/answer/candidateを監視
+onValue(ref(db, `rooms/${roomId}/offer`), async (snapshot) => {
+  const offer = snapshot.val();
+  if (!offer || offer.from === currentUser) return;
+  if (!localConnection) await startCall();
+
+  try {
+    await localConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await localConnection.createAnswer();
+    await localConnection.setLocalDescription(answer);
+    await set(ref(db, `rooms/${roomId}/answer`), { sdp: answer.sdp, type: answer.type, from: currentUser });
+  } catch (e) {
+    console.error(e);
+  }
+});
+
+onValue(ref(db, `rooms/${roomId}/answer`), async (snapshot) => {
+  const answer = snapshot.val();
+  if (!answer || answer.from === currentUser) return;
+
+  try {
+    await remoteConnection.setRemoteDescription(new RTCSessionDescription(answer));
+  } catch (e) {
+    console.error(e);
+  }
+});
+
+onValue(ref(db, `rooms/${roomId}/signaling`), (snapshot) => {
+  const data = snapshot.val();
+  if (!data) return;
+
+  Object.values(data).forEach(async (signal) => {
+    if (signal.from === currentUser) return;
+
+    if (signal.type === 'candidate') {
+      try {
+        await localConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  });
+});
+
+// 通話開始ボタン
+
+btnCallStart.addEventListener('click', async () => {
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+
+  // 通話開始要求をFirebaseへ通知
+  await set(ref(db, `rooms/${roomId}/callStatus`), { startedBy: currentUser, startedAt: new Date().toISOString() });
+
+  alert('通話開始要求を送信しました。相手も「通話開始」ボタンを押してください。');
+});
+
+// 通話終了ボタン
+btnCallEnd.addEventListener('click', async () => {
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  if (!isCallActive) {
+    alert('通話は開始されていません');
+    return;
+  }
+
+  await set(ref(db, `rooms/${roomId}/callStatus`), { endedBy: currentUser, endedAt: new Date().toISOString() });
+
+  if (localConnection) {
+    localConnection.close();
+    localConnection = null;
+  }
+  if (remoteConnection) {
+    remoteConnection.close();
+    remoteConnection = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  isCallActive = false;
+  alert('通話を終了しました。');
+});
+
+// callStatus監視 - 通話状態を同期
+onValue(ref(db, `rooms/${roomId}/callStatus`), snapshot => {
+  const status = snapshot.val();
+  if (!status) return;
+
+  if (status.startedAt && !isCallActive) {
+    // 他ユーザーが開始したら、こちらも準備を促す（実際の接続は各自のボタン押下で）
+    if (status.startedBy !== currentUser) {
+      alert(`相手（${status.startedBy}）が通話を開始しました。あなたも「通話開始」ボタンを押してください。`);
+    }
+  }
+  if (status.endedAt) {
+    if (isCallActive) {
+      if (localConnection) {
+        localConnection.close();
+        localConnection = null;
+      }
+      if (remoteConnection) {
+        remoteConnection.close();
+        remoteConnection = null;
+      }
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+      }
+      isCallActive = false;
+      alert('相手が通話を終了しました。');
+    }
+  }
+});
+
+// 初期化
+
+fetchHolidays();
+renderCalendar();
+
+</script>
+
+</body>
+</html>
