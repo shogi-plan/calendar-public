@@ -105,11 +105,10 @@
   <label>A：<input type="text" id="userAName" placeholder="名前" value="ユーザーA" /></label>
   <label>B：<input type="text" id="userBName" placeholder="名前" value="ユーザーB" /></label>
   <label><span style="font-size: 1.5em; font-weight: bold;">入力ユーザー選択：</span><select id="userSelect">
-  <option value="" disabled selected>選択してください</option>
-  <option value="A">A</option>
-  <option value="B">B</option>
-</select></label>
-
+    <option value="" selected>選択して下さい</option>
+    <option value="A">A</option>
+    <option value="B">B</option>
+  </select></label>
 </div>
 
 <div class="controls">
@@ -130,15 +129,16 @@
 <div class="chat">
   <h2>チャット</h2>
   <div class="chat-log" id="chatLog"></div>
-  <div class="controls" style="margin-top:0.5em; gap:0.5em;">
-    <input type="text" id="chatInput" placeholder="メッセージを入力" style="flex:1; min-width: 0;" />
-    <button id="btn-send">送信</button>
-    </div>
-<div class="controls" style="margin-top:0.5em; gap:0.5em;">
-  <button id="btn-call">通話開始</button>
-  <button id="btn-hangup">通話終了</button>
+ <div class="controls" style="margin-top:0.5em; gap:0.5em;">
+  <input type="text" id="chatInput" placeholder="メッセージを入力" style="flex:1; min-width: 0;" />
+  <button id="btn-send">送信</button>
+</div>
 
-  </div>
+<div class="controls" style="margin-top:0.5em; gap:0.5em; justify-content: center;">
+  <button id="btn-call-start">通話開始</button>
+  <button id="btn-call-end" disabled>通話終了</button>
+  <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
+</div>
 </div>
 
 <script type="module">
@@ -157,14 +157,11 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+  const callStatusRef = ref(db, 'callStatus');
 
   const userANameInput = document.getElementById('userAName');
   const userBNameInput = document.getElementById('userBName');
   const userSelect = document.getElementById('userSelect');
-  let currentUser = null;
-  let userRoleLocked = false;
-  const userRoleRef = ref(db, 'userRole');
-
   const calendar = document.getElementById('calendar');
   const chatLog = document.getElementById('chatLog');
   const chatInput = document.getElementById('chatInput');
@@ -177,14 +174,27 @@
   const btnToday = document.getElementById('btn-today');
   const btnNextWeek = document.getElementById('btn-next-week');
   const btnSend = document.getElementById('btn-send');
-  const btnCall = document.getElementById('btn-call');
-const btnHangup = document.getElementById('btn-hangup');
-let localConnection, localStream;
-const callStatusRef = ref(db, 'callStatus');
+  const btnCallStart = document.getElementById('btn-call-start');
+  const btnCallEnd = document.getElementById('btn-call-end');
+  const callStatusDisplay = document.getElementById('callStatusDisplay');
 
-  let selectedCells = new Set();
-  let currentWeekOffset = 0;
-  let holidays = {};
+let localStream = null;
+let peerConnection = null;
+const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const signalingRef = ref(db, 'signaling');
+
+  let currentUser = '';              // 空文字で初期化（未選択）
+let selectedCells = new Set();
+let currentWeekOffset = 0;
+let holidays = {};
+
+// WebRTC用：ユーザーA/Bが決定されたかどうか（固定）
+let lockedUserA = false;
+let lockedUserB = false;
+
+// 通話ステータス管理
+let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
+let callTimeoutId = null;
 
   function formatDate(date) {
     return date.toISOString().split('T')[0];
@@ -263,19 +273,15 @@ const callStatusRef = ref(db, 'callStatus');
           if (holidays[ymd]) td.classList.add('holiday');
 
           td.addEventListener('click', (e) => {
-  e.stopPropagation();
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
-  if (selectedCells.has(key)) {
-    selectedCells.delete(key);
-    td.classList.remove('selected');
-  } else {
-    selectedCells.add(key);
-    td.classList.add('selected');
-  }
-});
+            e.stopPropagation();
+            if (selectedCells.has(key)) {
+              selectedCells.delete(key);
+              td.classList.remove('selected');
+            } else {
+              selectedCells.add(key);
+              td.classList.add('selected');
+            }
+          });
 
           tr.appendChild(td);
         }
@@ -339,23 +345,136 @@ const callStatusRef = ref(db, 'callStatus');
   }
 
   async function clearAllData() {
-    if (!confirm('本当に全てのデータを削除しますか？')) return;
-    await remove(ref(db, 'schedules'));
-await remove(ref(db, 'chatLog'));
-await remove(ref(db, 'userRole'));
-await remove(ref(db, 'callStatus'));
-
-    selectedCells.clear();
-
-// ユーザー選択状態も初期化
-userSelect.disabled = false;
-userSelect.value = "";
-currentUser = null;
-userRoleLocked = false;
-userANameInput.value = "ユーザーA";
-userBNameInput.value = "ユーザーB";
-
+  if (!confirm('本当に全てのデータを削除しますか？')) return;
+  await remove(ref(db, 'schedules'));
+  await remove(ref(db, 'chatLog'));
+  await remove(ref(db, 'roomUsers'));
+  await remove(ref(db, 'callStatus'));
+  selectedCells.clear();
+  
+  // ユーザー固定状態リセット
+  lockedUserA = false;
+  lockedUserB = false;
+  currentUser = '';
+  
+  // userSelectも初期化
+  userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
+  userSelect.disabled = false;
+  
+  // 通話ステータス表示クリア
+  updateCallStatusUI('none');
   }
+  async function startLocalStream() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (e) {
+    alert('マイクの使用許可が必要です');
+    throw e;
+  }
+}
+
+function createPeerConnection() {
+  peerConnection = new RTCPeerConnection(configuration);
+
+  peerConnection.onicecandidate = event => {
+    if (event.candidate) {
+      const candRef = ref(db, `signaling/candidates/${currentUser}`);
+      update(candRef, { candidate: event.candidate.toJSON() });
+    }
+  };
+
+  peerConnection.ontrack = event => {
+    let audio = document.getElementById('remoteAudio');
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'remoteAudio';
+      audio.autoplay = true;
+      document.body.appendChild(audio);
+    }
+    audio.srcObject = event.streams[0];
+  };
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+  }
+}
+
+async function sendOffer() {
+  createPeerConnection();
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+
+  await set(ref(db, 'signaling/offer'), { sdp: offer.sdp, type: offer.type, from: currentUser });
+}
+
+async function sendAnswer() {
+  const offerSnapshot = await get(ref(db, 'signaling/offer'));
+  if (!offerSnapshot.exists()) return;
+  const offer = offerSnapshot.val();
+
+  createPeerConnection();
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+  const answer = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answer);
+
+  await set(ref(db, 'signaling/answer'), { sdp: answer.sdp, type: answer.type, from: currentUser });
+}
+
+function listenSignaling() {
+  onValue(ref(db, 'signaling/offer'), async snapshot => {
+    const offer = snapshot.val();
+    if (!offer || offer.from === currentUser) return;
+    createPeerConnection();
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    await sendAnswer();
+  });
+
+  onValue(ref(db, 'signaling/answer'), async snapshot => {
+    const answer = snapshot.val();
+    if (!answer || answer.from === currentUser) return;
+    if (peerConnection) {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+  });
+
+  onValue(ref(db, 'signaling/candidates/A'), snapshot => {
+    if (currentUser === 'B') {
+      const candidate = snapshot.val()?.candidate;
+      if (candidate && peerConnection) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    }
+  });
+
+  onValue(ref(db, 'signaling/candidates/B'), snapshot => {
+    if (currentUser === 'A') {
+      const candidate = snapshot.val()?.candidate;
+      if (candidate && peerConnection) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    }
+  });
+}
+
+  renderCalendar();
+  renderChat([]);
+  function updateCallStatusUI(status) {
+  callStatus = status;
+  if (status === 'started') {
+    callStatusDisplay.textContent = '通話が開始されました';
+    btnCallStart.disabled = true;
+    btnCallEnd.disabled = false;
+  } else if (status === 'cancelled') {
+    callStatusDisplay.textContent = '通話がキャンセルされました';
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+  } else {
+    callStatusDisplay.textContent = '';
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+  }
+}
 
   async function sendMessage() {
     const text = chatInput.value.trim();
@@ -390,28 +509,68 @@ userBNameInput.value = "ユーザーB";
     chatLog.scrollTop = chatLog.scrollHeight;
   }
 
-  userSelect.addEventListener('change', async (e) => {
-  if (userRoleLocked) return;
+  // 初期表示時にFirebaseからroomUsersを読み込んで設定する関数
+async function initializeUsers() {
+  const roomUsersRef = ref(db, 'roomUsers');
+  const snapshot = await get(roomUsersRef);
+  const roomUsers = snapshot.exists() ? snapshot.val() : {};
 
-  const selected = e.target.value;
-  const snapshot = await get(userRoleRef);
-  const roles = snapshot.exists() ? snapshot.val() : {};
-
-  if (selected === 'A' && !roles.A) {
-    await set(userRoleRef, { ...roles, A: true });
+  // 1人目のユーザーが未確定ならAを割当て
+  if (!roomUsers.A) {
     currentUser = 'A';
-    userRoleLocked = true;
+    lockedUserA = true;
+    await update(roomUsersRef, { A: true });
+    // 選択肢はAのみ選択可能で変更不可
+    userSelect.innerHTML = '<option value="A" selected>A</option>';
     userSelect.disabled = true;
-  } else if (selected === 'B' && roles.A && !roles.B) {
-    await set(userRoleRef, { ...roles, B: true });
-    currentUser = 'B';
-    userRoleLocked = true;
-    userSelect.disabled = true;
+  } else if (!roomUsers.B) {
+    // 2人目がアクセスした時はBのみ選択可能で変更不可
+    currentUser = '';
+    lockedUserB = false;
+    userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="B">B</option>';
+    userSelect.disabled = false;
   } else {
-    alert('選択できません');
-    userSelect.value = "";
+    // 既に両方占有されている場合は選択不可（実際には警告出すなど）
+    currentUser = '';
+    userSelect.innerHTML = '<option value="" selected>満室です</option>';
+    userSelect.disabled = true;
+  }
+  renderCalendar();
+}
+
+// ユーザー切替時の処理
+userSelect.addEventListener('change', async e => {
+  const val = e.target.value;
+  if (val === '') {
+    currentUser = '';
+    return;
+  }
+  if (val === 'A') {
+    // Aは1人目ユーザーに固定済みなので基本通らない想定
+    if (!lockedUserA) {
+      currentUser = 'A';
+      lockedUserA = true;
+      await update(ref(db, 'roomUsers'), { A: true });
+      userSelect.disabled = true;
+    } else {
+      alert('ユーザーAは既に確定しています');
+      e.target.value = 'A';
+    }
+  } else if (val === 'B') {
+    if (!lockedUserB) {
+      currentUser = 'B';
+      lockedUserB = true;
+      await update(ref(db, 'roomUsers'), { B: true });
+      userSelect.disabled = true;
+    } else {
+      alert('ユーザーBは既に確定しています');
+      e.target.value = 'B';
+    }
   }
 });
+
+// 初期化呼び出し
+initializeUsers();
 
   userANameInput.addEventListener('input', renderCalendar);
   userBNameInput.addEventListener('input', renderCalendar);
@@ -436,58 +595,60 @@ userBNameInput.value = "ユーザーB";
     renderCalendar();
   });
   btnSend.addEventListener('click', sendMessage);
-  btnCall.addEventListener('click', async () => {
-  if (!currentUser) return alert("ユーザーを選択してください");
-  await set(callStatusRef, { from: currentUser, status: 'calling' });
-});
-btnHangup.addEventListener('click', async () => {
-  await set(callStatusRef, { from: currentUser, status: 'ended' });
-  if (localConnection) {
-    localConnection.close();
-    localConnection = null;
+  btnCallStart.addEventListener('click', async () => {
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
   }
+
+  const snapshot = await get(callStatusRef);
+  const data = snapshot.exists() ? snapshot.val() : { status: 'none', timestamp: null };
+
+  if (data.status === 'none' || data.status === 'cancelled') {
+    // WebRTC開始処理
+    try {
+      await startLocalStream();
+      await sendOffer();
+      listenSignaling();
+    } catch (e) {
+      alert('通話の準備に失敗しました');
+      return;
+    }
+    await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
+  } else if (data.status === 'started') {
+    // 他ユーザーが既に開始していたら通話成立
+    alert('通話が開始されました');
+  }
+});
+
+btnCallEnd.addEventListener('click', async () => {
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  await update(callStatusRef, { status: 'none', timestamp: null });
+updateCallStatusUI('none');
+
+if (peerConnection) {
+  peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+  peerConnection.close();
+  peerConnection = null;
+}
+if (localStream) {
+  localStream.getTracks().forEach(track => track.stop());
+  localStream = null;
+}
+
+// signaling情報の削除
+await remove(ref(db, 'signaling'));
+
 });
 
   onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
-  
-  onValue(callStatusRef, async snapshot => {
-  const data = snapshot.exists() ? snapshot.val() : null;
-  if (!data || data.status === 'ended') return;
-
-  if (data.status === 'calling' && data.from !== currentUser) {
-    if (confirm('相手から通話のリクエストがあります。開始しますか？')) {
-      await set(callStatusRef, { from: currentUser, status: 'accepted' });
-      await startWebRTC();
-    }
-  } else if (data.status === 'accepted' && data.from !== currentUser) {
-    await startWebRTC();
-  }
-});
-
-async function startWebRTC() {
-  localConnection = new RTCPeerConnection();
-  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  localStream.getTracks().forEach(track => localConnection.addTrack(track, localStream));
-}
-
   onValue(ref(db, 'chatLog'), snapshot => {
     const chatData = snapshot.exists() ? snapshot.val() : [];
     renderChat(chatData);
   });
-
-onValue(userRoleRef, snapshot => {
-  const roles = snapshot.exists() ? snapshot.val() : {};
-  if (roles.A && roles.B) return;
-
-  if (roles.A && !roles.B) {
-    [...userSelect.options].forEach(opt => {
-      if (opt.value === 'A') opt.disabled = true;
-      if (opt.value === 'B') opt.disabled = false;
-    });
-  } else {
-    [...userSelect.options].forEach(opt => opt.disabled = false);
-  }
-});
 
   fetchHolidays();
   renderCalendar();
