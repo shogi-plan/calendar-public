@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>2人用予定調整カレンダー</title>
+<title>2人予定調整カレンダー</title>
 <style>
   body {
     font-family: sans-serif;
@@ -98,13 +98,13 @@
 <body>
 
 <div class="title-container">
-  <h1>2人用予定調整カレンダー</h1>
+  <h1>2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
   <label>A：<input type="text" id="userAName" placeholder="名前" value="ユーザーA" /></label>
   <label>B：<input type="text" id="userBName" placeholder="名前" value="ユーザーB" /></label>
-  <label><span style="font-size: 1.5em; font-weight: bold;">入力ユーザー選択：</span><select id="userSelect">
+  <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span><select id="userSelect">
     <option value="" selected>選択して下さい</option>
     <option value="A">A</option>
     <option value="B">B</option>
@@ -354,11 +354,16 @@ let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
   await remove(ref(db, 'chatLog'));
   await remove(ref(db, 'roomUsers'));
   await remove(ref(db, 'callStatus'));
+  await remove(ref(db, 'signaling')); // ← 追加！これがポイント！
   selectedCells.clear();
-  
+
+  // これから再読み込みした時、もう一度Aに登録されないようにマークをつける
+  localStorage.setItem('wasCleared', '1');
+
   // ユーザー固定状態リセット
   lockedUserA = false;
   lockedUserB = false;
+
   currentUser = '';
   
   // userSelectも初期化
@@ -541,6 +546,12 @@ function listenSignaling() {
 
   // 初期表示時にFirebaseからroomUsersを読み込んで設定する関数
 async function initializeUsers() {
+  // 前に「全データ削除」したばかりなら、何も登録しないで終わる
+  if (localStorage.getItem('wasCleared') === '1') {
+    localStorage.removeItem('wasCleared'); // 一度だけ使って消す
+    return;
+  }
+
   const roomUsersRef = ref(db, 'roomUsers');
   const snapshot = await get(roomUsersRef);
   const roomUsers = snapshot.exists() ? snapshot.val() : {};
