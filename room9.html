@@ -354,15 +354,14 @@ let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
   await remove(ref(db, 'chatLog'));
   await remove(ref(db, 'roomUsers'));
   await remove(ref(db, 'callStatus'));
-  await remove(ref(db, 'signaling')); // ← 追加！これがポイント！
-  selectedCells.clear();
+await remove(ref(db, 'signaling'));
+selectedCells.clear();
 
-  // これから再読み込みした時、もう一度Aに登録されないようにマークをつける
-  localStorage.setItem('wasCleared', '1');
+// 1回だけページを再読み込みしても登録しないように、このタブだけにメモを置く
+sessionStorage.setItem('wasCleared', '1'); // ← ここが新しい！
 
-  // ユーザー固定状態リセット
-  lockedUserA = false;
-  lockedUserB = false;
+lockedUserA = false;
+lockedUserB = false;
 
   currentUser = '';
   
@@ -546,9 +545,9 @@ function listenSignaling() {
 
   // 初期表示時にFirebaseからroomUsersを読み込んで設定する関数
 async function initializeUsers() {
-  // 前に「全データ削除」したばかりなら、何も登録しないで終わる
-  if (localStorage.getItem('wasCleared') === '1') {
-    localStorage.removeItem('wasCleared'); // 一度だけ使って消す
+  // このタブで「さっき全部けした」ってメモがあれば、登録しないで終わるよ
+  if (sessionStorage.getItem('wasCleared') === '1') {
+    sessionStorage.removeItem('wasCleared'); // 一度だけ使ってすてる
     return;
   }
 
