@@ -180,10 +180,11 @@
 
 let localStream = null;
 let peerConnection = null;
+let callTimeoutId = null;
 const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const signalingRef = ref(db, 'signaling');
 
-  let currentUser = '';              // 空文字で初期化（未選択）
+let currentUser = '';              // 空文字で初期化（未選択）
 let selectedCells = new Set();
 let currentWeekOffset = 0;
 let holidays = {};
@@ -194,7 +195,6 @@ let lockedUserB = false;
 
 // 通話ステータス管理
 let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
-let callTimeoutId = null;
 
   function formatDate(date) {
     return date.toISOString().split('T')[0];
@@ -273,15 +273,19 @@ let callTimeoutId = null;
           if (holidays[ymd]) td.classList.add('holiday');
 
           td.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (selectedCells.has(key)) {
-              selectedCells.delete(key);
-              td.classList.remove('selected');
-            } else {
-              selectedCells.add(key);
-              td.classList.add('selected');
-            }
-          });
+  e.stopPropagation();
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  if (selectedCells.has(key)) {
+    selectedCells.delete(key);
+    td.classList.remove('selected');
+  } else {
+    selectedCells.add(key);
+    td.classList.add('selected');
+  }
+});
 
           tr.appendChild(td);
         }
@@ -405,6 +409,32 @@ async function sendOffer() {
   await peerConnection.setLocalDescription(offer);
 
   await set(ref(db, 'signaling/offer'), { sdp: offer.sdp, type: offer.type, from: currentUser });
+}
+
+function startCallTimeout() {
+  if (callTimeoutId) clearTimeout(callTimeoutId); // 二重起動防止
+
+  callTimeoutId = setTimeout(async () => {
+    await update(callStatusRef, {
+      status: 'none',
+      timestamp: null
+    });
+
+    callStatusDisplay.textContent = '通話終了（30秒経過）';
+
+    if (peerConnection) {
+      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+      peerConnection.close();
+      peerConnection = null;
+    }
+
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
+    }
+
+    await remove(ref(db, 'signaling'));
+  }, 30000);
 }
 
 async function sendAnswer() {
@@ -597,7 +627,7 @@ initializeUsers();
   btnSend.addEventListener('click', sendMessage);
   btnCallStart.addEventListener('click', async () => {
   if (!currentUser) {
-    alert('ユーザーを選択してください');
+    callStatusDisplay.textContent = 'ユーザーを選択してください';
     return;
   }
 
@@ -605,19 +635,27 @@ initializeUsers();
   const data = snapshot.exists() ? snapshot.val() : { status: 'none', timestamp: null };
 
   if (data.status === 'none' || data.status === 'cancelled') {
-    // WebRTC開始処理
     try {
       await startLocalStream();
       await sendOffer();
       listenSignaling();
     } catch (e) {
-      alert('通話の準備に失敗しました');
+      callStatusDisplay.textContent = '通話の準備に失敗しました';
       return;
     }
     await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
+    callStatusDisplay.textContent = '通話を開始しました（30秒間有効）';
+    startCallTimeout();  // ← 追加
   } else if (data.status === 'started') {
-    // 他ユーザーが既に開始していたら通話成立
-    alert('通話が開始されました');
+    try {
+      await startLocalStream();
+      await sendAnswer();
+      listenSignaling();
+      callStatusDisplay.textContent = '通話に参加しました（30秒間）';
+      startCallTimeout();  // ← 追加
+    } catch (e) {
+      callStatusDisplay.textContent = '通話の準備に失敗しました';
+    }
   }
 });
 
@@ -626,22 +664,26 @@ btnCallEnd.addEventListener('click', async () => {
     alert('ユーザーを選択してください');
     return;
   }
+
+  if (callTimeoutId) {
+    clearTimeout(callTimeoutId);  // ← 追加: タイマー解除
+    callTimeoutId = null;
+  }
+
   await update(callStatusRef, { status: 'none', timestamp: null });
-updateCallStatusUI('none');
+  updateCallStatusUI('none');
 
-if (peerConnection) {
-  peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-  peerConnection.close();
-  peerConnection = null;
-}
-if (localStream) {
-  localStream.getTracks().forEach(track => track.stop());
-  localStream = null;
-}
+  if (peerConnection) {
+    peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+    peerConnection.close();
+    peerConnection = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
 
-// signaling情報の削除
-await remove(ref(db, 'signaling'));
-
+  await remove(ref(db, 'signaling'));
 });
 
   onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
