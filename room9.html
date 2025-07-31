@@ -407,6 +407,16 @@ lockedUserB = false;
 function createPeerConnection() {
   peerConnection = new RTCPeerConnection(configuration);
 
+// ICE接続の状態を監視し、切断時に通話終了
+peerConnection.oniceconnectionstatechange = () => {
+  const state = peerConnection.iceConnectionState;
+  console.log('ICE connection state:', state);
+  if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+    updateCallStatus("ended");
+    endCallUI();
+  }
+};
+
   peerConnection.onicecandidate = event => {
   if (event.candidate) {
     const candRef = ref(db, `signaling/candidates/${currentUser}`);
@@ -497,17 +507,28 @@ function listenSignaling() {
     }
   });
 
+    // 1. importはファイル先頭で1回だけ行う（もしまだしていなければ）
+  // import { onValue } from "firebase/database";
+
   onValue(ref(db, 'signaling/candidates/A'), snapshot => {
-  if (currentUser === 'B') {
-    const candidates = snapshot.val();
-    if (!candidates) return;
-    Object.values(candidates).forEach(data => {
-      if (data?.candidate && peerConnection) {
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
-    });
-  }
-});
+    if (currentUser === 'B') {
+      const candidates = snapshot.val();
+      if (!candidates) return;
+      Object.values(candidates).forEach(data => {
+        if (data?.candidate && peerConnection) {
+          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      });
+
+      // ここに直接 onValue を書いてOK
+      onValue(callStatusRef, (snapshot) => {
+        const status = snapshot.val();
+        console.log("Call status changed:", status);
+        updateCallStatusUI(status); // callStatusに応じてUI更新
+      });
+
+    }
+  });
 
 onValue(ref(db, 'signaling/candidates/B'), snapshot => {
   if (currentUser === 'A') {
@@ -728,7 +749,10 @@ initializeUsers();
       await sendOffer();
       listenSignaling();
       await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
+
+      // ここでタイムアウト開始（30秒後に自動終了）
       startCallTimeout();
+
     } catch (e) {
       callStatusDisplay.textContent = '通話の準備に失敗しました';
       return;
@@ -737,8 +761,14 @@ initializeUsers();
     try {
       await startLocalStream();
       await sendAnswer();
+
+      // 通話応答時なのでタイムアウトを解除する
+      if (callTimeoutId) {
+        clearTimeout(callTimeoutId);
+        callTimeoutId = null;
+      }
+
       listenSignaling();
-      startCallTimeout();
     } catch (e) {
       callStatusDisplay.textContent = '通話の準備に失敗しました';
     }
