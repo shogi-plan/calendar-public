@@ -507,9 +507,6 @@ function listenSignaling() {
     }
   });
 
-    // 1. importはファイル先頭で1回だけ行う（もしまだしていなければ）
-  // import { onValue } from "firebase/database";
-
   onValue(ref(db, 'signaling/candidates/A'), snapshot => {
     if (currentUser === 'B') {
       const candidates = snapshot.val();
@@ -520,12 +517,19 @@ function listenSignaling() {
         }
       });
 
-      // ここに直接 onValue を書いてOK
       onValue(callStatusRef, (snapshot) => {
         const status = snapshot.val();
         console.log("Call status changed:", status);
         updateCallStatusUI(status); // callStatusに応じてUI更新
       });
+      
+      onValue(ref(db, 'roomUsers'), snapshot => {
+  const roomUsers = snapshot.val() || {};
+
+  userSelect.innerHTML = `<option value="" selected>選択して下さい</option>`;
+  if (!roomUsers.A) userSelect.innerHTML += `<option value="A">A</option>`;
+  if (!roomUsers.B) userSelect.innerHTML += `<option value="B">B</option>`;
+});
 
     }
   });
@@ -655,7 +659,15 @@ async function initializeUsers() {
   currentUser = '';
   lockedUserB = false;
   if (!lockedUserA) lockedUserA = !!roomUsers.A;
-  userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
+  userSelect.innerHTML = `<option value="" selected>選択して下さい</option>`;
+
+if (!roomUsers.A) {
+  userSelect.innerHTML += `<option value="A">A</option>`;
+}
+if (!roomUsers.B) {
+  userSelect.innerHTML += `<option value="B">B</option>`;
+}
+
 userSelect.disabled = false;
 currentUser = ''; 
   } else {
@@ -710,6 +722,13 @@ userSelect.addEventListener('change', async e => {
 
 // 初期化呼び出し
 initializeUsers();
+
+onValue(callStatusRef, snapshot => {
+  const data = snapshot.val();
+  if (!data) return;
+  const status = data.status;
+  updateCallStatusUI(status);
+});
 
   userANameInput.addEventListener('input', renderCalendar);
   userBNameInput.addEventListener('input', renderCalendar);
