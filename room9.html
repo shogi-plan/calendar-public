@@ -693,32 +693,33 @@ userSelect.addEventListener('change', async e => {
     sessionStorage.removeItem('wasCleared');
   }
 
+  // Firebaseから現在のロック状況を取得
+  const roomUsersSnapshot = await get(ref(db, 'roomUsers'));
+  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
+
   if (val === 'A') {
-    if (!lockedUserA) {
+    if (!roomUsers.A) {  // Firebaseのロック状況で判断
       currentUser = 'A';
-      lockedUserA = true;
       await update(ref(db, 'roomUsers'), { A: true });
       userSelect.disabled = true;
       localStorage.setItem('currentUser', 'A');
-    }
-    else {
+    } else {
       alert('ユーザーAは既に確定しています');
-      e.target.value = 'A';
+      e.target.value = ''; // 選択解除して再選択促す
     }
   } else if (val === 'B') {
-    if (!lockedUserB) {
+    if (!roomUsers.B) {
       currentUser = 'B';
-      lockedUserB = true;
       await update(ref(db, 'roomUsers'), { B: true });
       userSelect.disabled = true;
       localStorage.setItem('currentUser', 'B');
-    }
-    else {
+    } else {
       alert('ユーザーBは既に確定しています');
-      e.target.value = 'B';
+      e.target.value = '';
     }
   }
 });
+
 
 // 初期化呼び出し
 initializeUsers();
@@ -762,35 +763,24 @@ onValue(callStatusRef, snapshot => {
   const snapshot = await get(callStatusRef);
   const data = snapshot.exists() ? snapshot.val() : { status: 'none', timestamp: null };
 
-  if (data.status === 'none' || data.status === 'cancelled') {
-    try {
-      await startLocalStream();
-      await sendOffer();
-      listenSignaling();
-      await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
+  // 通話中はボタン無効化しているが念のため防御
+  if (data.status === 'started') {
+    callStatusDisplay.textContent = '通話は既に開始されています';
+    return;  // ここで処理停止し、2回目の開始を防止
+  }
 
-      // ここでタイムアウト開始（30秒後に自動終了）
-      startCallTimeout();
+  try {
+    await startLocalStream();
+    await sendOffer();
+    listenSignaling();
+    await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
 
-    } catch (e) {
-      callStatusDisplay.textContent = '通話の準備に失敗しました';
-      return;
-    }
-  } else if (data.status === 'started') {
-    try {
-      await startLocalStream();
-      await sendAnswer();
+    // タイムアウトは不要にして通話は続く
+    // startCallTimeout();
 
-      // 通話応答時なのでタイムアウトを解除する
-      if (callTimeoutId) {
-        clearTimeout(callTimeoutId);
-        callTimeoutId = null;
-      }
-
-      listenSignaling();
-    } catch (e) {
-      callStatusDisplay.textContent = '通話の準備に失敗しました';
-    }
+  } catch (e) {
+    callStatusDisplay.textContent = '通話の準備に失敗しました';
+    return;
   }
 });
 
