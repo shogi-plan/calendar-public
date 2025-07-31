@@ -378,7 +378,7 @@ let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
   await remove(ref(db, 'callStatus'));
   await remove(ref(db, 'signaling'));
   selectedCells.clear();
-  localStorage.removeItem('currentUser');
+  localStorage.removeItem('currentUser');  
 
 // 1回だけページを再読み込みしても登録しないように、このタブだけにメモを置く
 sessionStorage.setItem('wasCleared', '1'); // ← ここが新しい！
@@ -415,7 +415,7 @@ function createPeerConnection() {
     }
   };
 
-  peerConnection.ontrack = event => {
+peerConnection.ontrack = event => {
     let audio = document.getElementById('remoteAudio');
     if (!audio) {
       audio = document.createElement('audio');
@@ -425,6 +425,7 @@ function createPeerConnection() {
     }
     audio.srcObject = event.streams[0];
   };
+;
 
   if (localStream) {
     localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
@@ -786,6 +787,10 @@ btnCallEnd.addEventListener('click', async () => {
     }
   });
 </script>
+  <!-- 相手の音声を再生するaudio要素と音量調整スライダー -->
+<audio id="remote-audio" autoplay></audio><br />
+<label for="volume-control">相手の音量：</label>
+<input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
 
 </body>
 </html>
