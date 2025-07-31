@@ -144,7 +144,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set, remove, update, get } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+  import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
   const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
@@ -408,12 +408,12 @@ function createPeerConnection() {
   peerConnection = new RTCPeerConnection(configuration);
 
   peerConnection.onicecandidate = event => {
-    if (event.candidate) {
-      const candRef = ref(db, `signaling/candidates/${currentUser}`);
-      const newCandRef = push(candRef);
-      set(newCandRef, event.candidate.toJSON());
-    }
-  };
+  if (event.candidate) {
+    const candRef = ref(db, `signaling/candidates/${currentUser}`);
+    const newCandRef = push(candRef);
+    set(newCandRef, { candidate: event.candidate.toJSON() }); // 候補はオブジェクトで包む
+  }
+};
 
 peerConnection.ontrack = event => {
     let audio = document.getElementById('remoteAudio');
@@ -498,22 +498,28 @@ function listenSignaling() {
   });
 
   onValue(ref(db, 'signaling/candidates/A'), snapshot => {
-    if (currentUser === 'B') {
-      const candidate = snapshot.val()?.candidate;
-      if (candidate && peerConnection) {
-        peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  if (currentUser === 'B') {
+    const candidates = snapshot.val();
+    if (!candidates) return;
+    Object.values(candidates).forEach(data => {
+      if (data?.candidate && peerConnection) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
-    }
-  });
+    });
+  }
+});
 
-  onValue(ref(db, 'signaling/candidates/B'), snapshot => {
-    if (currentUser === 'A') {
-      const candidate = snapshot.val()?.candidate;
-      if (candidate && peerConnection) {
-        peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+onValue(ref(db, 'signaling/candidates/B'), snapshot => {
+  if (currentUser === 'A') {
+    const candidates = snapshot.val();
+    if (!candidates) return;
+    Object.values(candidates).forEach(data => {
+      if (data?.candidate && peerConnection) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
-    }
-  });
+    });
+  }
+});
 }
 
   renderCalendar();
@@ -721,20 +727,18 @@ initializeUsers();
       await startLocalStream();
       await sendOffer();
       listenSignaling();
+      await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
+      startCallTimeout();
     } catch (e) {
       callStatusDisplay.textContent = '通話の準備に失敗しました';
       return;
     }
-    await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
-    callStatusDisplay.textContent = '通話を開始しました（30秒間有効）';
-    startCallTimeout();  // ← 追加
   } else if (data.status === 'started') {
     try {
       await startLocalStream();
       await sendAnswer();
       listenSignaling();
-      callStatusDisplay.textContent = '通話に参加しました（30秒間）';
-      startCallTimeout();  // ← 追加
+      startCallTimeout();
     } catch (e) {
       callStatusDisplay.textContent = '通話の準備に失敗しました';
     }
@@ -773,6 +777,12 @@ btnCallEnd.addEventListener('click', async () => {
     const chatData = snapshot.exists() ? snapshot.val() : [];
     renderChat(chatData);
   });
+  
+  onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
+  onValue(ref(db, 'chatLog'), snapshot => {
+  const chatData = snapshot.exists() ? snapshot.val() : [];
+  renderChat(chatData);
+});
 
   fetchHolidays();
   renderCalendar();
