@@ -136,6 +136,7 @@
 
 <div class="controls" style="margin-top:0.5em; gap:0.5em; justify-content: center;">
   <button id="btn-call-start">通話開始</button>
+  <button id="btn-mute" disabled>ミュート</button>
   <button id="btn-call-end" disabled>通話終了</button>
   <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
 </div>
@@ -176,6 +177,27 @@
   const btnSend = document.getElementById('btn-send');
   const btnCallStart = document.getElementById('btn-call-start');
   const btnCallEnd = document.getElementById('btn-call-end');
+  const btnMute = document.getElementById('btn-mute');
+  
+  btnCallStart.addEventListener('click', async () => {
+  updateCallStatusUI('started');
+});
+
+btnCallEnd.addEventListener('click', async () => {
+  updateCallStatusUI('ended');
+});
+  
+  let isMuted = false;  // ミュート状態管理用変数（グローバルに置くのがオススメ）
+
+btnMute.addEventListener('click', () => {
+  if (!localStream) return;       // 通話が開始されていなければ無視
+  isMuted = !isMuted;             // ミュート状態を反転
+  localStream.getAudioTracks().forEach(track => {
+    track.enabled = !isMuted;     // マイクのON/OFF切り替え
+  });
+  btnMute.textContent = isMuted ? 'ミュート解除' : 'ミュート';  // ボタン文言切替
+});
+  
   const callStatusDisplay = document.getElementById('callStatusDisplay');
 
 let localStream = null;
@@ -184,7 +206,7 @@ let callTimeoutId = null;
 const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const signalingRef = ref(db, 'signaling');
 
-let currentUser = '';              // 空文字で初期化（未選択）
+let currentUser = localStorage.getItem('currentUser') || '';
 let selectedCells = new Set();
 let currentWeekOffset = 0;
 let holidays = {};
@@ -354,8 +376,9 @@ let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
   await remove(ref(db, 'chatLog'));
   await remove(ref(db, 'roomUsers'));
   await remove(ref(db, 'callStatus'));
-await remove(ref(db, 'signaling'));
-selectedCells.clear();
+  await remove(ref(db, 'signaling'));
+  selectedCells.clear();
+  localStorage.removeItem('currentUser');
 
 // 1回だけページを再読み込みしても登録しないように、このタブだけにメモを置く
 sessionStorage.setItem('wasCleared', '1'); // ← ここが新しい！
@@ -387,7 +410,8 @@ function createPeerConnection() {
   peerConnection.onicecandidate = event => {
     if (event.candidate) {
       const candRef = ref(db, `signaling/candidates/${currentUser}`);
-      update(candRef, { candidate: event.candidate.toJSON() });
+      const newCandRef = push(candRef);
+      set(newCandRef, event.candidate.toJSON());
     }
   };
 
@@ -492,21 +516,27 @@ function listenSignaling() {
 }
 
   renderCalendar();
-  renderChat([]);
   function updateCallStatusUI(status) {
   callStatus = status;
   if (status === 'started') {
     callStatusDisplay.textContent = '通話が開始されました';
     btnCallStart.disabled = true;
     btnCallEnd.disabled = false;
+    btnMute.disabled = false;        // ミュートボタンを有効化
   } else if (status === 'cancelled') {
     callStatusDisplay.textContent = '通話がキャンセルされました';
     btnCallStart.disabled = false;
     btnCallEnd.disabled = true;
+    btnMute.disabled = true;         // ミュートボタンを無効化
+    btnMute.textContent = 'ミュート'; // ミュートボタンのラベル初期化
+    isMuted = false;                 // ミュート状態リセット
   } else {
     callStatusDisplay.textContent = '';
     btnCallStart.disabled = false;
     btnCallEnd.disabled = true;
+    btnMute.disabled = true;         // ミュートボタンを無効化
+    btnMute.textContent = 'ミュート'; // ミュートボタンのラベル初期化
+    isMuted = false;                 // ミュート状態リセット
   }
 }
 
@@ -545,11 +575,41 @@ function listenSignaling() {
 
   // 初期表示時にFirebaseからroomUsersを読み込んで設定する関数
 async function initializeUsers() {
-  // このタブで「さっき全部けした」ってメモがあれば、登録しないで終わるよ
   if (sessionStorage.getItem('wasCleared') === '1') {
-    sessionStorage.removeItem('wasCleared'); // 一度だけ使ってすてる
+    // 「全データ削除後リロード」の状態を維持するため
+    currentUser = '';
+    lockedUserA = false;
+    lockedUserB = false;
+    userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
+    userSelect.disabled = false;
+    // フラグは消さずに維持（リロード毎にここに戻る）
     return;
   }
+
+  if (currentUser) {
+  // FirebaseのroomUsersを取得
+  const roomUsersRef = ref(db, 'roomUsers');
+  const snapshot = await get(roomUsersRef);
+  const roomUsers = snapshot.exists() ? snapshot.val() : {};
+
+  // DB上に currentUser が登録されていなければ登録し直す
+  if (!roomUsers[currentUser]) {
+    await update(roomUsersRef, { [currentUser]: true });
+  }
+
+  // lockedUserA/Bを設定しUIをセット
+  if (currentUser === 'A') {
+    lockedUserA = true;
+    userSelect.innerHTML = '<option value="A" selected>A</option>';
+    userSelect.disabled = true;
+  } else if (currentUser === 'B') {
+    lockedUserB = true;
+    userSelect.innerHTML = '<option value="B" selected>B</option>';
+    userSelect.disabled = true;
+  }
+  renderCalendar();
+  return;
+}
 
   const roomUsersRef = ref(db, 'roomUsers');
   const snapshot = await get(roomUsersRef);
@@ -564,11 +624,12 @@ async function initializeUsers() {
     userSelect.innerHTML = '<option value="A" selected>A</option>';
     userSelect.disabled = true;
   } else if (!roomUsers.B) {
-    // 2人目がアクセスした時はBのみ選択可能で変更不可
-    currentUser = '';
-    lockedUserB = false;
-    userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="B">B</option>';
-    userSelect.disabled = false;
+  currentUser = '';
+  lockedUserB = false;
+  if (!lockedUserA) lockedUserA = !!roomUsers.A;
+  userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
+userSelect.disabled = false;
+currentUser = ''; 
   } else {
     // 既に両方占有されている場合は選択不可（実際には警告出すなど）
     currentUser = '';
@@ -581,18 +642,26 @@ async function initializeUsers() {
 // ユーザー切替時の処理
 userSelect.addEventListener('change', async e => {
   const val = e.target.value;
+
   if (val === '') {
     currentUser = '';
     return;
   }
+
+  // ここで全データ削除フラグを消す（ユーザーを決定したので）
+  if (sessionStorage.getItem('wasCleared') === '1') {
+    sessionStorage.removeItem('wasCleared');
+  }
+
   if (val === 'A') {
-    // Aは1人目ユーザーに固定済みなので基本通らない想定
     if (!lockedUserA) {
       currentUser = 'A';
       lockedUserA = true;
       await update(ref(db, 'roomUsers'), { A: true });
       userSelect.disabled = true;
-    } else {
+      localStorage.setItem('currentUser', 'A');
+    }
+    else {
       alert('ユーザーAは既に確定しています');
       e.target.value = 'A';
     }
@@ -602,7 +671,9 @@ userSelect.addEventListener('change', async e => {
       lockedUserB = true;
       await update(ref(db, 'roomUsers'), { B: true });
       userSelect.disabled = true;
-    } else {
+      localStorage.setItem('currentUser', 'B');
+    }
+    else {
       alert('ユーザーBは既に確定しています');
       e.target.value = 'B';
     }
