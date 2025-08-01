@@ -178,19 +178,6 @@
   const btnCallStart = document.getElementById('btn-call-start');
   const btnCallEnd = document.getElementById('btn-call-end');
   const btnMute = document.getElementById('btn-mute');
-  
-  // 自分の画面だけボタン状態を制御する関数
-function updateMyButtonStatus(status) {
-  if (status === 'started') {
-    btnCallStart.disabled = true;
-    btnCallEnd.disabled = false;
-    btnMute.disabled = false;
-  } else {
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;
-  }
-}
 
 // 例：通話開始ボタン押下時の処理
 btnCallStart.addEventListener('click', async () => {
@@ -198,10 +185,32 @@ btnCallStart.addEventListener('click', async () => {
     callStatusDisplay.textContent = 'ユーザーを選択してください';
     return;
   }
-  await update(callStatusRef, { status: 'started', user: currentUser });
-  updateMyButtonStatus('started'); // 自分の画面だけボタンを制御
+
+  try {
+    await startLocalStream();  // マイクの使用を開始する
+
+    // 現在の通話ステータスをFirebaseから取得
+    const callStatusSnap = await get(callStatusRef);
+    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
+
+    if (callData.status === 'waiting' && callData.user !== currentUser) {
+      // 相手がすでに待機中 → 通話開始！
+      await update(callStatusRef, { status: 'started', user: currentUser });
+    } else if (callData.status !== 'started') {
+      // 誰も通話を開始していない → 自分が待機に入る
+      await set(callStatusRef, { status: 'waiting', user: currentUser });
+    }
+
+    await sendOffer();         // WebRTCのオファー送信
+    listenSignaling();         // シグナリングの監視開始
+
+    // 自分のボタンだけ切り替える（他の人には影響しない）
+    updateMyButtonStatus(callData.status);
+  } catch (e) {
+    callStatusDisplay.textContent = '通話の準備に失敗しました';
+  }
 });
-  
+
   let isMuted = false;  // ミュート状態管理用変数（グローバルに置くのがオススメ）
 
 btnMute.addEventListener('click', () => {
@@ -837,23 +846,28 @@ btnCallEnd.addEventListener('click', async () => {
 function updateCallStatusUI(status) {
   callStatus = status;
 
+  // 全員に共通のステータスメッセージを表示する（同期される部分）
+  callStatusDisplay.textContent = {
+    'started': '通話中',
+    'waiting': '通話ボタンが押されました（相手を待っています）',
+    'ended': '通話が終了しました',
+    'none': ''
+  }[status] || '';
+
+  // ボタンの状態は自分の画面だけで切り替える（非同期）
+  updateMyButtonStatus(status);
+}
+
+function updateMyButtonStatus(status) {
   if (status === 'started') {
-    callStatusDisplay.textContent = '通話中';
     btnCallStart.disabled = true;
     btnCallEnd.disabled = false;
     btnMute.disabled = false;
-  } else if (status === 'ended') {
-    callStatusDisplay.textContent = '通話が終了しました';
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;
   } else if (status === 'waiting') {
-    callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
     btnCallStart.disabled = true;
     btnCallEnd.disabled = false;
     btnMute.disabled = true;
   } else {
-    callStatusDisplay.textContent = '';
     btnCallStart.disabled = false;
     btnCallEnd.disabled = true;
     btnMute.disabled = true;
