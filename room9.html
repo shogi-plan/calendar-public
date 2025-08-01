@@ -550,25 +550,26 @@ onValue(ref(db, 'signaling/candidates/B'), snapshot => {
   renderCalendar();
   function updateCallStatusUI(status) {
   callStatus = status;
+
   if (status === 'started') {
     callStatusDisplay.textContent = '通話が開始されました';
-    btnCallStart.disabled = true;
-    btnCallEnd.disabled = false;
-    btnMute.disabled = false;        // ミュートボタンを有効化
-  } else if (status === 'cancelled') {
-    callStatusDisplay.textContent = '通話がキャンセルされました';
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;         // ミュートボタンを無効化
-    btnMute.textContent = 'ミュート'; // ミュートボタンのラベル初期化
-    isMuted = false;                 // ミュート状態リセット
+
+    // 自分のユーザーであればボタン制御
+    if (currentUser) {
+      btnCallStart.disabled = true;
+      btnCallEnd.disabled = false;
+      btnMute.disabled = false;
+    }
+  } else if (status === 'cancelled' || status === 'none' || status === 'ended') {
+    callStatusDisplay.textContent = '';
+
+    if (currentUser) {
+      btnCallStart.disabled = false;
+      btnCallEnd.disabled = true;
+      btnMute.disabled = true;
+    }
   } else {
     callStatusDisplay.textContent = '';
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;         // ミュートボタンを無効化
-    btnMute.textContent = 'ミュート'; // ミュートボタンのラベル初期化
-    isMuted = false;                 // ミュート状態リセット
   }
 }
 
@@ -763,10 +764,9 @@ onValue(callStatusRef, snapshot => {
   const snapshot = await get(callStatusRef);
   const data = snapshot.exists() ? snapshot.val() : { status: 'none', timestamp: null };
 
-  // 通話中はボタン無効化しているが念のため防御
   if (data.status === 'started') {
     callStatusDisplay.textContent = '通話は既に開始されています';
-    return;  // ここで処理停止し、2回目の開始を防止
+    return;
   }
 
   try {
@@ -774,6 +774,14 @@ onValue(callStatusRef, snapshot => {
     await sendOffer();
     listenSignaling();
     await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
+
+    // ↓ここを追加：自分の画面だけボタンを無効化
+    btnCallStart.disabled = true;
+    btnCallEnd.disabled = false;
+    btnMute.disabled = false;
+
+    // 通話ステータスUIは更新（相手にも表示される）
+    updateCallStatusUI('started');
 
     // タイムアウトは不要にして通話は続く
     // startCallTimeout();
@@ -791,7 +799,7 @@ btnCallEnd.addEventListener('click', async () => {
   }
 
   if (callTimeoutId) {
-    clearTimeout(callTimeoutId);  // ← 追加: タイマー解除
+    clearTimeout(callTimeoutId);
     callTimeoutId = null;
   }
 
@@ -809,6 +817,11 @@ btnCallEnd.addEventListener('click', async () => {
   }
 
   await remove(ref(db, 'signaling'));
+
+  // ↓ ここを追加（自分だけボタン状態を切り替え）
+  btnCallStart.disabled = false;
+  btnCallEnd.disabled = true;
+  btnMute.disabled = true;
 });
 
   onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
