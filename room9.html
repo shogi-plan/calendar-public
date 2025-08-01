@@ -757,6 +757,22 @@ initializeUsers();
   // ここでFirebaseの通話状態はチェックせず、ローカルだけで管理
   try {
     await startLocalStream();
+    const currentStatusSnap = await get(callStatusRef);
+const currentStatus = currentStatusSnap.exists() ? currentStatusSnap.val() : {};
+
+if (currentStatus.status === 'waiting' && currentStatus.user !== currentUser) {
+  // 相手が既に通話開始済み → 通話中へ
+  await update(callStatusRef, {
+    status: 'started',
+    user: currentUser
+  });
+} else {
+  // 自分が最初の通話開始者
+  await update(callStatusRef, {
+    status: 'waiting',
+    user: currentUser
+  });
+}
     await sendOffer();
     listenSignaling();
 
@@ -807,6 +823,10 @@ btnCallEnd.addEventListener('click', async () => {
 
   callStatusDisplay.textContent = '通話は終了しました';
 });
+  await update(callStatusRef, {
+  status: 'ended',
+  user: currentUser
+});
 
   onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
   onValue(ref(db, 'chatLog'), snapshot => {
@@ -832,6 +852,22 @@ btnCallEnd.addEventListener('click', async () => {
       selectedCells.clear();
     }
   });
+  onValue(callStatusRef, snapshot => {
+  const val = snapshot.val();
+  if (!val || !val.status) {
+    callStatusDisplay.textContent = '';
+    return;
+  }
+
+  if (val.status === 'waiting') {
+    callStatusDisplay.textContent = '通話ボタンが押されました';
+  } else if (val.status === 'started') {
+    callStatusDisplay.textContent = '通話中';
+  } else if (val.status === 'ended') {
+    callStatusDisplay.textContent = '通話が終了されました';
+  }
+});
+
 </script>
   <!-- 相手の音声を再生するaudio要素と音量調整スライダー -->
 <audio id="remote-audio" autoplay></audio><br />
