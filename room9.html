@@ -768,10 +768,22 @@ if (currentStatus.status === 'waiting' && currentStatus.user !== currentUser) {
   });
 } else {
   // 自分が最初の通話開始者
-  await update(callStatusRef, {
-    status: 'waiting',
-    user: currentUser
-  });
+  const callStatusSnap = await get(callStatusRef);
+let statusData = callStatusSnap.exists() ? callStatusSnap.val() : { waitingUsers: [] };
+
+if (!statusData.waitingUsers) statusData.waitingUsers = [];
+if (!statusData.waitingUsers.includes(currentUser)) {
+  statusData.waitingUsers.push(currentUser);
+}
+
+if (statusData.waitingUsers.includes('A') && statusData.waitingUsers.includes('B')) {
+  // 両方揃ったので通話開始
+  await set(callStatusRef, { status: 'started' });
+  await sendOffer();
+  listenSignaling();
+} else {
+  await set(callStatusRef, statusData); // 待機中リスト更新だけ
+}
 }
     await sendOffer();
     listenSignaling();
@@ -823,9 +835,9 @@ btnCallEnd.addEventListener('click', async () => {
 
   callStatusDisplay.textContent = '通話は終了しました';
 });
-  await update(callStatusRef, {
+  await set(callStatusRef, {
   status: 'ended',
-  user: currentUser
+  waitingUsers: []
 });
 
   onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
@@ -852,19 +864,28 @@ btnCallEnd.addEventListener('click', async () => {
       selectedCells.clear();
     }
   });
-  onValue(callStatusRef, snapshot => {
+  onValue(callStatusRef, (snapshot) => {
   const val = snapshot.val();
   if (!val || !val.status) {
     callStatusDisplay.textContent = '';
     return;
   }
 
-  if (val.status === 'waiting') {
-    callStatusDisplay.textContent = '通話ボタンが押されました';
-  } else if (val.status === 'started') {
+  if (val.status === 'started') {
     callStatusDisplay.textContent = '通話中';
+    btnCallStart.disabled = true;
+    btnCallEnd.disabled = false;
+    btnMute.disabled = false;
   } else if (val.status === 'ended') {
-    callStatusDisplay.textContent = '通話が終了されました';
+    callStatusDisplay.textContent = '通話が終了しました';
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+    btnMute.disabled = true;
+  } else if (val.status === 'waiting') {
+    callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
+    btnCallStart.disabled = true;
+    btnCallEnd.disabled = false;
+    btnMute.disabled = true;
   }
 });
 
