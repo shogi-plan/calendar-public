@@ -725,13 +725,6 @@ userSelect.addEventListener('change', async e => {
 // 初期化呼び出し
 initializeUsers();
 
-onValue(callStatusRef, snapshot => {
-  const data = snapshot.val();
-  if (!data) return;
-  const status = data.status;
-  updateCallStatusUI(status);
-});
-
   userANameInput.addEventListener('input', renderCalendar);
   userBNameInput.addEventListener('input', renderCalendar);
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
@@ -761,30 +754,18 @@ onValue(callStatusRef, snapshot => {
     return;
   }
 
-  const snapshot = await get(callStatusRef);
-  const data = snapshot.exists() ? snapshot.val() : { status: 'none', timestamp: null };
-
-  if (data.status === 'started') {
-    callStatusDisplay.textContent = '通話は既に開始されています';
-    return;
-  }
-
+  // ここでFirebaseの通話状態はチェックせず、ローカルだけで管理
   try {
     await startLocalStream();
     await sendOffer();
     listenSignaling();
-    await update(callStatusRef, { status: 'started', timestamp: new Date().toISOString() });
 
-    // ↓ここを追加：自分の画面だけボタンを無効化
+    // ローカルでボタン状態を切り替え（他ユーザーの状態は気にしない）
     btnCallStart.disabled = true;
     btnCallEnd.disabled = false;
     btnMute.disabled = false;
 
-    // 通話ステータスUIは更新（相手にも表示される）
-    updateCallStatusUI('started');
-
-    // タイムアウトは不要にして通話は続く
-    // startCallTimeout();
+    callStatusDisplay.textContent = '通話が開始されました';
 
   } catch (e) {
     callStatusDisplay.textContent = '通話の準備に失敗しました';
@@ -803,8 +784,9 @@ btnCallEnd.addEventListener('click', async () => {
     callTimeoutId = null;
   }
 
-  await update(callStatusRef, { status: 'none', timestamp: null });
-  updateCallStatusUI('none');
+  // Firebaseの通話状態を操作しない（他ユーザーへの影響を排除）
+  // await update(callStatusRef, { status: 'none', timestamp: null });
+  // updateCallStatusUI('none');
 
   if (peerConnection) {
     peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
@@ -818,10 +800,12 @@ btnCallEnd.addEventListener('click', async () => {
 
   await remove(ref(db, 'signaling'));
 
-  // ↓ ここを追加（自分だけボタン状態を切り替え）
+  // 自分の画面だけボタン状態を切り替え
   btnCallStart.disabled = false;
   btnCallEnd.disabled = true;
   btnMute.disabled = true;
+
+  callStatusDisplay.textContent = '通話は終了しました';
 });
 
   onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
