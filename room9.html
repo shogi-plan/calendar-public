@@ -179,12 +179,27 @@
   const btnCallEnd = document.getElementById('btn-call-end');
   const btnMute = document.getElementById('btn-mute');
   
-  btnCallStart.addEventListener('click', async () => {
+  // 自分の画面だけボタン状態を制御する関数
+function updateMyButtonStatus(status) {
+  if (status === 'started') {
+    btnCallStart.disabled = true;
+    btnCallEnd.disabled = false;
+    btnMute.disabled = false;
+  } else {
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+    btnMute.disabled = true;
+  }
+}
+
+// 例：通話開始ボタン押下時の処理
+btnCallStart.addEventListener('click', async () => {
   if (!currentUser) {
     callStatusDisplay.textContent = 'ユーザーを選択してください';
     return;
   }
   await update(callStatusRef, { status: 'started', user: currentUser });
+  updateMyButtonStatus('started'); // 自分の画面だけボタンを制御
 });
   
   let isMuted = false;  // ミュート状態管理用変数（グローバルに置くのがオススメ）
@@ -491,13 +506,17 @@ async function sendAnswer() {
 }
 
 function listenSignaling() {
-  onValue(ref(db, 'signaling/offer'), async snapshot => {
+  onValue(ref(db, 'signaling/offer'), snapshot => {
     const offer = snapshot.val();
     if (!offer || offer.from === currentUser) return;
+    handleOffer(offer);
+  });
+
+  async function handleOffer(offer) {
     createPeerConnection();
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
     await sendAnswer();
-  });
+  }
 
   onValue(ref(db, 'signaling/answer'), async snapshot => {
     const answer = snapshot.val();
@@ -516,63 +535,39 @@ function listenSignaling() {
           peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
         }
       });
-
-      onValue(callStatusRef, (snapshot) => {
-        const status = snapshot.val();
-        console.log("Call status changed:", status);
-        updateCallStatusUI(status); // callStatusに応じてUI更新
-      });
-      
-      onValue(ref(db, 'roomUsers'), snapshot => {
-  const roomUsers = snapshot.val() || {};
-
-  userSelect.innerHTML = `<option value="" selected>選択して下さい</option>`;
-  if (!roomUsers.A) userSelect.innerHTML += `<option value="A">A</option>`;
-  if (!roomUsers.B) userSelect.innerHTML += `<option value="B">B</option>`;
-});
-
     }
   });
 
-onValue(ref(db, 'signaling/candidates/B'), snapshot => {
-  if (currentUser === 'A') {
-    const candidates = snapshot.val();
-    if (!candidates) return;
-    Object.values(candidates).forEach(data => {
-      if (data?.candidate && peerConnection) {
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
-    });
-  }
-});
+  onValue(ref(db, 'signaling/candidates/B'), snapshot => {
+    if (currentUser === 'A') {
+      const candidates = snapshot.val();
+      if (!candidates) return;
+      Object.values(candidates).forEach(data => {
+        if (data?.candidate && peerConnection) {
+          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      });
+    }
+  });
+
+  // ↓ この部分をif文の外に出すことでAユーザーもBユーザーも監視可能に！
+  onValue(callStatusRef, (snapshot) => {
+    const status = snapshot.val();
+    console.log("Call status changed:", status);
+    updateCallStatusUI(status); // callStatusに応じてUI更新
+  });
+
+  // こちらはroomUsersの監視も外に出したいなら同じように移動可能
+  onValue(ref(db, 'roomUsers'), snapshot => {
+    const roomUsers = snapshot.val() || {};
+
+    userSelect.innerHTML = `<option value="" selected>選択して下さい</option>`;
+    if (!roomUsers.A) userSelect.innerHTML += `<option value="A">A</option>`;
+    if (!roomUsers.B) userSelect.innerHTML += `<option value="B">B</option>`;
+  });
 }
 
   renderCalendar();
-  function updateCallStatusUI(status) {
-  callStatus = status;
-
-  if (status === 'started') {
-    callStatusDisplay.textContent = '通話が開始されました';
-
-    // 自分のユーザーであればボタン制御
-    if (currentUser) {
-      btnCallStart.disabled = true;
-      btnCallEnd.disabled = false;
-      btnMute.disabled = false;
-    }
-  } else if (status === 'cancelled' || status === 'none' || status === 'ended') {
-    callStatusDisplay.textContent = '';
-
-    if (currentUser) {
-      btnCallStart.disabled = false;
-      btnCallEnd.disabled = true;
-      btnMute.disabled = true;
-    }
-  } else {
-    callStatusDisplay.textContent = '';
-  }
-}
-
   async function sendMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
@@ -819,12 +814,6 @@ btnCallEnd.addEventListener('click', async () => {
   status: 'ended',
   waitingUsers: []
 });
-
-  onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
-  onValue(ref(db, 'chatLog'), snapshot => {
-    const chatData = snapshot.exists() ? snapshot.val() : [];
-    renderChat(chatData);
-  });
   
   onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
   onValue(ref(db, 'chatLog'), snapshot => {
@@ -844,29 +833,41 @@ btnCallEnd.addEventListener('click', async () => {
       selectedCells.clear();
     }
   });
-  onValue(callStatusRef, (snapshot) => {
-  const val = snapshot.val();
-  if (!val || !val.status) {
-    callStatusDisplay.textContent = '';
-    return;
-  }
+  // 修正後：ステータスメッセージとボタン制御の共通関数
+function updateCallStatusUI(status) {
+  callStatus = status;
 
-  if (val.status === 'started') {
+  if (status === 'started') {
     callStatusDisplay.textContent = '通話中';
     btnCallStart.disabled = true;
     btnCallEnd.disabled = false;
     btnMute.disabled = false;
-  } else if (val.status === 'ended') {
+  } else if (status === 'ended') {
     callStatusDisplay.textContent = '通話が終了しました';
     btnCallStart.disabled = false;
     btnCallEnd.disabled = true;
     btnMute.disabled = true;
-  } else if (val.status === 'waiting') {
+  } else if (status === 'waiting') {
     callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
     btnCallStart.disabled = true;
     btnCallEnd.disabled = false;
     btnMute.disabled = true;
+  } else {
+    callStatusDisplay.textContent = '';
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+    btnMute.disabled = true;
   }
+}
+
+// 修正後：onValue の中身は関数呼び出しだけにする
+onValue(callStatusRef, (snapshot) => {
+  const val = snapshot.val();
+  if (!val || !val.status) {
+    updateCallStatusUI('none');
+    return;
+  }
+  updateCallStatusUI(val.status);
 });
 
 </script>
