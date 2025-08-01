@@ -180,11 +180,11 @@
   const btnMute = document.getElementById('btn-mute');
   
   btnCallStart.addEventListener('click', async () => {
-  updateCallStatusUI('started');
-});
-
-btnCallEnd.addEventListener('click', async () => {
-  updateCallStatusUI('ended');
+  if (!currentUser) {
+    callStatusDisplay.textContent = 'ユーザーを選択してください';
+    return;
+  }
+  await update(callStatusRef, { status: 'started', user: currentUser });
 });
   
   let isMuted = false;  // ミュート状態管理用変数（グローバルに置くのがオススメ）
@@ -753,51 +753,30 @@ initializeUsers();
     callStatusDisplay.textContent = 'ユーザーを選択してください';
     return;
   }
-
-  // ここでFirebaseの通話状態はチェックせず、ローカルだけで管理
   try {
     await startLocalStream();
-    const currentStatusSnap = await get(callStatusRef);
-const currentStatus = currentStatusSnap.exists() ? currentStatusSnap.val() : {};
 
-if (currentStatus.status === 'waiting' && currentStatus.user !== currentUser) {
-  // 相手が既に通話開始済み → 通話中へ
-  await update(callStatusRef, {
-    status: 'started',
-    user: currentUser
-  });
-} else {
-  // 自分が最初の通話開始者
-  const callStatusSnap = await get(callStatusRef);
-let statusData = callStatusSnap.exists() ? callStatusSnap.val() : { waitingUsers: [] };
+    const callStatusSnap = await get(callStatusRef);
+    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
 
-if (!statusData.waitingUsers) statusData.waitingUsers = [];
-if (!statusData.waitingUsers.includes(currentUser)) {
-  statusData.waitingUsers.push(currentUser);
-}
+    if (callData.status === 'waiting' && callData.user !== currentUser) {
+      // 相手が待機中なら通話開始
+      await update(callStatusRef, { status: 'started', user: currentUser });
+    } else if (callData.status !== 'started') {
+      // 自分が最初の通話開始者として待機状態に入る
+      await set(callStatusRef, { status: 'waiting', user: currentUser });
+    }
 
-if (statusData.waitingUsers.includes('A') && statusData.waitingUsers.includes('B')) {
-  // 両方揃ったので通話開始
-  await set(callStatusRef, { status: 'started' });
-  await sendOffer();
-  listenSignaling();
-} else {
-  await set(callStatusRef, statusData); // 待機中リスト更新だけ
-}
-}
     await sendOffer();
     listenSignaling();
 
-    // ローカルでボタン状態を切り替え（他ユーザーの状態は気にしない）
     btnCallStart.disabled = true;
     btnCallEnd.disabled = false;
     btnMute.disabled = false;
-
     callStatusDisplay.textContent = '通話が開始されました';
 
   } catch (e) {
     callStatusDisplay.textContent = '通話の準備に失敗しました';
-    return;
   }
 });
 
@@ -812,9 +791,9 @@ btnCallEnd.addEventListener('click', async () => {
     callTimeoutId = null;
   }
 
-  // Firebaseの通話状態を操作しない（他ユーザーへの影響を排除）
-  // await update(callStatusRef, { status: 'none', timestamp: null });
-  // updateCallStatusUI('none');
+  // Firebaseの通話状態も更新して、他のユーザーに通話終了を知らせる
+  await update(callStatusRef, { status: 'ended', waitingUsers: [] });
+  updateCallStatusUI('ended');  // UI更新も忘れずに
 
   if (peerConnection) {
     peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
@@ -835,6 +814,7 @@ btnCallEnd.addEventListener('click', async () => {
 
   callStatusDisplay.textContent = '通話は終了しました';
 });
+
   await set(callStatusRef, {
   status: 'ended',
   waitingUsers: []
