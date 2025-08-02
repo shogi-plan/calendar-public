@@ -917,55 +917,58 @@ function resetMuteState() {
 onValue(callStatusRef, (snapshot) => {
   const val = snapshot.val();
   if (!val || !val.status) {
-    updateCallStatusUI('none');
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal();
-    return;
-  }
+  updateCallStatusUI('none');
+  localCallStartPressed = false;
+  updateMyButtonStatusLocal();
+
+  resetMuteState(); // ✅ ミュート状態をここでも初期化！
+
+  return;
+}
 
   updateCallStatusUI(val.status);
 
   if (val.status === 'ended' || val.status === 'none') {
-  localCallStartPressed = false;
-  updateMyButtonStatusLocal();
-
-  // ミュート状態を初期化（共通関数で）
-  resetMuteState();
-
-  if (val.statusMessage) {
-    callStatusDisplay.textContent = val.statusMessage;
-  } else {
-    callStatusDisplay.textContent = '通話は終了しました';
-  }
-  return;
-}
-
-  if (val.status === 'waiting') {
-  if (val.user !== currentUser) {
     localCallStartPressed = false;
     updateMyButtonStatusLocal();
-    callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
-  }
-} else if (val.status === 'started') {
-  // 通話開始になったら、通話処理を開始する
-  if (!peerConnection) {
-    if (val.user === currentUser) {
-      // 自分が通話開始ボタンを最初に押した側（発信者）ならOffer送信
-      sendOffer();
+
+    // ミュート状態を初期化（共通関数で）
+    resetMuteState();
+
+    if (val.statusMessage) {
+      callStatusDisplay.textContent = val.statusMessage;
+    } else {
+      callStatusDisplay.textContent = '通話は終了しました';
     }
-    // 発信者・受信者両方ともシグナリングは監視する
-    listenSignaling();
+    return;
   }
-  localCallStartPressed = true;      // 自分も通話開始ボタン押下状態に変更
-  updateMyButtonStatusLocal();       // ボタン状態更新
-  if (val.statusMessage) {
-    callStatusDisplay.textContent = val.statusMessage;
+
+  if (val.status === 'waiting') {
+    if (val.user !== currentUser) {
+      localCallStartPressed = false;
+      updateMyButtonStatusLocal();
+      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
+    }
+  } else if (val.status === 'started') {
+    // 通話開始になったら、通話処理を開始する
+    if (!peerConnection) {
+      // ✅ 2️⃣ 自分が発信者（最初にボタンを押した）場合のみ sendOffer を呼ぶ
+      if (val.user === currentUser) {
+        sendOffer();
+      }
+      // ✅ シグナリング監視は誰でも必要
+      listenSignaling();
+    }
+    localCallStartPressed = true;
+    updateMyButtonStatusLocal();
+    if (val.statusMessage) {
+      callStatusDisplay.textContent = val.statusMessage;
+    }
+  } else {
+    if (val.statusMessage) {
+      callStatusDisplay.textContent = val.statusMessage;
+    }
   }
-} else {
-  if (val.statusMessage) {
-    callStatusDisplay.textContent = val.statusMessage;
-  }
-}
 });
 
 </script>
