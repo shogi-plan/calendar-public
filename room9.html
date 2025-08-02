@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>2人予定調整カレンダー</h1>
+  <h1>あ2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -721,6 +721,8 @@ initializeUsers();
   }
   try {
     await startLocalStream();
+        // 前のシグナリング情報を削除（通話の初期化）
+    await remove(ref(db, 'signaling'));
 
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
@@ -778,11 +780,15 @@ btnCallEnd.addEventListener('click', async () => {
   const callData = snapshot.val();
 
   if (callData && (callData.status === 'started' || callData.status === 'waiting')) {
-    await update(callStatusRef, {
-      status: 'ended',
-      user: currentUser,
-      statusMessage: '通話は終了しました'  // ← ここを追加
-    });
+      await update(callStatusRef, {
+    status: 'none',   // ← 通話終了ではなく初期状態に戻す
+    user: '',
+    statusMessage: ''
+  });
+
+  // ローカル変数もリセット
+  localCallStartPressed = false;
+  updateMyButtonStatusLocal();
   }
 
   // ★ここから追加：WebRTCの接続を閉じる処理
@@ -895,6 +901,11 @@ onValue(callStatusRef, (snapshot) => {
   }
 
   updateCallStatusUI(val.status);
+  
+  if (val.status === 'waiting' && val.user !== currentUser) {
+    localCallStartPressed = false;
+    updateMyButtonStatusLocal(); // ← ここで再びボタンを有効にする
+  }
 
   if (val.status === 'ended' || val.status === 'none') {
     localCallStartPressed = false;
