@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>う2人予定調整カレンダー</h1>
+  <h1>え2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -744,15 +744,8 @@ initializeUsers();
         user: callData.user, // 最初に押したユーザーを保存
         statusMessage: '通話が開始されました'
       });
-
-      await sendOffer();
-      listenSignaling();
     } else if (callData.status === 'started') {
-      // すでに通話中でも、後から入った側が初期化できるように
-      await sendOffer();
-      listenSignaling();
     } else {
-      // どちらか片方が押しているが、条件に合わない場合は待機のみ
       await update(callStatusRef, {
         status: 'waiting',
         user: currentUser,
@@ -918,16 +911,27 @@ onValue(callStatusRef, (snapshot) => {
   }
 
   if (val.status === 'waiting') {
-    if (val.user !== currentUser) {
-      localCallStartPressed = false;
-      updateMyButtonStatusLocal();
-      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
-    }
-  } else {
-    if (val.statusMessage) {
-      callStatusDisplay.textContent = val.statusMessage;
-    }
+  if (val.user !== currentUser) {
+    localCallStartPressed = false;
+    updateMyButtonStatusLocal();
+    callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
   }
+} else if (val.status === 'started') {
+  // 通話開始になったら、通話処理を開始する
+  if (!peerConnection) {
+    sendOffer();
+    listenSignaling();
+  }
+  localCallStartPressed = true;      // 自分も通話開始ボタン押下状態に変更
+  updateMyButtonStatusLocal();       // ボタン状態更新
+  if (val.statusMessage) {
+    callStatusDisplay.textContent = val.statusMessage;
+  }
+} else {
+  if (val.statusMessage) {
+    callStatusDisplay.textContent = val.statusMessage;
+  }
+}
 });
 
 </script>
