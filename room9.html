@@ -912,16 +912,25 @@ onValue(callStatusRef, (snapshot) => {
   updateCallStatusUI(val.status);
 
   if (val.status === 'ended' || val.status === 'none') {
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal();
+  localCallStartPressed = false;
+  updateMyButtonStatusLocal();
 
-    if (val.statusMessage) {
-      callStatusDisplay.textContent = val.statusMessage;
-    } else {
-      callStatusDisplay.textContent = '通話は終了しました';
-    }
-    return;
+  // ミュート状態を初期化（音声ONに戻す）
+  isMuted = false;
+  btnMute.textContent = 'ミュート';
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;
+    });
   }
+
+  if (val.statusMessage) {
+    callStatusDisplay.textContent = val.statusMessage;
+  } else {
+    callStatusDisplay.textContent = '通話は終了しました';
+  }
+  return;
+}
 
   if (val.status === 'waiting') {
   if (val.user !== currentUser) {
