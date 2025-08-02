@@ -806,15 +806,21 @@ btnCallEnd.addEventListener('click', async () => {
     peerConnection = null;
   }
 
-  // ローカルストリームの停止
-  if (localStream) {
-    try {
-      localStream.getTracks().forEach(track => track.stop());
-    } catch (e) {
-      console.error('localStream stop error:', e);
-    }
-    localStream = null;
+  // ミュート状態を初期化（音声ONに戻す）
+isMuted = false;
+btnMute.textContent = 'ミュート';
+
+if (localStream) {
+  try {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;
+      track.stop();  // マイク停止
+    });
+  } catch (e) {
+    console.error('localStream stop error:', e);
   }
+  localStream = null;
+}
 
   // シグナリング情報の削除
   try {
