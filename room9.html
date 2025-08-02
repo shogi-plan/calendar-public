@@ -366,6 +366,9 @@ let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
 
   async function clearAllData() {
   if (!confirm('本当に全てのデータを削除しますか？')) return;
+  await remove(ref(db, 'userNames'));
+  userANameInput.value = 'ユーザーA';
+  userBNameInput.value = 'ユーザーB';
   await remove(ref(db, 'schedules'));
   await remove(ref(db, 'chatLog'));
   await remove(ref(db, 'roomUsers'));
@@ -373,7 +376,7 @@ let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
   await remove(ref(db, 'signaling'));
   selectedCells.clear();
   localStorage.removeItem('currentUser');  
-
+  
 // 1回だけページを再読み込みしても登録しないように、このタブだけにメモを置く
 sessionStorage.setItem('wasCleared', '1'); // ← ここが新しい！
 
@@ -712,8 +715,29 @@ userSelect.addEventListener('change', async e => {
 initializeUsers();
 listenSignaling();
 
-  userANameInput.addEventListener('input', renderCalendar);
-  userBNameInput.addEventListener('input', renderCalendar);
+  userANameInput.addEventListener('input', () => {
+  set(ref(db, 'userNames/A'), userANameInput.value);
+  renderCalendar(); // ← 表示も更新
+});
+
+userBNameInput.addEventListener('input', () => {
+  set(ref(db, 'userNames/B'), userBNameInput.value);
+  renderCalendar();
+});
+
+const userNamesRef = ref(db, 'userNames');
+
+onValue(userNamesRef, (snapshot) => {
+  const data = snapshot.val() || {};
+  if (data.A !== undefined) {
+    userANameInput.value = data.A;
+  }
+  if (data.B !== undefined) {
+    userBNameInput.value = data.B;
+  }
+  renderCalendar(); // 名前が変わったら画面も更新
+});
+
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
   btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
   btnClearCell.addEventListener('click', clearSelectedCells);
