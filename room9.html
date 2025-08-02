@@ -529,14 +529,6 @@ function listenSignaling() {
     }
   });
 
-  // ↓ この部分をif文の外に出すことでAユーザーもBユーザーも監視可能に！
-  onValue(callStatusRef, (snapshot) => {
-    const status = snapshot.val();
-    console.log("Call status changed:", status);
-    updateCallStatusUI(status); // callStatusに応じてUI更新
-  });
-
-  // こちらはroomUsersの監視も外に出したいなら同じように移動可能
   onValue(ref(db, 'roomUsers'), snapshot => {
     const roomUsers = snapshot.val() || {};
 
@@ -859,6 +851,12 @@ onValue(callStatusRef, (snapshot) => {
     return;
   }
   updateCallStatusUI(val.status);
+
+  if (val.status === 'waiting') {
+    if (val.user !== currentUser) {
+      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
+    }
+  }
 
   if (val.status === 'ended' || val.status === 'none') {
     localCallStartPressed = false;  // 通話終了等でローカルもクリア
