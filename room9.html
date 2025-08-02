@@ -799,24 +799,15 @@ btnCallEnd.addEventListener('click', async () => {
     peerConnection = null;
   }
 
-  // ミュートされていたら解除する
-if (isMuted && localStream) {
-  localStream.getAudioTracks().forEach(track => {
-    track.enabled = true;
-  });
-  isMuted = false;
-  btnMute.textContent = 'ミュート'; // ボタンの文字も元に戻す
-}
-
-// ローカルストリームの停止
-if (localStream) {
-  try {
-    localStream.getTracks().forEach(track => track.stop());
-  } catch (e) {
-    console.error('localStream stop error:', e);
+  // ローカルストリームの停止
+  if (localStream) {
+    try {
+      localStream.getTracks().forEach(track => track.stop());
+    } catch (e) {
+      console.error('localStream stop error:', e);
+    }
+    localStream = null;
   }
-  localStream = null;
-}
 
   // シグナリング情報の削除
   try {
@@ -908,25 +899,16 @@ onValue(callStatusRef, (snapshot) => {
   updateCallStatusUI(val.status);
 
   if (val.status === 'ended' || val.status === 'none') {
-  localCallStartPressed = false;
-  updateMyButtonStatusLocal();
+    localCallStartPressed = false;
+    updateMyButtonStatusLocal();
 
-  // 🔽 ミュート解除処理をここに追加
-  if (isMuted && localStream) {
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-    });
-    isMuted = false;
-    btnMute.textContent = 'ミュート'; // ボタン表示を戻す
+    if (val.statusMessage) {
+      callStatusDisplay.textContent = val.statusMessage;
+    } else {
+      callStatusDisplay.textContent = '通話は終了しました';
+    }
+    return;
   }
-
-  if (val.statusMessage) {
-    callStatusDisplay.textContent = val.statusMessage;
-  } else {
-    callStatusDisplay.textContent = '通話は終了しました';
-  }
-  return;
-}
 
   if (val.status === 'waiting') {
   if (val.user !== currentUser) {
