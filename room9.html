@@ -420,16 +420,16 @@ peerConnection.oniceconnectionstatechange = () => {
 };
 
 peerConnection.ontrack = event => {
-    let audio = document.getElementById('remoteAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'remoteAudio';
-      audio.autoplay = true;
-      document.body.appendChild(audio);
-    }
-    audio.srcObject = event.streams[0];
-  };
-;
+  let audio = document.getElementById('remoteAudio');
+  if (!audio) {
+    audio = document.createElement('audio');
+    audio.id = 'remoteAudio';
+    audio.autoplay = true;
+    audio.playsInline = true;  // モバイルでの自動再生対応におすすめ
+    document.body.appendChild(audio);
+  }
+  audio.srcObject = event.streams[0];
+};
 
   if (localStream) {
     localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
@@ -540,16 +540,23 @@ function listenSignaling() {
 
   renderCalendar();
   async function sendMessage() {
-    const text = chatInput.value.trim();
-    if (!text) return;
-    const userName = currentUser;
-    const newMsgRef = ref(db, 'chatLog');
-    const snapshot = await get(newMsgRef);
-    const chatData = snapshot.exists() ? snapshot.val() : [];
-    chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
-    await set(newMsgRef, chatData);
-    chatInput.value = '';
+  // ★ユーザーが選択されていない場合はメッセージを表示して中断
+  if (!currentUser) {
+    callStatusDisplay.textContent = 'ユーザーを選択してください';
+    return;
   }
+
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  const userName = currentUser;
+  const newMsgRef = ref(db, 'chatLog');
+  const snapshot = await get(newMsgRef);
+  const chatData = snapshot.exists() ? snapshot.val() : [];
+  chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
+  await set(newMsgRef, chatData);
+  chatInput.value = '';
+}
 
   function renderChat(chatData) {
     chatLog.innerHTML = '';
@@ -690,6 +697,7 @@ userSelect.addEventListener('change', async e => {
 
 // 初期化呼び出し
 initializeUsers();
+listenSignaling();
 
   userANameInput.addEventListener('input', renderCalendar);
   userBNameInput.addEventListener('input', renderCalendar);
@@ -799,15 +807,22 @@ btnCallEnd.addEventListener('click', async () => {
     peerConnection = null;
   }
 
-  // ローカルストリームの停止
-  if (localStream) {
-    try {
-      localStream.getTracks().forEach(track => track.stop());
-    } catch (e) {
-      console.error('localStream stop error:', e);
-    }
-    localStream = null;
+// ミュート状態を初期化（共通関数で）
+resetMuteState();
+
+// localStreamの停止（※track.stopは enabled を true にする前にやらない）
+if (localStream) {
+  try {
+    localStream.getAudioTracks().forEach(track => {
+      if (track.readyState === 'live') {
+        track.stop();  // 音声トラックを停止
+      }
+    });
+  } catch (e) {
+    console.error('localStream stop error:', e);
   }
+  localStream = null;
+}
 
   // シグナリング情報の削除
   try {
@@ -887,6 +902,18 @@ function updateMyButtonStatusLocal() {
   }
 }
 
+// ミュート状態を初期化する関数（共通で使う）
+function resetMuteState() {
+  isMuted = false;
+  btnMute.textContent = 'ミュート';
+
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;  // ミュート解除（音を出す）
+    });
+  }
+}
+
 onValue(callStatusRef, (snapshot) => {
   const val = snapshot.val();
   if (!val || !val.status) {
@@ -899,16 +926,19 @@ onValue(callStatusRef, (snapshot) => {
   updateCallStatusUI(val.status);
 
   if (val.status === 'ended' || val.status === 'none') {
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal();
+  localCallStartPressed = false;
+  updateMyButtonStatusLocal();
 
-    if (val.statusMessage) {
-      callStatusDisplay.textContent = val.statusMessage;
-    } else {
-      callStatusDisplay.textContent = '通話は終了しました';
-    }
-    return;
+  // ミュート状態を初期化（共通関数で）
+  resetMuteState();
+
+  if (val.statusMessage) {
+    callStatusDisplay.textContent = val.statusMessage;
+  } else {
+    callStatusDisplay.textContent = '通話は終了しました';
   }
+  return;
+}
 
   if (val.status === 'waiting') {
   if (val.user !== currentUser) {
@@ -919,7 +949,11 @@ onValue(callStatusRef, (snapshot) => {
 } else if (val.status === 'started') {
   // 通話開始になったら、通話処理を開始する
   if (!peerConnection) {
-    sendOffer();
+    if (val.user === currentUser) {
+      // 自分が通話開始ボタンを最初に押した側（発信者）ならOffer送信
+      sendOffer();
+    }
+    // 発信者・受信者両方ともシグナリングは監視する
     listenSignaling();
   }
   localCallStartPressed = true;      // 自分も通話開始ボタン押下状態に変更
