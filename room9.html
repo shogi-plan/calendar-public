@@ -735,10 +735,14 @@ initializeUsers();
 
     localCallStartPressed = true;  // ローカルの「押した」状態をセット
 
-    if (callData.status === 'waiting' && callData.user !== currentUser) {
-      // 相手が待機中なら、通話状態を同期させる（startedに）
-      await update(callStatusRef, { status: 'started', user: currentUser });
-    } else if (callData.status !== 'started') {
+    if (!callData || !callData.status) {
+  // ステータスがまだ何もない（最初の人） → waiting を書く
+  await update(callStatusRef, { status: 'waiting', user: currentUser });
+} else if (callData.status === 'waiting' && callData.user !== currentUser) {
+  // もう片方の人が waiting → 通話を開始
+  await update(callStatusRef, { status: 'started', user: currentUser });
+}
+    else if (callData.status !== 'started') {
       // 待機状態はFirebaseには書き込まず、ローカルだけ管理する（非同期に）
       // なのでここは何もしない
     }
@@ -760,14 +764,21 @@ btnCallEnd.addEventListener('click', async () => {
     alert('ユーザーを選択してください');
     return;
   }
-  // 省略...
 
-  localCallStartPressed = false;  // ローカルの押下状態リセット
+  localCallStartPressed = false;
   updateMyButtonStatusLocal();
 
   btnCallStart.disabled = false;
   btnCallEnd.disabled = true;
   btnMute.disabled = true;
+
+  // Firebase にステータスを書き込む
+  const snapshot = await get(callStatusRef);
+  const callData = snapshot.val();
+
+  if (callData && (callData.status === 'started' || callData.status === 'waiting')) {
+    await update(callStatusRef, { status: 'ended', user: currentUser });
+  }
 
   callStatusDisplay.textContent = '通話は終了しました';
 });
