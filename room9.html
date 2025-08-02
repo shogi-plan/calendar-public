@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>あ2人予定調整カレンダー</h1>
+  <h1>い2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -721,45 +721,51 @@ initializeUsers();
   }
 
   try {
+    // ローカルのマイクを取得
     await startLocalStream();
+
+    // 過去の signaling 情報を削除
     await remove(ref(db, 'signaling'));
 
+    // ローカルのボタン押下フラグをセット
     localCallStartPressed = true;
-
-await runTransaction(callStatusRef, (callData) => {
-  if (!callData || !callData.status || callData.status === 'none') {
-    // 自分が最初に通話開始ボタンを押した
-    return {
-      status: 'waiting',
-      user: currentUser,
-      statusMessage: '相手が通話開始ボタンを押すのを待っています'
-    };
-  } else if (callData.status === 'waiting' && callData.user !== currentUser) {
-    // 両方が押した → 通話開始
-    return {
-      status: 'started',
-      user: currentUser,
-      statusMessage: '通話が開始されました'
-    };
-  } else {
-    // 何か別の状態ならそのまま
-    return callData;
-  }
-});
-
-// 通話が始まっていたら、通話処理を開始する
-const statusSnap = await get(callStatusRef);
-const statusVal = statusSnap.exists() ? statusSnap.val() : null;
-
-if (statusVal?.status === 'started') {
-  await sendOffer();
-  listenSignaling();
-}
-
     updateMyButtonStatusLocal();
 
+    // ステータス取得
+    const snap = await get(callStatusRef);
+    const data = snap.exists() ? snap.val() : {};
+
+    // 状態に応じて分岐
+    if (!data.status || data.status === 'none') {
+      // 自分が先に押した（最初の通話参加者）
+      await update(callStatusRef, {
+        status: 'waiting',
+        user: currentUser,
+        statusMessage: '相手が通話開始ボタンを押すのを待っています'
+      });
+
+      callStatusDisplay.textContent = '相手の応答を待っています';
+
+    } else if (data.status === 'waiting' && data.user !== currentUser) {
+      // 両者が押した → 通話開始
+      await update(callStatusRef, {
+        status: 'started',
+        user: currentUser,
+        statusMessage: '通話が開始されました'
+      });
+
+      // WebRTC通話開始
+      await sendOffer();
+      listenSignaling();
+
+      callStatusDisplay.textContent = '通話が開始されました';
+
+    } else {
+      // 既に相手が押しているが、まだ条件を満たしていない場合
+      callStatusDisplay.textContent = '相手の応答を待っています';
+    }
+
   } catch (e) {
-    console.error(e);
     callStatusDisplay.textContent = '通話の準備に失敗しました';
   }
 });
