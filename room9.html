@@ -540,16 +540,23 @@ function listenSignaling() {
 
   renderCalendar();
   async function sendMessage() {
-    const text = chatInput.value.trim();
-    if (!text) return;
-    const userName = currentUser;
-    const newMsgRef = ref(db, 'chatLog');
-    const snapshot = await get(newMsgRef);
-    const chatData = snapshot.exists() ? snapshot.val() : [];
-    chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
-    await set(newMsgRef, chatData);
-    chatInput.value = '';
+  // ★ユーザーが選択されていない場合はメッセージを表示して中断
+  if (!currentUser) {
+    callStatusDisplay.textContent = 'ユーザーを選択してください';
+    return;
   }
+
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  const userName = currentUser;
+  const newMsgRef = ref(db, 'chatLog');
+  const snapshot = await get(newMsgRef);
+  const chatData = snapshot.exists() ? snapshot.val() : [];
+  chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
+  await set(newMsgRef, chatData);
+  chatInput.value = '';
+}
 
   function renderChat(chatData) {
     chatLog.innerHTML = '';
