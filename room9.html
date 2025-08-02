@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>あ2人予定調整カレンダー</h1>
+  <h1>2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -719,43 +719,47 @@ initializeUsers();
     callStatusDisplay.textContent = 'ユーザーを選択してください';
     return;
   }
+
   try {
     await startLocalStream();
-        // 前のシグナリング情報を削除（通話の初期化）
     await remove(ref(db, 'signaling'));
 
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
 
-    localCallStartPressed = true;  // ローカルの「押した」状態をセット
+    localCallStartPressed = true;
 
-        if (!callData || !callData.status) {
-   await update(callStatusRef, {
-     status: 'waiting',
-     user: currentUser,
-     statusMessage: '相手が通話開始ボタンを押すのを待っています'
-   });
-} else if (callData.status === 'waiting' && callData.user !== currentUser) {
-   await update(callStatusRef, {
-     status: 'started',
-     user: currentUser,
-     statusMessage: '通話が開始されました'
-   });
-}
+    if (!callData || !callData.status || callData.status === 'none') {
+      // 自分が最初に通話開始ボタンを押した
+      await update(callStatusRef, {
+        status: 'waiting',
+        user: currentUser,
+        statusMessage: '相手が通話開始ボタンを押すのを待っています'
+      });
 
-    else if (callData.status !== 'started') {
-      // 待機状態はFirebaseには書き込まず、ローカルだけ管理する（非同期に）
-      // なのでここは何もしない
+    } else if (callData.status === 'waiting' && callData.user !== currentUser) {
+      // 両方が押した → 通話開始
+      await update(callStatusRef, {
+        status: 'started',
+        user: currentUser,
+        statusMessage: '通話が開始されました'
+      });
+
+      await sendOffer();
+      listenSignaling();
+    } else {
+      // どちらか片方が押しているが、条件に合わない場合は待機のみ
+      await update(callStatusRef, {
+        status: 'waiting',
+        user: currentUser,
+        statusMessage: '相手が通話開始ボタンを押すのを待っています'
+      });
     }
 
-    await sendOffer();
-    listenSignaling();
-
-    updateMyButtonStatusLocal(); // ローカル押下状態でボタンを切り替える
-
-    callStatusDisplay.textContent = '通話が開始されました';
+    updateMyButtonStatusLocal();
 
   } catch (e) {
+    console.error(e);
     callStatusDisplay.textContent = '通話の準備に失敗しました';
   }
 });
@@ -766,35 +770,30 @@ btnCallEnd.addEventListener('click', async () => {
     return;
   }
 
-  // ローカルの通話開始フラグをリセットし、ボタン状態を更新
+  // ローカルの押下状態解除
   localCallStartPressed = false;
   updateMyButtonStatusLocal();
 
-  // ボタンの有効/無効を切り替え
+  // UIボタン状態をリセット
   btnCallStart.disabled = false;
   btnCallEnd.disabled = true;
   btnMute.disabled = true;
 
-  // FirebaseのcallStatusを更新して通話終了を通知
+  // ステータスをFirebase上でリセット
   const snapshot = await get(callStatusRef);
   const callData = snapshot.val();
 
   if (callData && (callData.status === 'started' || callData.status === 'waiting')) {
-      await update(callStatusRef, {
-    status: 'none',   // ← 通話終了ではなく初期状態に戻す
-    user: '',
-    statusMessage: ''
-  });
-
-  // ローカル変数もリセット
-  localCallStartPressed = false;
-  updateMyButtonStatusLocal();
+    await update(callStatusRef, {
+      status: 'none',
+      user: '',
+      statusMessage: '通話は終了しました'
+    });
   }
 
-  // ★ここから追加：WebRTCの接続を閉じる処理
+  // peerConnection のクリーンアップ
   if (peerConnection) {
     try {
-      // 送信中のトラックを全て削除してから接続を閉じる
       peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
       peerConnection.close();
     } catch (e) {
@@ -803,7 +802,7 @@ btnCallEnd.addEventListener('click', async () => {
     peerConnection = null;
   }
 
-  // ★ローカルの音声ストリームを停止する処理
+  // ローカルストリームの停止
   if (localStream) {
     try {
       localStream.getTracks().forEach(track => track.stop());
@@ -813,14 +812,14 @@ btnCallEnd.addEventListener('click', async () => {
     localStream = null;
   }
 
-  // ★シグナリングの情報をFirebaseから削除（通話終了時の後片付け）
+  // シグナリング情報の削除
   try {
     await remove(ref(db, 'signaling'));
   } catch (e) {
     console.error('signaling remove error:', e);
   }
 
-  // 通話終了メッセージを表示
+  // ステータスメッセージのローカル表示
   callStatusDisplay.textContent = '通話は終了しました';
 });
 
@@ -901,31 +900,28 @@ onValue(callStatusRef, (snapshot) => {
   }
 
   updateCallStatusUI(val.status);
-  
-  if (val.status === 'waiting' && val.user !== currentUser) {
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal(); // ← ここで再びボタンを有効にする
-  }
 
   if (val.status === 'ended' || val.status === 'none') {
     localCallStartPressed = false;
     updateMyButtonStatusLocal();
 
-    // 通話終了時のメッセージ表示（ここを修正）
     if (val.statusMessage) {
-      callStatusDisplay.textContent = val.statusMessage;  // Firebaseにあるメッセージを表示
+      callStatusDisplay.textContent = val.statusMessage;
     } else {
-      callStatusDisplay.textContent = '通話は終了しました';  // ない場合はこれを表示
+      callStatusDisplay.textContent = '通話は終了しました';
     }
-    return;  // ここで処理を終わらせる
+    return;
   }
 
-  // Firebaseに書かれているステータスメッセージがあれば、それを表示する（通話中や待機中）
-  if (val.statusMessage) {
-    callStatusDisplay.textContent = val.statusMessage;
-  } else if (val.status === 'waiting') {
+  if (val.status === 'waiting') {
     if (val.user !== currentUser) {
+      localCallStartPressed = false;
+      updateMyButtonStatusLocal();
       callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
+    }
+  } else {
+    if (val.statusMessage) {
+      callStatusDisplay.textContent = val.statusMessage;
     }
   }
 });
