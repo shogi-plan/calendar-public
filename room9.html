@@ -540,23 +540,16 @@ function listenSignaling() {
 
   renderCalendar();
   async function sendMessage() {
-  // ★ユーザーが選択されていない場合はメッセージを表示して中断
-  if (!currentUser) {
-    callStatusDisplay.textContent = 'ユーザーを選択してください';
-    return;
+    const text = chatInput.value.trim();
+    if (!text) return;
+    const userName = currentUser;
+    const newMsgRef = ref(db, 'chatLog');
+    const snapshot = await get(newMsgRef);
+    const chatData = snapshot.exists() ? snapshot.val() : [];
+    chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
+    await set(newMsgRef, chatData);
+    chatInput.value = '';
   }
-
-  const text = chatInput.value.trim();
-  if (!text) return;
-
-  const userName = currentUser;
-  const newMsgRef = ref(db, 'chatLog');
-  const snapshot = await get(newMsgRef);
-  const chatData = snapshot.exists() ? snapshot.val() : [];
-  chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
-  await set(newMsgRef, chatData);
-  chatInput.value = '';
-}
 
   function renderChat(chatData) {
     chatLog.innerHTML = '';
@@ -806,17 +799,19 @@ btnCallEnd.addEventListener('click', async () => {
     peerConnection = null;
   }
 
-// ミュート状態を初期化（共通関数で）
-resetMuteState();
+  // ミュートされていたら解除する
+if (isMuted && localStream) {
+  localStream.getAudioTracks().forEach(track => {
+    track.enabled = true;
+  });
+  isMuted = false;
+  btnMute.textContent = 'ミュート'; // ボタンの文字も元に戻す
+}
 
-// localStreamの停止（※track.stopは enabled を true にする前にやらない）
+// ローカルストリームの停止
 if (localStream) {
   try {
-    localStream.getAudioTracks().forEach(track => {
-      if (track.readyState === 'live') {
-        track.stop();  // 音声トラックを停止
-      }
-    });
+    localStream.getTracks().forEach(track => track.stop());
   } catch (e) {
     console.error('localStream stop error:', e);
   }
@@ -901,18 +896,6 @@ function updateMyButtonStatusLocal() {
   }
 }
 
-// ミュート状態を初期化する関数（共通で使う）
-function resetMuteState() {
-  isMuted = false;
-  btnMute.textContent = 'ミュート';
-
-  if (localStream) {
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;  // ミュート解除（音を出す）
-    });
-  }
-}
-
 onValue(callStatusRef, (snapshot) => {
   const val = snapshot.val();
   if (!val || !val.status) {
@@ -928,8 +911,14 @@ onValue(callStatusRef, (snapshot) => {
   localCallStartPressed = false;
   updateMyButtonStatusLocal();
 
-  // ミュート状態を初期化（共通関数で）
-  resetMuteState();
+  // 🔽 ミュート解除処理をここに追加
+  if (isMuted && localStream) {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;
+    });
+    isMuted = false;
+    btnMute.textContent = 'ミュート'; // ボタン表示を戻す
+  }
 
   if (val.statusMessage) {
     callStatusDisplay.textContent = val.statusMessage;
