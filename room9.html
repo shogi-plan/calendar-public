@@ -390,11 +390,24 @@ lockedUserB = false;
   updateCallStatusUI('none');
   }
   async function startLocalStream() {
+  // ストリームがすでにある場合は停止してから作り直す
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+
   try {
+    // 毎回新しく取得（ミュートによって停止されていたトラックもリセット）
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-  } catch (e) {
-    alert('マイクの使用許可が必要です');
-    throw e;
+
+    // ミュート状態を初期化（enabled = true）
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;
+    });
+
+  } catch (error) {
+    console.error('startLocalStream error:', error);
+    throw error;
   }
 }
 
@@ -730,6 +743,7 @@ listenSignaling();
 
   try {
     await startLocalStream();
+    resetMuteState();  // enabled を明示的に true にしておく（冗長だが安全）
     await remove(ref(db, 'signaling'));
 
     const callStatusSnap = await get(callStatusRef);
