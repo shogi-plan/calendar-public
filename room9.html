@@ -179,38 +179,6 @@
   const btnCallEnd = document.getElementById('btn-call-end');
   const btnMute = document.getElementById('btn-mute');
 
-// 例：通話開始ボタン押下時の処理
-btnCallStart.addEventListener('click', async () => {
-  if (!currentUser) {
-    callStatusDisplay.textContent = 'ユーザーを選択してください';
-    return;
-  }
-
-  try {
-    await startLocalStream();  // マイクの使用を開始する
-
-    // 現在の通話ステータスをFirebaseから取得
-    const callStatusSnap = await get(callStatusRef);
-    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
-
-    if (callData.status === 'waiting' && callData.user !== currentUser) {
-      // 相手がすでに待機中 → 通話開始！
-      await update(callStatusRef, { status: 'started', user: currentUser });
-    } else if (callData.status !== 'started') {
-      // 誰も通話を開始していない → 自分が待機に入る
-      await set(callStatusRef, { status: 'waiting', user: currentUser });
-    }
-
-    await sendOffer();         // WebRTCのオファー送信
-    listenSignaling();         // シグナリングの監視開始
-
-    // 自分のボタンだけ切り替える（他の人には影響しない）
-    updateMyButtonStatus(callData.status);
-  } catch (e) {
-    callStatusDisplay.textContent = '通話の準備に失敗しました';
-  }
-});
-
   let isMuted = false;  // ミュート状態管理用変数（グローバルに置くのがオススメ）
 
 btnMute.addEventListener('click', () => {
@@ -227,6 +195,8 @@ btnMute.addEventListener('click', () => {
 let localStream = null;
 let peerConnection = null;
 let callTimeoutId = null;
+let localCallStartPressed = false; // 自分が通話開始ボタンを押しているかどうか（ローカル管理）
+
 const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const signalingRef = ref(db, 'signaling');
 
@@ -763,20 +733,21 @@ initializeUsers();
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
 
+    localCallStartPressed = true;  // ローカルの「押した」状態をセット
+
     if (callData.status === 'waiting' && callData.user !== currentUser) {
-      // 相手が待機中なら通話開始
+      // 相手が待機中なら、通話状態を同期させる（startedに）
       await update(callStatusRef, { status: 'started', user: currentUser });
     } else if (callData.status !== 'started') {
-      // 自分が最初の通話開始者として待機状態に入る
-      await set(callStatusRef, { status: 'waiting', user: currentUser });
+      // 待機状態はFirebaseには書き込まず、ローカルだけ管理する（非同期に）
+      // なのでここは何もしない
     }
 
     await sendOffer();
     listenSignaling();
 
-    btnCallStart.disabled = true;
-    btnCallEnd.disabled = false;
-    btnMute.disabled = false;
+    updateMyButtonStatusLocal(); // ローカル押下状態でボタンを切り替える
+
     callStatusDisplay.textContent = '通話が開始されました';
 
   } catch (e) {
@@ -789,29 +760,11 @@ btnCallEnd.addEventListener('click', async () => {
     alert('ユーザーを選択してください');
     return;
   }
+  // 省略...
 
-  if (callTimeoutId) {
-    clearTimeout(callTimeoutId);
-    callTimeoutId = null;
-  }
+  localCallStartPressed = false;  // ローカルの押下状態リセット
+  updateMyButtonStatusLocal();
 
-  // Firebaseの通話状態も更新して、他のユーザーに通話終了を知らせる
-  await update(callStatusRef, { status: 'ended', waitingUsers: [] });
-  updateCallStatusUI('ended');  // UI更新も忘れずに
-
-  if (peerConnection) {
-    peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-    peerConnection.close();
-    peerConnection = null;
-  }
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
-  }
-
-  await remove(ref(db, 'signaling'));
-
-  // 自分の画面だけボタン状態を切り替え
   btnCallStart.disabled = false;
   btnCallEnd.disabled = true;
   btnMute.disabled = true;
@@ -874,14 +827,32 @@ function updateMyButtonStatus(status) {
   }
 }
 
-// 修正後：onValue の中身は関数呼び出しだけにする
+function updateMyButtonStatusLocal() {
+  if (localCallStartPressed) {
+    btnCallStart.disabled = true;
+    btnCallEnd.disabled = false;
+    btnMute.disabled = false;
+  } else {
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+    btnMute.disabled = true;
+  }
+}
+
 onValue(callStatusRef, (snapshot) => {
   const val = snapshot.val();
   if (!val || !val.status) {
     updateCallStatusUI('none');
+    localCallStartPressed = false;  // ローカル状態もリセット
+    updateMyButtonStatusLocal();
     return;
   }
   updateCallStatusUI(val.status);
+
+  if (val.status === 'ended' || val.status === 'none') {
+    localCallStartPressed = false;  // 通話終了等でローカルもクリア
+    updateMyButtonStatusLocal();
+  }
 });
 
 </script>
