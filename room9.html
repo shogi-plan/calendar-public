@@ -757,14 +757,16 @@ btnCallEnd.addEventListener('click', async () => {
     return;
   }
 
+  // ローカルの通話開始フラグをリセットし、ボタン状態を更新
   localCallStartPressed = false;
   updateMyButtonStatusLocal();
 
+  // ボタンの有効/無効を切り替え
   btnCallStart.disabled = false;
   btnCallEnd.disabled = true;
   btnMute.disabled = true;
 
-  // Firebase にステータスを書き込む
+  // FirebaseのcallStatusを更新して通話終了を通知
   const snapshot = await get(callStatusRef);
   const callData = snapshot.val();
 
@@ -772,6 +774,36 @@ btnCallEnd.addEventListener('click', async () => {
     await update(callStatusRef, { status: 'ended', user: currentUser });
   }
 
+  // ★ここから追加：WebRTCの接続を閉じる処理
+  if (peerConnection) {
+    try {
+      // 送信中のトラックを全て削除してから接続を閉じる
+      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+      peerConnection.close();
+    } catch (e) {
+      console.error('peerConnection close error:', e);
+    }
+    peerConnection = null;
+  }
+
+  // ★ローカルの音声ストリームを停止する処理
+  if (localStream) {
+    try {
+      localStream.getTracks().forEach(track => track.stop());
+    } catch (e) {
+      console.error('localStream stop error:', e);
+    }
+    localStream = null;
+  }
+
+  // ★シグナリングの情報をFirebaseから削除（通話終了時の後片付け）
+  try {
+    await remove(ref(db, 'signaling'));
+  } catch (e) {
+    console.error('signaling remove error:', e);
+  }
+
+  // 通話終了メッセージを表示
   callStatusDisplay.textContent = '通話は終了しました';
 });
 
