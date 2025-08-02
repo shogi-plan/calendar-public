@@ -806,15 +806,16 @@ btnCallEnd.addEventListener('click', async () => {
     peerConnection = null;
   }
 
-  // ミュート状態を初期化（音声ONに戻す）
-isMuted = false;
-btnMute.textContent = 'ミュート';
+// ミュート状態を初期化（共通関数で）
+resetMuteState();
 
+// localStreamの停止（※track.stopは enabled を true にする前にやらない）
 if (localStream) {
   try {
     localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-      track.stop();  // マイク停止
+      if (track.readyState === 'live') {
+        track.stop();  // 音声トラックを停止
+      }
     });
   } catch (e) {
     console.error('localStream stop error:', e);
@@ -900,6 +901,18 @@ function updateMyButtonStatusLocal() {
   }
 }
 
+// ミュート状態を初期化する関数（共通で使う）
+function resetMuteState() {
+  isMuted = false;
+  btnMute.textContent = 'ミュート';
+
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;  // ミュート解除（音を出す）
+    });
+  }
+}
+
 onValue(callStatusRef, (snapshot) => {
   const val = snapshot.val();
   if (!val || !val.status) {
@@ -915,14 +928,8 @@ onValue(callStatusRef, (snapshot) => {
   localCallStartPressed = false;
   updateMyButtonStatusLocal();
 
-  // ミュート状態を初期化（音声ONに戻す）
-  isMuted = false;
-  btnMute.textContent = 'ミュート';
-  if (localStream) {
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-    });
-  }
+  // ミュート状態を初期化（共通関数で）
+  resetMuteState();
 
   if (val.statusMessage) {
     callStatusDisplay.textContent = val.statusMessage;
