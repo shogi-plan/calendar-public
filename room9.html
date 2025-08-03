@@ -444,7 +444,11 @@ peerConnection.ontrack = event => {
     audio.playsInline = true;  // モバイルでの自動再生対応におすすめ
     document.body.appendChild(audio);
   }
-  audio.srcObject = event.streams[0];
+  // 🔁 古い stream を切り離す
+  audio.srcObject = null;
+  // ✅ 新しいストリーム（clone で確実に違うオブジェクトにする）
+  const newStream = event.streams[0].clone();
+  audio.srcObject = newStream;
 };
 
   if (localStream) {
