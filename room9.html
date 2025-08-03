@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>2人予定調整カレンダー</h1>
+  <h1>あ2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -449,6 +449,9 @@ peerConnection.ontrack = event => {
   // ✅ 新しいストリーム（clone で確実に違うオブジェクトにする）
   const newStream = event.streams[0].clone();
   audio.srcObject = newStream;
+  audio.play().catch(err => {
+  console.warn("🔇 audio.play() が失敗しました:", err);
+ });
 };
 
   if (localStream) {
