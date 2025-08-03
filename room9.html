@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>え2人予定調整カレンダー</h1>
+  <h1>お2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -455,8 +455,14 @@ peerConnection.ontrack = event => {
 };
 
   if (localStream) {
-    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-  }
+  localStream.getTracks().forEach(track => {
+    // 既に同じトラックが追加されていないかチェック
+    const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
+    if (!senderExists) {
+      peerConnection.addTrack(track, localStream);
+    }
+  });
+}
 }
 
 async function sendOffer() {
@@ -766,14 +772,24 @@ onValue(userNamesRef, (snapshot) => {
     renderCalendar();
   });
   btnSend.addEventListener('click', sendMessage);
-  btnCallStart.addEventListener('click', async () => {
+  let isCallStarting = false; // 追加：通話開始処理中かどうかを管理するフラグ
+
+btnCallStart.addEventListener('click', async () => {
+  if (isCallStarting) {
+    // 既に通話開始処理中なら無視する（連打防止）
+    return;
+  }
+  isCallStarting = true; // 処理開始をフラグで記録
+  btnCallStart.disabled = true; // ボタンを押せなくして視覚的にも連打防止
+
   if (!currentUser) {
     callStatusDisplay.textContent = 'ユーザーを選択してください';
+    isCallStarting = false; // フラグ戻す
+    btnCallStart.disabled = false; // ボタン戻す
     return;
   }
 
   try {
-    // もし前のpeerConnectionがあれば閉じて消す
     if (peerConnection) {
       try {
         peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
@@ -784,30 +800,26 @@ onValue(userNamesRef, (snapshot) => {
       peerConnection = null;
     }
 
-    // マイクの音声を新しくもらう（startLocalStreamで）
     await startLocalStream();
-
-    // ミュート状態を解除（音を出す状態に）
     resetMuteState();
-
-    // 新しい通信のためのpeerConnectionを作る
     createPeerConnection();
 
-    // マイクの音声をpeerConnectionに送る準備
     if (localStream) {
       localStream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, localStream);
+        // 送信済みトラック重複防止（対策①の例）
+        const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
+        if (!senderExists) {
+          peerConnection.addTrack(track, localStream);
+        }
       });
     }
 
-    // 自分の音声を再生するaudioにセット（ミュートしてるので自分には聞こえない）
     const localAudio = document.getElementById('localAudio');
     if (localAudio) {
       localAudio.srcObject = localStream;
       await localAudio.play();
     }
 
-    // Firebaseにある古いシグナリング情報を全部消す（重要）
     await remove(ref(db, 'signaling'));
 
     // 通話開始状態をFirebaseに登録する処理は元のまま続ける
@@ -844,6 +856,10 @@ onValue(userNamesRef, (snapshot) => {
   } catch (e) {
     console.error(e);
     callStatusDisplay.textContent = '通話の準備に失敗しました';
+  } finally {
+    // 処理終了したら連打防止フラグとボタン状態を元に戻す
+    isCallStarting = false;
+    btnCallStart.disabled = false;
   }
 });
 
