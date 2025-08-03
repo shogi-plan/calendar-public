@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>い2人予定調整カレンダー</h1>
+  <h1>う2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -775,6 +775,11 @@ onValue(userNamesRef, (snapshot) => {
   try {
     await startLocalStream();
     resetMuteState();  // enabled を明示的に true にしておく（冗長だが安全）
+    // 【追加・重要】localStreamがあればlocalAudioにセットしてから再生を呼ぶ
+    if (localAudio && localStream) {
+      localAudio.srcObject = localStream;  // ここが追加された行
+      await localAudio.play();              // 再生開始（失敗したらcatchへ）
+    }
     await remove(ref(db, 'signaling'));
     
     // 追加：ローカルの audio 要素の再生を開始する
