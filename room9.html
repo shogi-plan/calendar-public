@@ -844,6 +844,10 @@ btnCallEnd.addEventListener('click', async () => {
     }
     peerConnection = null;
   }
+const audio = document.getElementById('remoteAudio');
+if (audio) {
+  audio.srcObject = null; // 🎯 再接続時に音が出るようにする
+}
 
 // ミュート状態を初期化（共通関数で）
 resetMuteState();
