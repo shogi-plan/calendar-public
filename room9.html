@@ -147,7 +147,13 @@
   import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
   const firebaseConfig = {
-      ナイショ
+      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
+      authDomain: "calendar-chousei.firebaseapp.com",
+      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "calendar-chousei",
+      storageBucket: "calendar-chousei.firebasestorage.app",
+      messagingSenderId: "368704703397",
+      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
 
   const app = initializeApp(firebaseConfig);
@@ -745,6 +751,29 @@ onValue(userNamesRef, (snapshot) => {
   renderCalendar(); // 名前が変わったら画面も更新
 });
 
+// ここから追加：callStatusRef の監視を追加する
+onValue(callStatusRef, (snapshot) => {
+  const callData = snapshot.val();
+  if (!callData) return;
+
+  let statusText = {
+    'started': '通話中',
+    'waiting': '通話ボタンが押されました（相手を待っています）',
+    'ended': '通話が終了しました',
+    'none': ''
+  }[callData.status] || '';
+
+  // 特別メッセージ：waitingかつ自分じゃない場合
+  if (callData.status === 'waiting' && callData.user !== currentUser) {
+    statusText = '相手が通話を開始しました（あなたの応答待ち）';
+  }
+
+  callStatusDisplay.textContent = statusText;
+
+  // ボタン状態は自分の画面だけで切り替える（非同期）
+  updateMyButtonStatus(callData.status);
+});
+
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
   btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
   btnClearCell.addEventListener('click', clearSelectedCells);
@@ -770,16 +799,15 @@ onValue(userNamesRef, (snapshot) => {
 
 btnCallStart.addEventListener('click', async () => {
   if (isCallStarting) {
-    // 既に通話開始処理中なら無視する（連打防止）
     return;
   }
-  isCallStarting = true; // 処理開始をフラグで記録
-  btnCallStart.disabled = true; // ボタンを押せなくして視覚的にも連打防止
+  isCallStarting = true;
+  btnCallStart.disabled = true;
 
   if (!currentUser) {
     callStatusDisplay.textContent = 'ユーザーを選択してください';
-    isCallStarting = false; // フラグ戻す
-    btnCallStart.disabled = false; // ボタン戻す
+    isCallStarting = false;
+    btnCallStart.disabled = false;
     return;
   }
 
@@ -800,7 +828,6 @@ btnCallStart.addEventListener('click', async () => {
 
     if (localStream) {
       localStream.getTracks().forEach(track => {
-        // 送信済みトラック重複防止（対策①の例）
         const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
         if (!senderExists) {
           peerConnection.addTrack(track, localStream);
@@ -816,11 +843,12 @@ btnCallStart.addEventListener('click', async () => {
 
     await remove(ref(db, 'signaling'));
 
-    // 通話開始状態をFirebaseに登録する処理は元のまま続ける
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
 
+    // 通話開始フラグを先に立ててからUI更新も呼ぶようにする
     localCallStartPressed = true;
+    updateMyButtonStatusLocal();
 
     if (!callData || !callData.status || callData.status === 'none') {
       await update(callStatusRef, {
@@ -828,7 +856,6 @@ btnCallStart.addEventListener('click', async () => {
         user: currentUser,
         statusMessage: '相手が通話開始ボタンを押すのを待っています'
       });
-
     } else if (callData.status === 'waiting' && callData.user !== currentUser) {
       await update(callStatusRef, {
         status: 'started',
@@ -845,15 +872,15 @@ btnCallStart.addEventListener('click', async () => {
       });
     }
 
-    updateMyButtonStatusLocal();
-
   } catch (e) {
     console.error(e);
     callStatusDisplay.textContent = '通話の準備に失敗しました';
+    localCallStartPressed = false;
+    updateMyButtonStatusLocal();
   } finally {
-    // 処理終了したら連打防止フラグとボタン状態を元に戻す
     isCallStarting = false;
-    btnCallStart.disabled = false;
+    // ボタン無効化は状態に合わせてupdateMyButtonStatusLocal()で制御するので
+    // ここでは元に戻さない（押したままの状態を維持）
   }
 });
 
@@ -1014,16 +1041,26 @@ function resetMuteState() {
   }
 }
 
-if (val.status === 'waiting') {
-  if (val.user !== currentUser) {
-    // 他人が先に押したら、自分はまだ押してないのでボタン有効にしておく
-    if (localCallStartPressed) {
-      localCallStartPressed = false;
-      updateMyButtonStatusLocal();
+(async () => {
+  // callStatusRefから現在の通話状態を取得するよ
+  const callStatusSnap = await get(callStatusRef);
+  // データがあれば取得、なければ空オブジェクト
+  const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
+
+  // もし通話状態がwaitingなら
+  if (callData.status === 'waiting') {
+    // そして通話開始したユーザーが自分じゃなかったら
+    if (callData.user !== currentUser) {
+      // もし自分が通話開始ボタンを押している状態なら、それを解除するよ
+      if (localCallStartPressed) {
+        localCallStartPressed = false;
+        updateMyButtonStatusLocal();  // ボタン状態を更新するよ
+      }
+      // 画面にメッセージを出すよ
+      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
     }
-    callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
   }
-}
+})();
 
 </script>
 <!-- 相手の音声を再生するaudio要素と音量調整スライダー -->
