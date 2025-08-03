@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>あ2人予定調整カレンダー</h1>
+  <h1>い2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -776,6 +776,11 @@ onValue(userNamesRef, (snapshot) => {
     await startLocalStream();
     resetMuteState();  // enabled を明示的に true にしておく（冗長だが安全）
     await remove(ref(db, 'signaling'));
+    
+    // 追加：ローカルの audio 要素の再生を開始する
+   if (localAudio) {
+     await localAudio.play();
+   }
 
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
