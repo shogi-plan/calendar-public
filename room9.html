@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>う2人予定調整カレンダー</h1>
+  <h1>え2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -147,13 +147,7 @@
   import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
   const firebaseConfig = {
-      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
-      authDomain: "calendar-chousei.firebaseapp.com",
-      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "calendar-chousei",
-      storageBucket: "calendar-chousei.firebasestorage.app",
-      messagingSenderId: "368704703397",
-      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+      ナイショ
   };
 
   const app = initializeApp(firebaseConfig);
@@ -436,22 +430,15 @@ peerConnection.oniceconnectionstatechange = () => {
 };
 
 peerConnection.ontrack = event => {
-  let audio = document.getElementById('remoteAudio');
-  if (!audio) {
-    audio = document.createElement('audio');
-    audio.id = 'remoteAudio';
-    audio.autoplay = true;
-    audio.playsInline = true;  // モバイルでの自動再生対応におすすめ
-    document.body.appendChild(audio);
+  const audio = document.getElementById('remote-audio');
+  if (!audio) return;
+  // 既存のストリームと異なる場合のみ差し替え
+  if (audio.srcObject !== event.streams[0]) {
+    audio.srcObject = event.streams[0];
+    audio.play().catch(err => {
+      console.warn('remote audio play error:', err);
+    });
   }
-  // 🔁 古い stream を切り離す
-  audio.srcObject = null;
-  // ✅ 新しいストリーム（clone で確実に違うオブジェクトにする）
-  const newStream = event.streams[0].clone();
-  audio.srcObject = newStream;
-  audio.play().catch(err => {
-  console.warn("🔇 audio.play() が失敗しました:", err);
- });
 };
 
   if (localStream) {
@@ -774,13 +761,18 @@ onValue(userNamesRef, (snapshot) => {
 
   try {
     await startLocalStream();
-    resetMuteState();  // enabled を明示的に true にしておく（冗長だが安全）
-    // 【追加・重要】localStreamがあればlocalAudioにセットしてから再生を呼ぶ
-    if (localAudio && localStream) {
-      localAudio.srcObject = localStream;  // ここが追加された行
-      await localAudio.play();              // 再生開始（失敗したらcatchへ）
-    }
-    await remove(ref(db, 'signaling'));
+resetMuteState();
+
+const localAudio = document.getElementById('remote-audio');
+if (localAudio && localStream) {
+  localAudio.srcObject = localStream;
+  try {
+    await localAudio.play();
+  } catch (err) {
+    console.warn('localAudio play failed:', err);
+  }
+}
+await remove(ref(db, 'signaling'));
     
     // 追加：ローカルの audio 要素の再生を開始する
    if (localAudio) {
@@ -824,12 +816,7 @@ onValue(userNamesRef, (snapshot) => {
   }
 });
 
-btnCallEnd.addEventListener('click', async () => {
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
-
+async function endCall() {
   // ローカルの押下状態解除
   localCallStartPressed = false;
   updateMyButtonStatusLocal();
@@ -861,27 +848,28 @@ btnCallEnd.addEventListener('click', async () => {
     }
     peerConnection = null;
   }
-const audio = document.getElementById('remoteAudio');
-if (audio) {
-  audio.srcObject = null; // 🎯 再接続時に音が出るようにする
-}
 
-// ミュート状態を初期化（共通関数で）
-resetMuteState();
-
-// localStreamの停止（※track.stopは enabled を true にする前にやらない）
-if (localStream) {
-  try {
-    localStream.getAudioTracks().forEach(track => {
-      if (track.readyState === 'live') {
-        track.stop();  // 音声トラックを停止
-      }
-    });
-  } catch (e) {
-    console.error('localStream stop error:', e);
+  const audio = document.getElementById('remoteAudio');
+  if (audio) {
+    audio.srcObject = null; // 🎯 再接続時に音が出るようにする
   }
-  localStream = null;
-}
+
+  // ミュート状態を初期化（共通関数で）
+  resetMuteState();
+
+  // localStreamの停止（※track.stopは enabled を true にする前にやらない）
+  if (localStream) {
+    try {
+      localStream.getAudioTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();  // 音声トラックを停止
+        }
+      });
+    } catch (e) {
+      console.error('localStream stop error:', e);
+    }
+    localStream = null;
+  }
 
   // シグナリング情報の削除
   try {
@@ -892,6 +880,14 @@ if (localStream) {
 
   // ステータスメッセージのローカル表示
   callStatusDisplay.textContent = '通話は終了しました';
+}
+
+btnCallEnd.addEventListener('click', async () => {
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  await endCall();
 });
 
   await set(callStatusRef, {
@@ -1016,7 +1012,7 @@ onValue(callStatusRef, (snapshot) => {
         sendOffer();
       }
       // ✅ シグナリング監視は誰でも必要
-      listenSignaling();
+      // listenSignaling();
     }
     localCallStartPressed = true;
     updateMyButtonStatusLocal();
