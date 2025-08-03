@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>う2人予定調整カレンダー</h1>
+  <h1>え2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -773,27 +773,50 @@ onValue(userNamesRef, (snapshot) => {
   }
 
   try {
-    await startLocalStream();
-    resetMuteState();  // enabled を明示的に true にしておく（冗長だが安全）
-    // 【追加・重要】localStreamがあればlocalAudioにセットしてから再生を呼ぶ
-    if (localAudio && localStream) {
-      localAudio.srcObject = localStream;  // ここが追加された行
-      await localAudio.play();              // 再生開始（失敗したらcatchへ）
+    // もし前のpeerConnectionがあれば閉じて消す
+    if (peerConnection) {
+      try {
+        peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+        peerConnection.close();
+      } catch (e) {
+        console.warn('peerConnection close時のエラー:', e);
+      }
+      peerConnection = null;
     }
-    await remove(ref(db, 'signaling'));
-    
-    // 追加：ローカルの audio 要素の再生を開始する
-   if (localAudio) {
-     await localAudio.play();
-   }
 
+    // マイクの音声を新しくもらう（startLocalStreamで）
+    await startLocalStream();
+
+    // ミュート状態を解除（音を出す状態に）
+    resetMuteState();
+
+    // 新しい通信のためのpeerConnectionを作る
+    createPeerConnection();
+
+    // マイクの音声をpeerConnectionに送る準備
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
+      });
+    }
+
+    // 自分の音声を再生するaudioにセット（ミュートしてるので自分には聞こえない）
+    const localAudio = document.getElementById('localAudio');
+    if (localAudio) {
+      localAudio.srcObject = localStream;
+      await localAudio.play();
+    }
+
+    // Firebaseにある古いシグナリング情報を全部消す（重要）
+    await remove(ref(db, 'signaling'));
+
+    // 通話開始状態をFirebaseに登録する処理は元のまま続ける
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
 
     localCallStartPressed = true;
 
     if (!callData || !callData.status || callData.status === 'none') {
-      // 自分が最初に通話開始ボタンを押した
       await update(callStatusRef, {
         status: 'waiting',
         user: currentUser,
@@ -801,13 +824,13 @@ onValue(userNamesRef, (snapshot) => {
       });
 
     } else if (callData.status === 'waiting' && callData.user !== currentUser) {
-      // 両方が押した → 通話開始
       await update(callStatusRef, {
         status: 'started',
-        user: callData.user, // 最初に押したユーザーを保存
+        user: callData.user,
         statusMessage: '通話が開始されました'
       });
     } else if (callData.status === 'started') {
+      // 何もしない
     } else {
       await update(callStatusRef, {
         status: 'waiting',
@@ -830,16 +853,16 @@ btnCallEnd.addEventListener('click', async () => {
     return;
   }
 
-  // ローカルの押下状態解除
+  // 通話開始ボタンの押下状態を解除
   localCallStartPressed = false;
   updateMyButtonStatusLocal();
 
-  // UIボタン状態をリセット
+  // ボタンの状態を戻す
   btnCallStart.disabled = false;
   btnCallEnd.disabled = true;
   btnMute.disabled = true;
 
-  // ステータスをFirebase上でリセット
+  // Firebaseの通話ステータスをリセット
   const snapshot = await get(callStatusRef);
   const callData = snapshot.val();
 
@@ -851,7 +874,7 @@ btnCallEnd.addEventListener('click', async () => {
     });
   }
 
-  // peerConnection のクリーンアップ
+  // peerConnectionを閉じて削除する
   if (peerConnection) {
     try {
       peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
@@ -861,37 +884,45 @@ btnCallEnd.addEventListener('click', async () => {
     }
     peerConnection = null;
   }
-const audio = document.getElementById('remoteAudio');
-if (audio) {
-  audio.srcObject = null; // 🎯 再接続時に音が出るようにする
-}
 
-// ミュート状態を初期化（共通関数で）
-resetMuteState();
-
-// localStreamの停止（※track.stopは enabled を true にする前にやらない）
-if (localStream) {
-  try {
-    localStream.getAudioTracks().forEach(track => {
-      if (track.readyState === 'live') {
-        track.stop();  // 音声トラックを停止
-      }
-    });
-  } catch (e) {
-    console.error('localStream stop error:', e);
+  // remoteAudioの再生停止
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) {
+    remoteAudio.srcObject = null;
   }
-  localStream = null;
-}
 
-  // シグナリング情報の削除
+  // localAudioの再生停止
+  const localAudio = document.getElementById('localAudio');
+  if (localAudio) {
+    localAudio.srcObject = null;
+  }
+
+  // localStreamの音声トラックを停止して消す
+  if (localStream) {
+    try {
+      localStream.getTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();
+        }
+      });
+    } catch (e) {
+      console.error('localStream stop error:', e);
+    }
+    localStream = null;
+  }
+
+  // Firebaseのシグナリング情報も削除
   try {
     await remove(ref(db, 'signaling'));
   } catch (e) {
     console.error('signaling remove error:', e);
   }
 
-  // ステータスメッセージのローカル表示
+  // ステータスメッセージを表示
   callStatusDisplay.textContent = '通話は終了しました';
+
+  // ミュート状態をリセット
+  resetMuteState();
 });
 
   await set(callStatusRef, {
@@ -1031,10 +1062,12 @@ onValue(callStatusRef, (snapshot) => {
 });
 
 </script>
-  <!-- 相手の音声を再生するaudio要素と音量調整スライダー -->
+<!-- 相手の音声を再生するaudio要素と音量調整スライダー -->
 <audio id="remote-audio" autoplay></audio><br />
 <label for="volume-control">相手の音量：</label>
 <input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
+<!-- 自分の音声を再生する（ミュートなので自分には聞こえません） -->
+<audio id="localAudio" autoplay muted style="display:none;"></audio>
 
 </body>
 </html>
