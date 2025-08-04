@@ -1055,10 +1055,10 @@ onValue(callStatusRef, (snapshot) => {
 
   switch (callData.status) {
     case 'ended':
-      localCallStartPressed = false;
-      updateMyButtonStatusLocal();
       resetUI();
       callStatusDisplay.textContent = '通話は終了しました';
+      localCallStartPressed = false;
+      updateMyButtonStatusLocal();
       break;
 
     case 'waiting':
