@@ -1056,12 +1056,9 @@ onValue(callStatusRef, (snapshot) => {
   switch (callData.status) {
     case 'ended':
       resetUI();
-
-      callStatusDisplay.textContent = '通話は終了しました';
-
-      // **ここで自分のローカルフラグは必ずfalseにする（通話終了なので）**
       localCallStartPressed = false;
       updateMyButtonStatusLocal();
+      callStatusDisplay.textContent = '通話は終了しました';
       break;
 
     case 'waiting':
