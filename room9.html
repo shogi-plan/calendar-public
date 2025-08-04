@@ -1055,22 +1055,11 @@ onValue(callStatusRef, (snapshot) => {
 
   switch (callData.status) {
     case 'ended':
-  // ステータス表示
-  callStatusDisplay.textContent = '通話は終了しました';
-
-  // 自分の通話状態を Firebase 上の情報で判断
-  if (callData.users && currentUser && callData.users[currentUser] !== undefined) {
-    localCallStartPressed = callData.users[currentUser];
-  } else {
-    localCallStartPressed = false;
-  }
-
-  // ボタン表示を更新
-  updateMyButtonStatusLocal();
-
-  // ストリームなども初期化
-  resetUI();
-  break;
+      localCallStartPressed = false;
+      updateMyButtonStatusLocal();
+      resetUI();
+      callStatusDisplay.textContent = '通話は終了しました';
+      break;
 
     case 'waiting':
       callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
@@ -1111,7 +1100,8 @@ onValue(callStatusRef, (snapshot) => {
 
 await set(callStatusRef, {
   status: 'ended',
-  waitingUsers: []
+  users: { A: false, B: false },
+  statusMessage: '通話は終了しました'
 });
 
 onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
