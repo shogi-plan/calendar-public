@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>お2人予定調整カレンダー</h1>
+  <h1>2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -179,7 +179,8 @@
   const btnCallEnd = document.getElementById('btn-call-end');
   const btnMute = document.getElementById('btn-mute');
 
-  let isMuted = false;  // ミュート状態管理用変数（グローバルに置くのがオススメ）
+  let isMuted = false;  // ミュート状態管理用変数
+  let remoteStream = null;
 
 btnMute.addEventListener('click', () => {
   if (!localStream) return;       // 通話が開始されていなければ無視
@@ -416,6 +417,17 @@ lockedUserB = false;
 
 function createPeerConnection() {
   peerConnection = new RTCPeerConnection(configuration);
+  peerConnection.ontrack = (event) => {
+    if (!remoteStream) {
+      remoteStream = new MediaStream();
+    }
+    remoteStream.addTrack(event.track);
+
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+      remoteAudio.srcObject = remoteStream;
+    }
+  };
 
 // ICE接続の状態を監視し、切断時に通話終了
 peerConnection.oniceconnectionstatechange = () => {
@@ -586,17 +598,6 @@ function listenSignaling() {
 });
 }
 
-btnCallStart.addEventListener('click', async () => {
-  const userType = await getUserType(currentUserId);
-  if (userType === 'A') {
-    await createOffer();
-  }
-  await updateCallStatus('started');
-
-  btnCallStart.disabled = true;
-  btnCallEnd.disabled = false;
-});
-
 // ユーザータイプ取得
 async function getUserType(uid) {
   const snapshot = await get(ref(db, `users/${uid}/type`));
@@ -607,14 +608,6 @@ async function getUserType(uid) {
 async function updateCallStatus(status) {
   await set(ref(db, 'callStatus'), status);
 }
-
-btnCallEnd.addEventListener('click', async () => {
-  // UI 状態をリセット
-  resetUI();
-
-  // Firebase 上の通話状態を "ended" に
-  await updateCallStatus('ended');
-});
 
 function resetUI() {
   btnCallStart.disabled = false;
@@ -972,76 +965,86 @@ btnCallEnd.addEventListener('click', async () => {
     return;
   }
 
-  // 通話開始ボタンの押下状態を解除
-  localCallStartPressed = false;
-  updateMyButtonStatusLocal();
+  try {
+    // 通話開始ボタンの押下状態を解除
+    localCallStartPressed = false;
+    updateMyButtonStatusLocal();
 
-  // ボタンの状態を戻す
-  btnCallStart.disabled = false;
-  btnCallEnd.disabled = true;
-  btnMute.disabled = true;
+    // UIボタンの状態を完全リセット
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+    btnMute.disabled = true;
+    btnMute.textContent = 'ミュート';
 
-  // Firebaseの通話ステータスをリセット
-  const snapshot = await get(callStatusRef);
-  const callData = snapshot.val();
+    // ミュート状態のリセット
+    isMuted = false;
 
-  if (callData && (callData.status === 'started' || callData.status === 'waiting')) {
-    await update(callStatusRef, {
-      status: 'none',
-      user: '',
-      statusMessage: '通話は終了しました'
-    });
-  }
-
-  // peerConnectionを閉じて削除する
-  if (peerConnection) {
-    try {
-      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-      peerConnection.close();
-    } catch (e) {
-      console.error('peerConnection close error:', e);
-    }
-    peerConnection = null;
-  }
-
-  // remoteAudioの再生停止
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) {
-    remoteAudio.srcObject = null;
-  }
-
-  // localAudioの再生停止
-  const localAudio = document.getElementById('localAudio');
-  if (localAudio) {
-    localAudio.srcObject = null;
-  }
-
-  // localStreamの音声トラックを停止して消す
-  if (localStream) {
-    try {
+    if (localStream) {
+      // ローカルストリームのすべてのトラックを停止しミュート解除
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = true; // ミュート解除
+      });
       localStream.getTracks().forEach(track => {
         if (track.readyState === 'live') {
           track.stop();
         }
       });
-    } catch (e) {
-      console.error('localStream stop error:', e);
+      localStream = null;
     }
-    localStream = null;
-  }
 
-  // Firebaseのシグナリング情報も削除
-  try {
-    await remove(ref(db, 'signaling'));
+    if (remoteStream) {
+      // リモートストリームも停止する場合（使っていれば）
+      remoteStream.getTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();
+        }
+      });
+      remoteStream = null;
+    }
+
+    // audio要素のsrcObjectをクリア
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+      remoteAudio.srcObject = null;
+    }
+
+    const localAudio = document.getElementById('localAudio');
+    if (localAudio) {
+      localAudio.srcObject = null;
+    }
+
+    // peerConnectionを閉じて解放
+    if (peerConnection) {
+      try {
+        peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+        peerConnection.close();
+      } catch (e) {
+        console.error('peerConnection close error:', e);
+      }
+      peerConnection = null;
+    }
+
+    // Firebaseの通話状態を完全リセット（endedまたはnone）
+    await update(callStatusRef, {
+      status: 'ended',
+      users: { A: false, B: false },
+      statusMessage: '通話は終了しました'
+    });
+
+    // Firebaseのシグナリング情報も削除
+    try {
+      await remove(ref(db, 'signaling'));
+    } catch (e) {
+      console.error('signaling remove error:', e);
+    }
+
+    // ステータスメッセージを更新
+    callStatusDisplay.textContent = '通話は終了しました';
+
   } catch (e) {
-    console.error('signaling remove error:', e);
+    console.error('通話終了処理でエラー:', e);
+    callStatusDisplay.textContent = '通話終了時にエラーが発生しました';
   }
-
-  // ステータスメッセージを表示
-  callStatusDisplay.textContent = '通話は終了しました';
-
-  // ミュート状態をリセット
-  resetMuteState();
 });
 
   await set(callStatusRef, {
