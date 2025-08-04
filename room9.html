@@ -936,6 +936,8 @@ btnCallStart.addEventListener('click', async () => {
     let newStatus = 'waiting';
     if (callData.users.A && callData.users.B) {
       newStatus = 'started';
+      // 両方押したらここで通話シグナリングの開始処理を呼び出す
+      await sendOffer();
     } else if (!callData.users.A && !callData.users.B) {
       newStatus = 'none';
     } else {
@@ -1058,6 +1060,68 @@ btnCallEnd.addEventListener('click', async () => {
   } catch (e) {
     console.error('通話終了処理でエラー:', e);
     callStatusDisplay.textContent = '通話終了時にエラーが発生しました';
+  }
+});
+
+// FirebaseのcallStatusの変更を監視し、誰かが通話終了したらUIを強制リセットする
+onValue(callStatusRef, (snapshot) => {
+  const callData = snapshot.val();
+  if (!callData) return;
+
+  // 通話が終了状態になったら（誰かが終了ボタン押した場合など）
+  if (callData.status === 'ended') {
+    // UIリセット
+    localCallStartPressed = false;
+    updateMyButtonStatusLocal();
+
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+    btnMute.disabled = true;
+    btnMute.textContent = 'ミュート';
+    isMuted = false;
+
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = true;
+      });
+      localStream.getTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();
+        }
+      });
+      localStream = null;
+    }
+
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();
+        }
+      });
+      remoteStream = null;
+    }
+
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+      remoteAudio.srcObject = null;
+    }
+
+    const localAudio = document.getElementById('localAudio');
+    if (localAudio) {
+      localAudio.srcObject = null;
+    }
+
+    if (peerConnection) {
+      try {
+        peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+        peerConnection.close();
+      } catch (e) {
+        console.error('peerConnection close error:', e);
+      }
+      peerConnection = null;
+    }
+
+    callStatusDisplay.textContent = '通話は終了しました';
   }
 });
 
