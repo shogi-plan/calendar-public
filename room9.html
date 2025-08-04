@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>2人予定調整カレンダー</h1>
+  <h1>あ2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -610,6 +610,8 @@ async function updateCallStatus(status) {
 }
 
 function resetUI() {
+  localCallStartPressed = false;
+  updateMyButtonStatusLocal();
   btnCallStart.disabled = false;
   btnCallEnd.disabled = true;
   btnMute.disabled = true;
