@@ -1053,47 +1053,42 @@ onValue(callStatusRef, (snapshot) => {
   const callData = snapshot.val();
   if (!callData) return;
 
-  switch (callData.status) {
+  const iPressed = !!callData.users?.[currentUser]; // 自分の押下状態
+  const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A']; // 相手の押下状態
+  const status = callData.status;
+
+  // 自分の状態をローカル変数に保存
+  localCallStartPressed = iPressed;
+
+  switch (status) {
     case 'ended':
       resetUI();
       callStatusDisplay.textContent = '通話は終了しました';
-      localCallStartPressed = false;
-      updateMyButtonStatusLocal();
       break;
 
     case 'waiting':
       callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
 
-      // **ここで自分のローカルのボタン押下状態は変えない！**
-      // 自分が押したかどうかはlocalCallStartPressedで管理し、
-      // ここでは相手の押下状態を反映したメッセージだけを表示する
-      if (!localCallStartPressed) {
-        // 自分が押していなければボタンは押せる状態にしておく
+      if (!iPressed && !otherPressed) {
         updateMyButtonStatus('none');
-      } else {
-        // 自分が押していれば通常の押下状態UIに
+      } else if (!iPressed && otherPressed) {
+        updateMyButtonStatus('none');
+      } else if (iPressed && !otherPressed) {
         updateMyButtonStatusLocal();
+      } else {
+        updateMyButtonStatus('started');
       }
       break;
 
     case 'started':
       callStatusDisplay.textContent = '通話中';
-
-      // 通話中は自分の押下状態に合わせてボタン制御
-      if (!localCallStartPressed) {
-        updateMyButtonStatus('none');
-      } else {
-        updateMyButtonStatusLocal();
-      }
+      updateMyButtonStatus('started');
       break;
 
     case 'none':
     default:
       callStatusDisplay.textContent = '';
-
-      // 通話していない状態は自分の押下状態をリセットしてUIを更新
-      localCallStartPressed = false;
-      updateMyButtonStatusLocal();
+      resetUI();
       break;
   }
 });
@@ -1140,18 +1135,20 @@ function updateCallStatusUI(status) {
 }
 
 function updateMyButtonStatus(status) {
-  if (status === 'started') {
-    btnCallStart.disabled = true;
-    btnCallEnd.disabled = false;
-    btnMute.disabled = false;
-  } else if (status === 'waiting') {
-    btnCallStart.disabled = true;
-    btnCallEnd.disabled = false;
-    btnMute.disabled = true;
-  } else {
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;
+  switch (status) {
+    case 'started':
+      btnCallStart.disabled = true;
+      btnCallEnd.disabled = false;
+      btnMute.disabled = false;
+      break;
+    case 'none':
+    default:
+      btnCallStart.disabled = false;
+      btnCallEnd.disabled = true;
+      btnMute.disabled = true;
+      btnMute.textContent = 'ミュート';
+      isMuted = false;
+      break;
   }
 }
 
