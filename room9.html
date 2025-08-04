@@ -883,6 +883,7 @@ btnCallStart.addEventListener('click', async () => {
   }
 
   try {
+    // 既存のpeerConnectionがあれば閉じる
     if (peerConnection) {
       try {
         peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
@@ -897,6 +898,7 @@ btnCallStart.addEventListener('click', async () => {
     resetMuteState();
     createPeerConnection();
 
+    // トラックを追加
     if (localStream) {
       localStream.getTracks().forEach(track => {
         const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
@@ -912,21 +914,25 @@ btnCallStart.addEventListener('click', async () => {
       await localAudio.play();
     }
 
+    // シグナリングをクリア
     await remove(ref(db, 'signaling'));
 
+    // Firebaseから現在の通話状態を取得
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
       status: 'none',
       users: { A: false, B: false }
     };
 
-    // 自分のボタン押下状態をtrueにする
+    // ボタン押下状態を初期化
     if (!callData.users) {
       callData.users = { A: false, B: false };
     }
+
+    // 自分の押下状態をtrueにする
     callData.users[currentUser] = true;
 
-    // 両方が押しているかどうかでstatus決定
+    // 両方が押しているかどうかでステータス決定
     let newStatus = 'waiting';
     if (callData.users.A && callData.users.B) {
       newStatus = 'started';
@@ -936,7 +942,7 @@ btnCallStart.addEventListener('click', async () => {
       newStatus = 'waiting';
     }
 
-    // callStatus更新
+    // Firebaseに状態をアップデート（ステータスメッセージも含む）
     await update(callStatusRef, {
       status: newStatus,
       users: callData.users,
@@ -945,7 +951,7 @@ btnCallStart.addEventListener('click', async () => {
         : (newStatus === 'started' ? '通話が開始されました' : '')
     });
 
-    // ローカルフラグセット＆UI更新
+    // ローカルのフラグをセットし、UI更新
     localCallStartPressed = true;
     updateMyButtonStatusLocal();
 
@@ -966,21 +972,41 @@ btnCallEnd.addEventListener('click', async () => {
   }
 
   try {
-    // 通話開始ボタンの押下状態を解除
+    // まずFirebaseから現在のcallStatusを取得
+    const callStatusSnap = await get(callStatusRef);
+    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
+      status: 'none',
+      users: { A: false, B: false }
+    };
+
+    // 自分の押下状態のみfalseに変更
+    if (callData.users && callData.users[currentUser] !== undefined) {
+      callData.users[currentUser] = false;
+    }
+
+    // 両方押されていなければ、通話は終了状態にする
+    const bothReleased = !callData.users.A && !callData.users.B;
+    const newStatus = bothReleased ? 'ended' : callData.status;
+
+    // Firebaseに更新
+    await update(callStatusRef, {
+      status: newStatus,
+      users: callData.users,
+      statusMessage: newStatus === 'ended' ? '通話は終了しました' : ''
+    });
+
+    // UIのリセット処理
     localCallStartPressed = false;
     updateMyButtonStatusLocal();
 
-    // UIボタンの状態を完全リセット
     btnCallStart.disabled = false;
     btnCallEnd.disabled = true;
     btnMute.disabled = true;
     btnMute.textContent = 'ミュート';
 
-    // ミュート状態のリセット
     isMuted = false;
 
     if (localStream) {
-      // ローカルストリームのすべてのトラックを停止しミュート解除
       localStream.getAudioTracks().forEach(track => {
         track.enabled = true; // ミュート解除
       });
@@ -993,7 +1019,6 @@ btnCallEnd.addEventListener('click', async () => {
     }
 
     if (remoteStream) {
-      // リモートストリームも停止する場合（使っていれば）
       remoteStream.getTracks().forEach(track => {
         if (track.readyState === 'live') {
           track.stop();
@@ -1002,7 +1027,6 @@ btnCallEnd.addEventListener('click', async () => {
       remoteStream = null;
     }
 
-    // audio要素のsrcObjectをクリア
     const remoteAudio = document.getElementById('remote-audio');
     if (remoteAudio) {
       remoteAudio.srcObject = null;
@@ -1013,7 +1037,6 @@ btnCallEnd.addEventListener('click', async () => {
       localAudio.srcObject = null;
     }
 
-    // peerConnectionを閉じて解放
     if (peerConnection) {
       try {
         peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
@@ -1024,22 +1047,13 @@ btnCallEnd.addEventListener('click', async () => {
       peerConnection = null;
     }
 
-    // Firebaseの通話状態を完全リセット（endedまたはnone）
-    await update(callStatusRef, {
-      status: 'ended',
-      users: { A: false, B: false },
-      statusMessage: '通話は終了しました'
-    });
-
-    // Firebaseのシグナリング情報も削除
     try {
       await remove(ref(db, 'signaling'));
     } catch (e) {
       console.error('signaling remove error:', e);
     }
 
-    // ステータスメッセージを更新
-    callStatusDisplay.textContent = '通話は終了しました';
+    callStatusDisplay.textContent = newStatus === 'ended' ? '通話は終了しました' : '';
 
   } catch (e) {
     console.error('通話終了処理でエラー:', e);
