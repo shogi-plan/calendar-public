@@ -612,8 +612,8 @@ async function updateCallStatus(status) {
 function resetUI() {
   btnCallStart.disabled = false;
   btnCallEnd.disabled = true;
-  muteButton.disabled = true;
-  muteButton.textContent = 'ミュート';
+  btnMute.disabled = true;
+  btnMute.textContent = 'ミュート';
   isMuted = false;
 
   // ストリーム停止処理（任意）
@@ -849,7 +849,6 @@ btnCallStart.addEventListener('click', async () => {
   }
 
   try {
-    // 既存のpeerConnectionがあれば閉じる
     if (peerConnection) {
       try {
         peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
@@ -864,7 +863,6 @@ btnCallStart.addEventListener('click', async () => {
     resetMuteState();
     createPeerConnection();
 
-    // トラックを追加
     if (localStream) {
       localStream.getTracks().forEach(track => {
         const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
@@ -880,29 +878,25 @@ btnCallStart.addEventListener('click', async () => {
       await localAudio.play();
     }
 
-    // シグナリングをクリア
     await remove(ref(db, 'signaling'));
 
-    // Firebaseから現在の通話状態を取得
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
       status: 'none',
       users: { A: false, B: false }
     };
 
-    // ボタン押下状態を初期化
     if (!callData.users) {
       callData.users = { A: false, B: false };
     }
 
-    // 自分の押下状態をtrueにする
+    // 自分の押下状態をtrueにする（変更なし）
     callData.users[currentUser] = true;
 
     // 両方が押しているかどうかでステータス決定
     let newStatus = 'waiting';
     if (callData.users.A && callData.users.B) {
       newStatus = 'started';
-      // 両方押したらここで通話シグナリングの開始処理を呼び出す
       await sendOffer();
     } else if (!callData.users.A && !callData.users.B) {
       newStatus = 'none';
@@ -919,13 +913,14 @@ btnCallStart.addEventListener('click', async () => {
         : (newStatus === 'started' ? '通話が開始されました' : '')
     });
 
-    // ローカルのフラグをセットし、UI更新
+    // ローカルのフラグをtrueにセット（ここは変更なし）
     localCallStartPressed = true;
     updateMyButtonStatusLocal();
 
   } catch (e) {
     console.error(e);
     callStatusDisplay.textContent = '通話の準備に失敗しました';
+    // 失敗時はローカルフラグはfalseに
     localCallStartPressed = false;
     updateMyButtonStatusLocal();
   } finally {
@@ -1035,31 +1030,48 @@ onValue(callStatusRef, (snapshot) => {
 
   switch (callData.status) {
     case 'ended':
-      // 通話終了時はUIリセットや音声停止などの処理をまとめて行うよ
       resetUI();
 
       callStatusDisplay.textContent = '通話は終了しました';
+
+      // **ここで自分のローカルフラグは必ずfalseにする（通話終了なので）**
       localCallStartPressed = false;
       updateMyButtonStatusLocal();
       break;
 
     case 'waiting':
-      // 待機中は相手の応答を待っているメッセージを表示
       callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
-      updateMyButtonStatus('waiting');
+
+      // **ここで自分のローカルのボタン押下状態は変えない！**
+      // 自分が押したかどうかはlocalCallStartPressedで管理し、
+      // ここでは相手の押下状態を反映したメッセージだけを表示する
+      if (!localCallStartPressed) {
+        // 自分が押していなければボタンは押せる状態にしておく
+        updateMyButtonStatus('none');
+      } else {
+        // 自分が押していれば通常の押下状態UIに
+        updateMyButtonStatusLocal();
+      }
       break;
 
     case 'started':
-      // 通話中は通話中メッセージとボタン制御
       callStatusDisplay.textContent = '通話中';
-      updateMyButtonStatus('started');
+
+      // 通話中は自分の押下状態に合わせてボタン制御
+      if (!localCallStartPressed) {
+        updateMyButtonStatus('none');
+      } else {
+        updateMyButtonStatusLocal();
+      }
       break;
 
     case 'none':
     default:
-      // 通話していない状態はメッセージクリア
       callStatusDisplay.textContent = '';
-      updateMyButtonStatus('none');
+
+      // 通話していない状態は自分の押下状態をリセットしてUIを更新
+      localCallStartPressed = false;
+      updateMyButtonStatusLocal();
       break;
   }
 });
