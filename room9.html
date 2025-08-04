@@ -817,33 +817,6 @@ onValue(userNamesRef, (snapshot) => {
 });
 
 // ここから追加：callStatusRef の監視を追加する
-onValue(callStatusRef, (snapshot) => {
-  const callData = snapshot.val();
-
-  if (!callData || !callData.status) {
-    callStatusDisplay.textContent = '';
-    updateCallStatusUI('none'); // ← ステータス非表示時のUI更新関数（任意）
-    return;
-  }
-
-  // ステータスメッセージ（同期）
-  if (callData.status === 'waiting') {
-    if (callData.user === currentUser) {
-      callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
-    } else {
-      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
-    }
-  } else if (callData.status === 'started') {
-    callStatusDisplay.textContent = '通話中';
-  } else if (callData.status === 'ended') {
-    callStatusDisplay.textContent = '通話が終了しました';
-  } else {
-    callStatusDisplay.textContent = '';
-  }
-
-  // ボタン状態は自分の画面だけで制御（非同期）
-  updateMyButtonStatusLocal(); // ← 自分のlocalCallStartPressedなどを見るローカル関数
-});
 
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
   btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
