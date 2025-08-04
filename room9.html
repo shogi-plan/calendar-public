@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>あ2人予定調整カレンダー</h1>
+  <h1>い2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -1064,6 +1064,8 @@ onValue(callStatusRef, (snapshot) => {
 
   switch (status) {
     case 'ended':
+      localCallStartPressed = false;
+      updateMyButtonStatusLocal(); 
       resetUI();
       callStatusDisplay.textContent = '通話は終了しました';
       break;
