@@ -559,12 +559,31 @@ function listenSignaling() {
   });
 
   onValue(ref(db, 'roomUsers'), snapshot => {
-    const roomUsers = snapshot.val() || {};
+  const roomUsers = snapshot.val() || {};
 
-    userSelect.innerHTML = `<option value="" selected>選択して下さい</option>`;
-    if (!roomUsers.A) userSelect.innerHTML += `<option value="A">A</option>`;
-    if (!roomUsers.B) userSelect.innerHTML += `<option value="B">B</option>`;
+  userSelect.innerHTML = '';
+
+  const options = [{ value: '', text: '選択して下さい' }];
+
+  if (!roomUsers.A || currentUser === 'A') {
+    options.push({ value: 'A', text: 'A' });
+  }
+  if (!roomUsers.B || currentUser === 'B') {
+    options.push({ value: 'B', text: 'B' });
+  }
+
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.text;
+    if (opt.value === currentUser) {
+      option.selected = true;
+    }
+    userSelect.appendChild(option);
   });
+
+  userSelect.value = currentUser || '';
+});
 }
 
   renderCalendar();
@@ -754,24 +773,30 @@ onValue(userNamesRef, (snapshot) => {
 // ここから追加：callStatusRef の監視を追加する
 onValue(callStatusRef, (snapshot) => {
   const callData = snapshot.val();
-  if (!callData) return;
 
-  let statusText = {
-    'started': '通話中',
-    'waiting': '通話ボタンが押されました（相手を待っています）',
-    'ended': '通話が終了しました',
-    'none': ''
-  }[callData.status] || '';
-
-  // 特別メッセージ：waitingかつ自分じゃない場合
-  if (callData.status === 'waiting' && callData.user !== currentUser) {
-    statusText = '相手が通話を開始しました（あなたの応答待ち）';
+  if (!callData || !callData.status) {
+    callStatusDisplay.textContent = '';
+    updateCallStatusUI('none'); // ← ステータス非表示時のUI更新関数（任意）
+    return;
   }
 
-  callStatusDisplay.textContent = statusText;
+  // ステータスメッセージ（同期）
+  if (callData.status === 'waiting') {
+    if (callData.user === currentUser) {
+      callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
+    } else {
+      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
+    }
+  } else if (callData.status === 'started') {
+    callStatusDisplay.textContent = '通話中';
+  } else if (callData.status === 'ended') {
+    callStatusDisplay.textContent = '通話が終了しました';
+  } else {
+    callStatusDisplay.textContent = '';
+  }
 
-  // ボタン状態は自分の画面だけで切り替える（非同期）
-  updateMyButtonStatus(callData.status);
+  // ボタン状態は自分の画面だけで制御（非同期）
+  updateMyButtonStatusLocal(); // ← 自分のlocalCallStartPressedなどを見るローカル関数
 });
 
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
