@@ -159,7 +159,7 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   const callStatusRef = ref(db, 'callStatus');
-
+  
   const userANameInput = document.getElementById('userAName');
   const userBNameInput = document.getElementById('userBName');
   const userSelect = document.getElementById('userSelect');
@@ -586,6 +586,59 @@ function listenSignaling() {
 });
 }
 
+btnCallStart.addEventListener('click', async () => {
+  const userType = await getUserType(currentUserId);
+  if (userType === 'A') {
+    await createOffer();
+  }
+  await updateCallStatus('started');
+
+  btnCallStart.disabled = true;
+  btnCallEnd.disabled = false;
+});
+
+// ユーザータイプ取得
+async function getUserType(uid) {
+  const snapshot = await get(ref(db, `users/${uid}/type`));
+  return snapshot.exists() ? snapshot.val() : null;
+}
+
+// 通話状態の保存
+async function updateCallStatus(status) {
+  await set(ref(db, 'callStatus'), status);
+}
+
+btnCallEnd.addEventListener('click', async () => {
+  // UI 状態をリセット
+  resetUI();
+
+  // Firebase 上の通話状態を "ended" に
+  await updateCallStatus('ended');
+});
+
+function resetUI() {
+  btnCallStart.disabled = false;
+  btnCallEnd.disabled = true;
+  muteButton.disabled = true;
+  muteButton.textContent = 'ミュート';
+  isMuted = false;
+
+  // ストリーム停止処理（任意）
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+  }
+  if (remoteStream) {
+    remoteStream.getTracks().forEach(track => track.stop());
+  }
+}
+
+onValue(callStatusRef, (snapshot) => {
+  const status = snapshot.val();
+  if (status === 'ended') {
+    resetUI();
+  }
+});
+
   renderCalendar();
   async function sendMessage() {
   // ★ユーザーが選択されていない場合はメッセージを表示して中断
@@ -869,33 +922,39 @@ btnCallStart.addEventListener('click', async () => {
     await remove(ref(db, 'signaling'));
 
     const callStatusSnap = await get(callStatusRef);
-    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
+    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
+      status: 'none',
+      users: { A: false, B: false }
+    };
 
-    // 通話開始フラグを先に立ててからUI更新も呼ぶようにする
+    // 自分のボタン押下状態をtrueにする
+    if (!callData.users) {
+      callData.users = { A: false, B: false };
+    }
+    callData.users[currentUser] = true;
+
+    // 両方が押しているかどうかでstatus決定
+    let newStatus = 'waiting';
+    if (callData.users.A && callData.users.B) {
+      newStatus = 'started';
+    } else if (!callData.users.A && !callData.users.B) {
+      newStatus = 'none';
+    } else {
+      newStatus = 'waiting';
+    }
+
+    // callStatus更新
+    await update(callStatusRef, {
+      status: newStatus,
+      users: callData.users,
+      statusMessage: newStatus === 'waiting'
+        ? '相手が通話開始ボタンを押すのを待っています'
+        : (newStatus === 'started' ? '通話が開始されました' : '')
+    });
+
+    // ローカルフラグセット＆UI更新
     localCallStartPressed = true;
     updateMyButtonStatusLocal();
-
-    if (!callData || !callData.status || callData.status === 'none') {
-      await update(callStatusRef, {
-        status: 'waiting',
-        user: currentUser,
-        statusMessage: '相手が通話開始ボタンを押すのを待っています'
-      });
-    } else if (callData.status === 'waiting' && callData.user !== currentUser) {
-      await update(callStatusRef, {
-        status: 'started',
-        user: callData.user,
-        statusMessage: '通話が開始されました'
-      });
-    } else if (callData.status === 'started') {
-      // 何もしない
-    } else {
-      await update(callStatusRef, {
-        status: 'waiting',
-        user: currentUser,
-        statusMessage: '相手が通話開始ボタンを押すのを待っています'
-      });
-    }
 
   } catch (e) {
     console.error(e);
@@ -904,8 +963,6 @@ btnCallStart.addEventListener('click', async () => {
     updateMyButtonStatusLocal();
   } finally {
     isCallStarting = false;
-    // ボタン無効化は状態に合わせてupdateMyButtonStatusLocal()で制御するので
-    // ここでは元に戻さない（押したままの状態を維持）
   }
 });
 
