@@ -1055,9 +1055,9 @@ onValue(callStatusRef, (snapshot) => {
 
   switch (callData.status) {
     case 'ended':
-      resetUI();
       localCallStartPressed = false;
       updateMyButtonStatusLocal();
+      resetUI();
       callStatusDisplay.textContent = '通話は終了しました';
       break;
 
