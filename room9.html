@@ -616,12 +616,37 @@ function resetUI() {
   btnMute.textContent = 'ミュート';
   isMuted = false;
 
-  // ストリーム停止処理（任意）
+  // ストリーム停止とnull化
   if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
+    localStream.getTracks().forEach(track => {
+      if (track.readyState === 'live') track.stop();
+    });
+    localStream = null;
   }
+
   if (remoteStream) {
-    remoteStream.getTracks().forEach(track => track.stop());
+    remoteStream.getTracks().forEach(track => {
+      if (track.readyState === 'live') track.stop();
+    });
+    remoteStream = null;
+  }
+
+  // Audio要素のsrcObjectをnullに
+  const localAudio = document.getElementById('localAudio');
+  if (localAudio) localAudio.srcObject = null;
+
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) remoteAudio.srcObject = null;
+
+  // ピアコネクションをクローズしてnullに
+  if (peerConnection) {
+    try {
+      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+      peerConnection.close();
+    } catch (e) {
+      console.error('peerConnection close error:', e);
+    }
+    peerConnection = null;
   }
 }
 
