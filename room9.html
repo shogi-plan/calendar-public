@@ -625,13 +625,6 @@ function resetUI() {
   }
 }
 
-onValue(callStatusRef, (snapshot) => {
-  const status = snapshot.val();
-  if (status === 'ended') {
-    resetUI();
-  }
-});
-
   renderCalendar();
   async function sendMessage() {
   // ★ユーザーが選択されていない場合はメッセージを表示して中断
@@ -1036,92 +1029,66 @@ btnCallEnd.addEventListener('click', async () => {
   }
 });
 
-// FirebaseのcallStatusの変更を監視し、誰かが通話終了したらUIを強制リセットする
 onValue(callStatusRef, (snapshot) => {
   const callData = snapshot.val();
   if (!callData) return;
 
-  // 通話が終了状態になったら（誰かが終了ボタン押した場合など）
-  if (callData.status === 'ended') {
-    // UIリセット
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal();
+  switch (callData.status) {
+    case 'ended':
+      // 通話終了時はUIリセットや音声停止などの処理をまとめて行うよ
+      resetUI();
 
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;
-    btnMute.textContent = 'ミュート';
-    isMuted = false;
+      callStatusDisplay.textContent = '通話は終了しました';
+      localCallStartPressed = false;
+      updateMyButtonStatusLocal();
+      break;
 
-    if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
-        track.enabled = true;
-      });
-      localStream.getTracks().forEach(track => {
-        if (track.readyState === 'live') {
-          track.stop();
-        }
-      });
-      localStream = null;
-    }
+    case 'waiting':
+      // 待機中は相手の応答を待っているメッセージを表示
+      callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
+      updateMyButtonStatus('waiting');
+      break;
 
-    if (remoteStream) {
-      remoteStream.getTracks().forEach(track => {
-        if (track.readyState === 'live') {
-          track.stop();
-        }
-      });
-      remoteStream = null;
-    }
+    case 'started':
+      // 通話中は通話中メッセージとボタン制御
+      callStatusDisplay.textContent = '通話中';
+      updateMyButtonStatus('started');
+      break;
 
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio) {
-      remoteAudio.srcObject = null;
-    }
-
-    const localAudio = document.getElementById('localAudio');
-    if (localAudio) {
-      localAudio.srcObject = null;
-    }
-
-    if (peerConnection) {
-      try {
-        peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-        peerConnection.close();
-      } catch (e) {
-        console.error('peerConnection close error:', e);
-      }
-      peerConnection = null;
-    }
-
-    callStatusDisplay.textContent = '通話は終了しました';
+    case 'none':
+    default:
+      // 通話していない状態はメッセージクリア
+      callStatusDisplay.textContent = '';
+      updateMyButtonStatus('none');
+      break;
   }
 });
 
-  await set(callStatusRef, {
+await set(callStatusRef, {
   status: 'ended',
   waitingUsers: []
 });
-  
-  onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
-  onValue(ref(db, 'chatLog'), snapshot => {
+
+onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
+onValue(ref(db, 'chatLog'), snapshot => {
   const chatData = snapshot.exists() ? snapshot.val() : [];
   renderChat(chatData);
 });
 
-  fetchHolidays();
-  renderCalendar();
+fetchHolidays();
+renderCalendar();
 
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('td')) {
-      selectedCells.forEach(key => {
-        const td = calendar.querySelector(`td[data-key="${key}"]`);
-        if (td) td.classList.remove('selected');
-      });
-      selectedCells.clear();
-    }
-  });
-  // 修正後：ステータスメッセージとボタン制御の共通関数
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('td')) {
+    selectedCells.forEach(key => {
+      const td = calendar.querySelector(`td[data-key="${key}"]`);
+      if (td) td.classList.remove('selected');
+    });
+    selectedCells.clear();
+  }
+});
+
+// 修正後：ステータスメッセージとボタン制御の共通関数
 function updateCallStatusUI(status) {
   callStatus = status;
 
