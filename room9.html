@@ -362,6 +362,42 @@ let callStatus = 'none';
 
   async function clearAllData() {
   if (!confirm('本当に全てのデータを削除しますか？')) return;
+
+  // 既存のpeerConnectionがあれば閉じる
+  if (peerConnection) {
+    try {
+      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+      peerConnection.close();
+    } catch (e) {
+      console.warn('clearAllData peerConnection close error:', e);
+    }
+    peerConnection = null;
+  }
+
+  // 既存のストリームがあれば停止してクリア
+  if (localStream) {
+    try {
+      localStream.getTracks().forEach(track => track.stop());
+    } catch(e) {
+      console.warn('clearAllData localStream stop error:', e);
+    }
+    localStream = null;
+  }
+  if (remoteStream) {
+    try {
+      remoteStream.getTracks().forEach(track => track.stop());
+    } catch(e) {
+      console.warn('clearAllData remoteStream stop error:', e);
+    }
+    remoteStream = null;
+  }
+
+  // オーディオタグのsrcObjectクリア
+  const localAudio = document.getElementById('localAudio');
+  if (localAudio) localAudio.srcObject = null;
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) remoteAudio.srcObject = null;
+
   await remove(ref(db, 'userNames'));
   userANameInput.value = 'ユーザーA';
   userBNameInput.value = 'ユーザーB';
@@ -370,12 +406,13 @@ let callStatus = 'none';
   await remove(ref(db, 'roomUsers'));
   await remove(ref(db, 'callStatus'));
   await remove(ref(db, 'signaling'));
+
   selectedCells.clear();
   localStorage.removeItem('currentUser');  
-sessionStorage.setItem('wasCleared', '1');
+  sessionStorage.setItem('wasCleared', '1');
 
-lockedUserA = false;
-lockedUserB = false;
+  lockedUserA = false;
+  lockedUserB = false;
 
   currentUser = '';
   
@@ -383,24 +420,6 @@ lockedUserB = false;
   userSelect.disabled = false;
   
   updateCallStatusUI('none');
-  }
-  async function startLocalStream() {
-  	
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
-  }
-
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-    });
-
-  } catch (error) {
-    console.error('startLocalStream error:', error);
-    throw error;
-  }
 }
 
 function createPeerConnection() {
@@ -434,6 +453,32 @@ function createPeerConnection() {
     if (state === 'disconnected' || state === 'failed' || state === 'closed') {
       updateCallStatus("ended");
       endCallUI();
+
+      // ここでストリームやpeerConnectionを安全に停止・解放する
+      if (remoteStream) {
+        try {
+          remoteStream.getTracks().forEach(track => track.stop());
+        } catch(e) {
+          console.warn('remoteStream stop error:', e);
+        }
+        remoteStream = null;
+      }
+
+      if (peerConnection) {
+        try {
+          peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+          peerConnection.close();
+        } catch (e) {
+          console.warn('peerConnection close error:', e);
+        }
+        peerConnection = null;
+      }
+
+      // remote-audioのsrcObjectもクリア
+      const remoteAudio = document.getElementById('remote-audio');
+      if (remoteAudio) {
+        remoteAudio.srcObject = null;
+      }
     }
   };
 
@@ -850,11 +895,26 @@ btnCallStart.addEventListener('click', async () => {
       peerConnection = null;
     }
 
+    if (localStream) {
+      try {
+        localStream.getTracks().forEach(track => {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        });
+      } catch (e) {
+        console.warn('localStream stop error:', e);
+      }
+      localStream = null;
+    }
+
     await startLocalStream();
+
     resetMuteState();
+
     createPeerConnection();
 
-    if (localStream) {
+    if (localStream && peerConnection) {
       localStream.getTracks().forEach(track => {
         const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
         if (!senderExists) {
@@ -866,7 +926,11 @@ btnCallStart.addEventListener('click', async () => {
     const localAudio = document.getElementById('localAudio');
     if (localAudio) {
       localAudio.srcObject = localStream;
-      await localAudio.play();
+      try {
+        await localAudio.play();
+      } catch (e) {
+        console.warn('localAudio play error:', e);
+      }
     }
 
     await remove(ref(db, 'signaling'));
@@ -911,6 +975,7 @@ btnCallStart.addEventListener('click', async () => {
     updateMyButtonStatusLocal();
   } finally {
     isCallStarting = false;
+    btnCallStart.disabled = false;
   }
 });
 
@@ -931,7 +996,6 @@ btnCallEnd.addEventListener('click', async () => {
       callData.users[currentUser] = false;
     }
 
-    // 終了ボタン押下時点で必ず終了扱いにして、全員の通話状態をリセット
     await update(callStatusRef, {
       status: 'ended',
       users: { A: false, B: false },
@@ -1028,7 +1092,6 @@ onValue(callStatusRef, (snapshot) => {
       resetUI();
       callStatusDisplay.textContent = '通話は終了しました';
 
-      // 追加：音声ストリーム停止とUI初期化
       isMuted = false;
       btnCallStart.disabled = false;
       btnCallEnd.disabled = true;
