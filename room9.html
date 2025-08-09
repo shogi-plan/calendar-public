@@ -385,7 +385,6 @@ lockedUserB = false;
   updateCallStatusUI('none');
   }
   async function startLocalStream() {
-  // 既に有効なストリームがあればそれを返す（再取得を避ける）
   if (localStream && localStream.getAudioTracks().length > 0 && localStream.getAudioTracks()[0].enabled) {
     return localStream;
   }
@@ -404,30 +403,24 @@ function createPeerConnection() {
   peerConnection = new RTCPeerConnection(configuration);
 
   peerConnection.ontrack = event => {
-    // 修正1: remoteStreamは毎回新しく作る
-    remoteStream = new MediaStream();
+    if (!remoteStream) remoteStream = new MediaStream();
+    remoteStream.addTrack(event.track);
 
-    // イベントで来たトラックをすべて追加
-    event.streams[0].getTracks().forEach(track => {
-      remoteStream.addTrack(track);
-    });
-
-    // 修正2: audio要素を毎回初期化
-    let remoteAudio = document.getElementById('remote-audio');
-    if (!remoteAudio) {
-      remoteAudio = document.createElement('audio');
-      remoteAudio.id = 'remote-audio';
-      remoteAudio.autoplay = true;
-      remoteAudio.playsInline = true;
-      document.body.appendChild(remoteAudio);
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+      remoteAudio.srcObject = remoteStream;
+      remoteAudio.play().catch(err => {
+        console.warn('remoteAudio.play() blocked or failed:', err);
+      });
+    } else {
+      const audio = document.createElement('audio');
+      audio.id = 'remote-audio';
+      audio.autoplay = true;
+      audio.playsInline = true;
+      document.body.appendChild(audio);
+      audio.srcObject = remoteStream;
+      audio.play().catch(err => console.warn("audio.play() error:", err));
     }
-
-    remoteAudio.srcObject = remoteStream;
-
-    // 修正3: 再生試行（モバイル対策）
-    remoteAudio.play().catch(err => {
-      console.warn('remoteAudio.play() blocked or failed:', err);
-    });
   };
 
   peerConnection.oniceconnectionstatechange = () => {
@@ -440,6 +433,7 @@ function createPeerConnection() {
         statusMessage: 'ICE: ' + state
       }).catch(console.error);
 
+      endCallCleanup();
       resetUI();
       return;
     }
@@ -460,6 +454,33 @@ function createPeerConnection() {
         peerConnection.addTrack(track, localStream);
       }
     });
+  }
+}
+
+function endCallCleanup() {
+  console.log("=== 通話終了: ストリームと接続を解放 ===");
+
+  if (remoteStream) {
+    remoteStream.getTracks().forEach(track => track.stop());
+    remoteStream = null;
+  }
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+
+  if (peerConnection) {
+    peerConnection.ontrack = null;
+    peerConnection.onicecandidate = null;
+    peerConnection.oniceconnectionstatechange = null;
+    peerConnection.close();
+    peerConnection = null;
+  }
+
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) {
+    remoteAudio.srcObject = null;
   }
 }
 
