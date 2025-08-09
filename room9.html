@@ -404,40 +404,46 @@ function createPeerConnection() {
   peerConnection = new RTCPeerConnection(configuration);
 
   peerConnection.ontrack = event => {
-  if (!remoteStream) remoteStream = new MediaStream();
-  remoteStream.addTrack(event.track);
+    // 修正1: remoteStreamは毎回新しく作る
+    remoteStream = new MediaStream();
 
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) {
+    // イベントで来たトラックをすべて追加
+    event.streams[0].getTracks().forEach(track => {
+      remoteStream.addTrack(track);
+    });
+
+    // 修正2: audio要素を毎回初期化
+    let remoteAudio = document.getElementById('remote-audio');
+    if (!remoteAudio) {
+      remoteAudio = document.createElement('audio');
+      remoteAudio.id = 'remote-audio';
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
+      document.body.appendChild(remoteAudio);
+    }
+
     remoteAudio.srcObject = remoteStream;
+
+    // 修正3: 再生試行（モバイル対策）
     remoteAudio.play().catch(err => {
       console.warn('remoteAudio.play() blocked or failed:', err);
     });
-  } else {
-    const audio = document.createElement('audio');
-    audio.id = 'remote-audio';
-    audio.autoplay = true;
-    audio.playsInline = true;
-    document.body.appendChild(audio);
-    audio.srcObject = remoteStream;
-    audio.play().catch(err => console.warn("audio.play() error:", err));
-  }
-};
+  };
 
   peerConnection.oniceconnectionstatechange = () => {
-  const state = peerConnection.iceConnectionState;
-  console.log('ICE connection state:', state);
-  if (state === 'disconnected' || state === 'failed' || state === 'closed') {
-    update(ref(db, 'callStatus'), {
-      status: 'ended',
-      users: { A: false, B: false },
-      statusMessage: 'ICE: ' + state
-    }).catch(console.error);
+    const state = peerConnection.iceConnectionState;
+    console.log('ICE connection state:', state);
+    if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+      update(ref(db, 'callStatus'), {
+        status: 'ended',
+        users: { A: false, B: false },
+        statusMessage: 'ICE: ' + state
+      }).catch(console.error);
 
-    resetUI();
-    return;
-  }
-};
+      resetUI();
+      return;
+    }
+  };
 
   peerConnection.onicecandidate = event => {
     if (event.candidate) {
