@@ -385,18 +385,15 @@ lockedUserB = false;
   updateCallStatusUI('none');
   }
   async function startLocalStream() {
-  	
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
+  // 既に有効なストリームがあればそれを返す（再取得を避ける）
+  if (localStream && localStream.getAudioTracks().length > 0 && localStream.getAudioTracks()[0].enabled) {
+    return localStream;
   }
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-    });
-
+    localStream.getAudioTracks().forEach(track => track.enabled = true);
+    return localStream;
   } catch (error) {
     console.error('startLocalStream error:', error);
     throw error;
@@ -413,10 +410,8 @@ function createPeerConnection() {
   const remoteAudio = document.getElementById('remote-audio');
   if (remoteAudio) {
     remoteAudio.srcObject = remoteStream;
-    // 再生を試みる（自動再生ブロックは catch する）
     remoteAudio.play().catch(err => {
       console.warn('remoteAudio.play() blocked or failed:', err);
-      // 必要なら UI に「再生を許可してください」などを出す
     });
   } else {
     const audio = document.createElement('audio');
