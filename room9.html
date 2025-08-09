@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>2人予定調整カレンダー</h1>
+  <h1>あ2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -159,7 +159,6 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   const callStatusRef = ref(db, 'callStatus');
-  
   const userANameInput = document.getElementById('userAName');
   const userBNameInput = document.getElementById('userBName');
   const userSelect = document.getElementById('userSelect');
@@ -179,16 +178,16 @@
   const btnCallEnd = document.getElementById('btn-call-end');
   const btnMute = document.getElementById('btn-mute');
 
-  let isMuted = false;  // ミュート状態管理用変数
+  let isMuted = false;
   let remoteStream = null;
 
 btnMute.addEventListener('click', () => {
-  if (!localStream) return;       // 通話が開始されていなければ無視
-  isMuted = !isMuted;             // ミュート状態を反転
+  if (!localStream) return;
+  isMuted = !isMuted;
   localStream.getAudioTracks().forEach(track => {
-    track.enabled = !isMuted;     // マイクのON/OFF切り替え
+    track.enabled = !isMuted;
   });
-  btnMute.textContent = isMuted ? 'ミュート解除' : 'ミュート';  // ボタン文言切替
+  btnMute.textContent = isMuted ? 'ミュート解除' : 'ミュート';
 });
   
   const callStatusDisplay = document.getElementById('callStatusDisplay');
@@ -196,7 +195,7 @@ btnMute.addEventListener('click', () => {
 let localStream = null;
 let peerConnection = null;
 let callTimeoutId = null;
-let localCallStartPressed = false; // 自分が通話開始ボタンを押しているかどうか（ローカル管理）
+let localCallStartPressed = false;
 
 const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const signalingRef = ref(db, 'signaling');
@@ -205,13 +204,9 @@ let currentUser = localStorage.getItem('currentUser') || '';
 let selectedCells = new Set();
 let currentWeekOffset = 0;
 let holidays = {};
-
-// WebRTC用：ユーザーA/Bが決定されたかどうか（固定）
 let lockedUserA = false;
 let lockedUserB = false;
-
-// 通話ステータス管理
-let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
+let callStatus = 'none';
 
   function formatDate(date) {
     return date.toISOString().split('T')[0];
@@ -257,7 +252,7 @@ let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
       const ymd = formatDate(d);
 
       const th = document.createElement('th');
-      th.innerHTML = `${mm}/${dd}<br>(${weekdays[d.getDay()]})`; // ← 修正箇所
+      th.innerHTML = `${mm}/${dd}<br>(${weekdays[d.getDay()]})`;
 
       if (d.getDay() === 0 || d.getDay() === 6) th.classList.add('weekend');
       if (holidays[ymd]) {
@@ -377,34 +372,27 @@ let callStatus = 'none'; // 'none' | 'started' | 'cancelled'
   await remove(ref(db, 'signaling'));
   selectedCells.clear();
   localStorage.removeItem('currentUser');  
-  
-// 1回だけページを再読み込みしても登録しないように、このタブだけにメモを置く
-sessionStorage.setItem('wasCleared', '1'); // ← ここが新しい！
+sessionStorage.setItem('wasCleared', '1');
 
 lockedUserA = false;
 lockedUserB = false;
 
   currentUser = '';
   
-  // userSelectも初期化
   userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
   userSelect.disabled = false;
   
-  // 通話ステータス表示クリア
   updateCallStatusUI('none');
   }
   async function startLocalStream() {
-  // ストリームがすでにある場合は停止してから作り直す
+  	
   if (localStream) {
     localStream.getTracks().forEach(track => track.stop());
     localStream = null;
   }
 
   try {
-    // 毎回新しく取得（ミュートによって停止されていたトラックもリセット）
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-
-    // ミュート状態を初期化（enabled = true）
     localStream.getAudioTracks().forEach(track => {
       track.enabled = true;
     });
@@ -418,7 +406,6 @@ lockedUserB = false;
 function createPeerConnection() {
   peerConnection = new RTCPeerConnection(configuration);
 
-  // ontrackイベントはここで1回だけ定義します
   peerConnection.ontrack = event => {
     if (!remoteStream) {
       remoteStream = new MediaStream();
@@ -429,7 +416,6 @@ function createPeerConnection() {
     if (remoteAudio) {
       remoteAudio.srcObject = remoteStream;
     } else {
-      // もし要素がなければ作る（必要なら）
       const audio = document.createElement('audio');
       audio.id = 'remote-audio';
       audio.autoplay = true;
@@ -442,7 +428,6 @@ function createPeerConnection() {
     }
   };
 
-  // ICE接続の状態を監視し、切断時に通話終了
   peerConnection.oniceconnectionstatechange = () => {
     const state = peerConnection.iceConnectionState;
     console.log('ICE connection state:', state);
@@ -479,7 +464,7 @@ async function sendOffer() {
 }
 
 function startCallTimeout() {
-  if (callTimeoutId) clearTimeout(callTimeoutId); // 二重起動防止
+  if (callTimeoutId) clearTimeout(callTimeoutId);
 
   callTimeoutId = setTimeout(async () => {
     await update(callStatusRef, {
@@ -591,13 +576,11 @@ function listenSignaling() {
 });
 }
 
-// ユーザータイプ取得
 async function getUserType(uid) {
   const snapshot = await get(ref(db, `users/${uid}/type`));
   return snapshot.exists() ? snapshot.val() : null;
 }
 
-// 通話状態の保存
 async function updateCallStatus(status) {
   await set(ref(db, 'callStatus'), status);
 }
@@ -611,7 +594,6 @@ function resetUI() {
   btnMute.textContent = 'ミュート';
   isMuted = false;
 
-  // ストリーム停止とnull化
   if (localStream) {
   try {
     localStream.getTracks().forEach(track => {
@@ -634,14 +616,12 @@ if (remoteStream) {
   remoteStream = null;
 }
 
-  // Audio要素のsrcObjectをnullに
   const localAudio = document.getElementById('localAudio');
   if (localAudio) localAudio.srcObject = null;
 
   const remoteAudio = document.getElementById('remote-audio');
   if (remoteAudio) remoteAudio.srcObject = null;
 
-  // ピアコネクションをクローズしてnullに
   if (peerConnection) {
     try {
       peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
@@ -655,7 +635,6 @@ if (remoteStream) {
 
   renderCalendar();
   async function sendMessage() {
-  // ★ユーザーが選択されていない場合はメッセージを表示して中断
   if (!currentUser) {
     callStatusDisplay.textContent = 'ユーザーを選択してください';
     return;
@@ -694,31 +673,25 @@ if (remoteStream) {
     chatLog.scrollTop = chatLog.scrollHeight;
   }
 
-  // 初期表示時にFirebaseからroomUsersを読み込んで設定する関数
 async function initializeUsers() {
   if (sessionStorage.getItem('wasCleared') === '1') {
-    // 「全データ削除後リロード」の状態を維持するため
     currentUser = '';
     lockedUserA = false;
     lockedUserB = false;
     userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
     userSelect.disabled = false;
-    // フラグは消さずに維持（リロード毎にここに戻る）
     return;
   }
 
   if (currentUser) {
-  // FirebaseのroomUsersを取得
   const roomUsersRef = ref(db, 'roomUsers');
   const snapshot = await get(roomUsersRef);
   const roomUsers = snapshot.exists() ? snapshot.val() : {};
 
-  // DB上に currentUser が登録されていなければ登録し直す
   if (!roomUsers[currentUser]) {
     await update(roomUsersRef, { [currentUser]: true });
   }
 
-  // lockedUserA/Bを設定しUIをセット
   if (currentUser === 'A') {
     lockedUserA = true;
     userSelect.innerHTML = '<option value="A" selected>A</option>';
@@ -736,12 +709,10 @@ async function initializeUsers() {
   const snapshot = await get(roomUsersRef);
   const roomUsers = snapshot.exists() ? snapshot.val() : {};
 
-  // 1人目のユーザーが未確定ならAを割当て
   if (!roomUsers.A) {
     currentUser = 'A';
     lockedUserA = true;
     await update(roomUsersRef, { A: true });
-    // 選択肢はAのみ選択可能で変更不可
     userSelect.innerHTML = '<option value="A" selected>A</option>';
     userSelect.disabled = true;
   } else if (!roomUsers.B) {
@@ -760,7 +731,6 @@ if (!roomUsers.B) {
 userSelect.disabled = false;
 currentUser = ''; 
   } else {
-    // 既に両方占有されている場合は選択不可（実際には警告出すなど）
     currentUser = '';
     userSelect.innerHTML = '<option value="" selected>満室です</option>';
     userSelect.disabled = true;
@@ -768,7 +738,6 @@ currentUser = '';
   renderCalendar();
 }
 
-// ユーザー切替時の処理
 userSelect.addEventListener('change', async e => {
   const val = e.target.value;
 
@@ -777,24 +746,22 @@ userSelect.addEventListener('change', async e => {
     return;
   }
 
-  // ここで全データ削除フラグを消す（ユーザーを決定したので）
   if (sessionStorage.getItem('wasCleared') === '1') {
     sessionStorage.removeItem('wasCleared');
   }
 
-  // Firebaseから現在のロック状況を取得
   const roomUsersSnapshot = await get(ref(db, 'roomUsers'));
   const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
 
   if (val === 'A') {
-    if (!roomUsers.A) {  // Firebaseのロック状況で判断
+    if (!roomUsers.A) {
       currentUser = 'A';
       await update(ref(db, 'roomUsers'), { A: true });
       userSelect.disabled = true;
       localStorage.setItem('currentUser', 'A');
     } else {
       alert('ユーザーAは既に確定しています');
-      e.target.value = ''; // 選択解除して再選択促す
+      e.target.value = '';
     }
   } else if (val === 'B') {
     if (!roomUsers.B) {
@@ -809,14 +776,12 @@ userSelect.addEventListener('change', async e => {
   }
 });
 
-
-// 初期化呼び出し
 initializeUsers();
 listenSignaling();
 
   userANameInput.addEventListener('input', () => {
   set(ref(db, 'userNames/A'), userANameInput.value);
-  renderCalendar(); // ← 表示も更新
+  renderCalendar();
 });
 
 userBNameInput.addEventListener('input', () => {
@@ -834,10 +799,8 @@ onValue(userNamesRef, (snapshot) => {
   if (data.B !== undefined) {
     userBNameInput.value = data.B;
   }
-  renderCalendar(); // 名前が変わったら画面も更新
+  renderCalendar();
 });
-
-// ここから追加：callStatusRef の監視を追加する
 
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
   btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
@@ -860,7 +823,7 @@ onValue(userNamesRef, (snapshot) => {
     renderCalendar();
   });
   btnSend.addEventListener('click', sendMessage);
-  let isCallStarting = false; // 追加：通話開始処理中かどうかを管理するフラグ
+  let isCallStarting = false;
 
 btnCallStart.addEventListener('click', async () => {
   if (isCallStarting) {
@@ -918,10 +881,8 @@ btnCallStart.addEventListener('click', async () => {
       callData.users = { A: false, B: false };
     }
 
-    // 自分の押下状態をtrueにする（変更なし）
     callData.users[currentUser] = true;
 
-    // 両方が押しているかどうかでステータス決定
     let newStatus = 'waiting';
     if (callData.users.A && callData.users.B) {
       newStatus = 'started';
@@ -932,7 +893,6 @@ btnCallStart.addEventListener('click', async () => {
       newStatus = 'waiting';
     }
 
-    // Firebaseに状態をアップデート（ステータスメッセージも含む）
     await update(callStatusRef, {
       status: newStatus,
       users: callData.users,
@@ -941,14 +901,12 @@ btnCallStart.addEventListener('click', async () => {
         : (newStatus === 'started' ? '通話が開始されました' : '')
     });
 
-    // ローカルのフラグをtrueにセット（ここは変更なし）
     localCallStartPressed = true;
     updateMyButtonStatusLocal();
 
   } catch (e) {
     console.error(e);
     callStatusDisplay.textContent = '通話の準備に失敗しました';
-    // 失敗時はローカルフラグはfalseに
     localCallStartPressed = false;
     updateMyButtonStatusLocal();
   } finally {
@@ -963,30 +921,23 @@ btnCallEnd.addEventListener('click', async () => {
   }
 
   try {
-    // まずFirebaseから現在のcallStatusを取得
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
       status: 'none',
       users: { A: false, B: false }
     };
 
-    // 自分の押下状態のみfalseに変更
     if (callData.users && callData.users[currentUser] !== undefined) {
       callData.users[currentUser] = false;
     }
 
-    // 両方押されていなければ、通話は終了状態にする
-    const bothReleased = !callData.users.A && !callData.users.B;
-    const newStatus = bothReleased ? 'ended' : callData.status;
-
-    // Firebaseに更新
+    // 終了ボタン押下時点で必ず終了扱いにして、全員の通話状態をリセット
     await update(callStatusRef, {
-      status: newStatus,
-      users: callData.users,
-      statusMessage: newStatus === 'ended' ? '通話は終了しました' : ''
+      status: 'ended',
+      users: { A: false, B: false },
+      statusMessage: '通話は終了しました'
     });
 
-    // UIのリセット処理
     localCallStartPressed = false;
     updateMyButtonStatusLocal();
 
@@ -998,33 +949,33 @@ btnCallEnd.addEventListener('click', async () => {
     isMuted = false;
 
     if (localStream) {
-  try {
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true; // ミュート解除
-    });
-    localStream.getTracks().forEach(track => {
-      if (track.readyState === 'live') {
-        track.stop();
+      try {
+        localStream.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
+        localStream.getTracks().forEach(track => {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        });
+      } catch (e) {
+        console.warn('localStream stop error:', e);
       }
-    });
-  } catch (e) {
-    console.warn('localStream stop error:', e);
-  }
-  localStream = null;
-}
+      localStream = null;
+    }
 
-if (remoteStream) {
-  try {
-    remoteStream.getTracks().forEach(track => {
-      if (track.readyState === 'live') {
-        track.stop();
+    if (remoteStream) {
+      try {
+        remoteStream.getTracks().forEach(track => {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        });
+      } catch (e) {
+        console.warn('remoteStream stop error:', e);
       }
-    });
-  } catch (e) {
-    console.warn('remoteStream stop error:', e);
-  }
-  remoteStream = null;
-}
+      remoteStream = null;
+    }
 
     const remoteAudio = document.getElementById('remote-audio');
     if (remoteAudio) {
@@ -1052,7 +1003,7 @@ if (remoteStream) {
       console.error('signaling remove error:', e);
     }
 
-    callStatusDisplay.textContent = newStatus === 'ended' ? '通話は終了しました' : '';
+    callStatusDisplay.textContent = '通話は終了しました';
 
   } catch (e) {
     console.error('通話終了処理でエラー:', e);
@@ -1064,11 +1015,10 @@ onValue(callStatusRef, (snapshot) => {
   const callData = snapshot.val();
   if (!callData) return;
 
-  const iPressed = !!callData.users?.[currentUser]; // 自分の押下状態
-  const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A']; // 相手の押下状態
+  const iPressed = !!callData.users?.[currentUser];
+  const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A'];
   const status = callData.status;
 
-  // 自分の状態をローカル変数に保存
   localCallStartPressed = iPressed;
 
   switch (status) {
@@ -1077,6 +1027,51 @@ onValue(callStatusRef, (snapshot) => {
       updateMyButtonStatusLocal(); 
       resetUI();
       callStatusDisplay.textContent = '通話は終了しました';
+
+      // 追加：音声ストリーム停止とUI初期化
+      isMuted = false;
+      btnCallStart.disabled = false;
+      btnCallEnd.disabled = true;
+      btnMute.disabled = true;
+      btnMute.textContent = 'ミュート';
+
+      if (localStream) {
+        try {
+          localStream.getTracks().forEach(track => {
+            if (track.readyState === 'live') track.stop();
+          });
+        } catch (e) {
+          console.warn('localStream stop error:', e);
+        }
+        localStream = null;
+      }
+
+      if (remoteStream) {
+        try {
+          remoteStream.getTracks().forEach(track => {
+            if (track.readyState === 'live') track.stop();
+          });
+        } catch (e) {
+          console.warn('remoteStream stop error:', e);
+        }
+        remoteStream = null;
+      }
+
+      const remoteAudio = document.getElementById('remote-audio');
+      if (remoteAudio) remoteAudio.srcObject = null;
+
+      const localAudio = document.getElementById('localAudio');
+      if (localAudio) localAudio.srcObject = null;
+
+      if (peerConnection) {
+        try {
+          peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+          peerConnection.close();
+        } catch (e) {
+          console.error('peerConnection close error:', e);
+        }
+        peerConnection = null;
+      }
       break;
 
     case 'waiting':
@@ -1125,11 +1120,8 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// 修正後：ステータスメッセージとボタン制御の共通関数
 function updateCallStatusUI(status) {
   callStatus = status;
-
-  // 全員に共通のステータスメッセージを表示する（同期される部分）
   callStatusDisplay.textContent = {
     'started': '通話中',
     'waiting': '通話ボタンが押されました（相手を待っています）',
@@ -1137,7 +1129,6 @@ function updateCallStatusUI(status) {
     'none': ''
   }[status] || '';
 
-  // ボタンの状態は自分の画面だけで切り替える（非同期）
   updateMyButtonStatus(status);
 }
 
@@ -1171,34 +1162,27 @@ function updateMyButtonStatusLocal() {
   }
 }
 
-// ミュート状態を初期化する関数（共通で使う）
 function resetMuteState() {
   isMuted = false;
   btnMute.textContent = 'ミュート';
 
   if (localStream) {
     localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;  // ミュート解除（音を出す）
+      track.enabled = true;
     });
   }
 }
 
 (async () => {
-  // callStatusRefから現在の通話状態を取得するよ
   const callStatusSnap = await get(callStatusRef);
-  // データがあれば取得、なければ空オブジェクト
   const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
 
-  // もし通話状態がwaitingなら
   if (callData.status === 'waiting') {
-    // そして通話開始したユーザーが自分じゃなかったら
     if (callData.user !== currentUser) {
-      // もし自分が通話開始ボタンを押している状態なら、それを解除するよ
       if (localCallStartPressed) {
         localCallStartPressed = false;
-        updateMyButtonStatusLocal();  // ボタン状態を更新するよ
+        updateMyButtonStatusLocal();
       }
-      // 画面にメッセージを出すよ
       callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
     }
   }
