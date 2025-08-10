@@ -391,10 +391,10 @@ lockedUserB = false;
   updateCallStatusUI('none');
   }
   async function startLocalStream() {
-  if (localStream && localStream.getAudioTracks().length > 0 && localStream.getAudioTracks()[0].enabled) {
-    return localStream;
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
   }
-
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     localStream.getAudioTracks().forEach(track => track.enabled = true);
@@ -408,30 +408,40 @@ lockedUserB = false;
 function createPeerConnection() {
   peerConnection = new RTCPeerConnection(configuration);
 
-  peerConnection.ontrack = event => {
-    if (!remoteStream) remoteStream = new MediaStream();
-    remoteStream.addTrack(event.track);
-
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio) {
-      // 再生を確実にするために、一旦srcObjectをnullにしてからセットする
-      remoteAudio.srcObject = null;
-      remoteAudio.srcObject = remoteStream;
-      remoteAudio.play().catch(err => {
-        console.warn('remoteAudio.play() blocked or failed:', err);
-      });
-    } else {
-      const audio = document.createElement('audio');
-      audio.id = 'remote-audio';
-      audio.autoplay = true;
-      audio.playsInline = true;
-      document.body.appendChild(audio);
-
-      audio.srcObject = null;
-      audio.srcObject = remoteStream;
-      audio.play().catch(err => console.warn("audio.play() error:", err));
+if (remoteStream) {
+  remoteStream.getTracks().forEach(track => {
+    try {
+      track.stop();
+    } catch (e) {
+      console.warn('remoteStream track stop error:', e);
     }
-  };
+  });
+  remoteStream = null;
+}
+
+peerConnection.ontrack = event => {
+  if (!remoteStream) remoteStream = new MediaStream();
+  remoteStream.addTrack(event.track);
+
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) {
+    remoteAudio.srcObject = null;
+    remoteAudio.srcObject = remoteStream;
+    remoteAudio.play().catch(err => {
+      console.warn('remoteAudio.play() blocked or failed:', err);
+    });
+  } else {
+    const audio = document.createElement('audio');
+    audio.id = 'remote-audio';
+    audio.autoplay = true;
+    audio.playsInline = true;
+    document.body.appendChild(audio);
+
+    audio.srcObject = null;
+    audio.srcObject = remoteStream;
+    audio.play().catch(err => console.warn("audio.play() error:", err));
+  }
+};
 
   if (localStream) {
     localStream.getTracks().forEach(track => {
@@ -476,8 +486,16 @@ function createPeerConnection() {
   }
 }
 
-function endCallCleanup() {
+async function endCallCleanup() {
   console.log("=== 通話終了: ストリームと接続を解放 ===");
+  
+  try {
+    await remove(ref(db, 'signaling/candidates/A'));
+    await remove(ref(db, 'signaling/candidates/B'));
+    console.log('シグナリングの候補を削除しました');
+  } catch (e) {
+    console.error('候補削除エラー:', e);
+  }
 
   if (remoteStream) {
     remoteStream.getTracks().forEach(track => track.stop());
@@ -499,7 +517,8 @@ function endCallCleanup() {
 
   const remoteAudio = document.getElementById('remote-audio');
   if (remoteAudio) {
-    remoteAudio.srcObject = null;
+  	remoteAudio.pause();
+      remoteAudio.srcObject = null;
   }
 }
 
@@ -912,33 +931,49 @@ btnCallStart.addEventListener('click', async () => {
 
   try {
     if (peerConnection) {
-      try {
-        peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-        peerConnection.close();
-      } catch (e) {
-        console.warn('peerConnection close時のエラー:', e);
-      }
-      peerConnection = null;
-    }
+  try {
+    const removeTrackPromises = peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender));
+    await Promise.all(removeTrackPromises); // 全部削除し終わるのを待つよ
 
-    await startLocalStream();
-    resetMuteState();
-    createPeerConnection();
+    peerConnection.close();
+  } catch (e) {
+    console.warn('peerConnection close時のエラー:', e);
+  }
+  peerConnection = null;
+}
 
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
-        if (!senderExists) {
-          peerConnection.addTrack(track, localStream);
-        }
-      });
+if (localStream) {
+  localStream.getTracks().forEach(track => {
+    try {
+      track.stop();
+    } catch (e) {
+      console.warn('localStream track stop error:', e);
     }
+  });
+  localStream = null;
+}
 
-    const localAudio = document.getElementById('localAudio');
-    if (localAudio) {
-      localAudio.srcObject = localStream;
-      await localAudio.play();
+await startLocalStream();
+
+resetMuteState();
+createPeerConnection();
+
+if (localStream) {
+  localStream.getTracks().forEach(track => {
+    const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
+    if (!senderExists) {
+      peerConnection.addTrack(track, localStream);
     }
+  });
+}
+
+const localAudio = document.getElementById('localAudio');
+if (localAudio) {
+  localAudio.srcObject = localStream;
+  localAudio.play().catch(err => {
+    console.warn('localAudio.play() blocked or failed:', err);
+  });
+}
 
     await remove(ref(db, 'signaling'));
 
