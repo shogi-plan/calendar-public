@@ -408,54 +408,52 @@ lockedUserB = false;
 function createPeerConnection() {
   peerConnection = new RTCPeerConnection(configuration);
 
-if (remoteStream) {
-  remoteStream.getTracks().forEach(track => {
-    try {
-      track.stop();
-    } catch (e) {
-      console.warn('remoteStream track stop error:', e);
-    }
-  });
-  remoteStream = null;
-}
-
-peerConnection.ontrack = event => {
-  if (!remoteStream) remoteStream = new MediaStream();
-  remoteStream.addTrack(event.track);
-
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) {
-    remoteAudio.srcObject = null;
-    remoteAudio.srcObject = remoteStream;
-    remoteAudio.play().catch(err => {
-      console.warn('remoteAudio.play() blocked or failed:', err);
+  if (remoteStream) {
+    remoteStream.getTracks().forEach(track => {
+      try {
+        track.stop();
+      } catch (e) {
+        console.warn('remoteStream track stop error:', e);
+      }
     });
-  } else {
-    const audio = document.createElement('audio');
-    audio.id = 'remote-audio';
-    audio.autoplay = true;
-    audio.playsInline = true;
-    document.body.appendChild(audio);
-
-    audio.srcObject = null;
-    audio.srcObject = remoteStream;
-    audio.play().catch(err => console.warn("audio.play() error:", err));
+    remoteStream = null;
   }
-};
+
+  peerConnection.ontrack = event => {
+    if (!remoteStream) remoteStream = new MediaStream();
+    remoteStream.addTrack(event.track);
+
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+      remoteAudio.srcObject = null;
+      remoteAudio.srcObject = remoteStream;
+      remoteAudio.play().catch(err => {
+        console.warn('remoteAudio.play() blocked or failed:', err);
+      });
+    } else {
+      const audio = document.createElement('audio');
+      audio.id = 'remote-audio';
+      audio.autoplay = true;
+      audio.playsInline = true;
+      document.body.appendChild(audio);
+
+      audio.srcObject = null;
+      audio.srcObject = remoteStream;
+      audio.play().catch(err => console.warn("audio.play() error:", err));
+    }
+  };
 
   if (localStream) {
     localStream.getTracks().forEach(track => {
-      const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
-      if (!senderExists) {
-        peerConnection.addTrack(track, localStream);
-      }
+      peerConnection.addTrack(track, localStream);
     });
   }
 
   peerConnection.oniceconnectionstatechange = () => {
     const state = peerConnection.iceConnectionState;
     console.log('ICE connection state:', state);
-    if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+
+    if (state === 'failed' || state === 'closed') {
       update(ref(db, 'callStatus'), {
         status: 'ended',
         users: { A: false, B: false },
@@ -464,7 +462,19 @@ peerConnection.ontrack = event => {
 
       endCallCleanup();
       resetUI();
-      return;
+    } else if (state === 'disconnected') {
+      setTimeout(() => {
+        if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
+          update(ref(db, 'callStatus'), {
+            status: 'ended',
+            users: { A: false, B: false },
+            statusMessage: 'ICE: disconnected timeout'
+          }).catch(console.error);
+
+          endCallCleanup();
+          resetUI();
+        }
+      }, 5000);
     }
   };
 
@@ -475,15 +485,6 @@ peerConnection.ontrack = event => {
       set(newCandRef, { candidate: event.candidate.toJSON() });
     }
   };
-
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
-      if (!senderExists) {
-        peerConnection.addTrack(track, localStream);
-      }
-    });
-  }
 }
 
 async function endCallCleanup() {
@@ -512,11 +513,12 @@ async function endCallCleanup() {
     peerConnection.onicecandidate = null;
     peerConnection.oniceconnectionstatechange = null;
     try {
-      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+      await Promise.all(peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender)));
     } catch (e) {
       console.warn('peerConnection removeTrack error:', e);
     }
     peerConnection.close();
+    await new Promise(resolve => setTimeout(resolve, 200));
     peerConnection = null;
   }
 
@@ -937,9 +939,7 @@ btnCallStart.addEventListener('click', async () => {
   try {
     if (peerConnection) {
   try {
-    const removeTrackPromises = peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender));
-    await Promise.all(removeTrackPromises); // 全部削除し終わるのを待つよ
-
+    peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
     peerConnection.close();
   } catch (e) {
     console.warn('peerConnection close時のエラー:', e);
@@ -1098,14 +1098,15 @@ await update(ref(db, 'callStatus'), {
     }
 
     if (peerConnection) {
-      try {
-        peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-        peerConnection.close();
-      } catch (e) {
-        console.error('peerConnection close error:', e);
-      }
-      peerConnection = null;
-    }
+  try {
+    await Promise.all(peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender)));
+    peerConnection.close();
+    await new Promise(resolve => setTimeout(resolve, 200));
+  } catch (e) {
+    console.warn('peerConnection close時のエラー:', e);
+  }
+  peerConnection = null;
+}
 
     try {
       await remove(ref(db, 'signaling'));
@@ -1138,7 +1139,6 @@ onValue(callStatusRef, (snapshot) => {
       resetUI();
       callStatusDisplay.textContent = '通話は終了しました';
 
-      // 追加：音声ストリーム停止とUI初期化
       isMuted = false;
       btnCallStart.disabled = false;
       btnCallEnd.disabled = true;
