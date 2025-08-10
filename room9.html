@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>あ2人予定調整カレンダー</h1>
+  <h1>い2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -416,7 +416,69 @@ lockedUserB = false;
 }
 
 function createPeerConnection() {
+  if (peerConnection && peerConnection.signalingState !== 'closed') {
+    console.log('createPeerConnection: 既存のpeerConnectionを再利用します');
+
+    try {
+      if (localStream && peerConnection.getSenders) {
+        const senders = peerConnection.getSenders();
+        localStream.getTracks().forEach(track => {
+          const sameSender = senders.find(s => s.track === track);
+          if (sameSender) {
+            return;
+          }
+
+          const sameKindSender = senders.find(s => s.track && s.track.kind === track.kind);
+          if (sameKindSender) {
+            if (typeof sameKindSender.replaceTrack === 'function') {
+              sameKindSender.replaceTrack(track).then(() => {
+                console.log(`createPeerConnection(reuse): replaceTrack で ${track.kind} を差し替えました`);
+              }).catch(err => {
+                console.warn('createPeerConnection(reuse): replaceTrack に失敗しました。remove/add を試みます', err);
+                try {
+                  peerConnection.removeTrack(sameKindSender);
+                } catch (e) {
+                  console.warn('createPeerConnection(reuse): removeTrack でエラー', e);
+                }
+                try {
+                  peerConnection.addTrack(track, localStream);
+                  console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
+                } catch (e) {
+                  console.warn('createPeerConnection(reuse): addTrack に失敗', e);
+                }
+              });
+            } else {
+              try {
+                peerConnection.removeTrack(sameKindSender);
+              } catch (e) {
+                console.warn('createPeerConnection(reuse): removeTrack でエラー', e);
+              }
+              try {
+                peerConnection.addTrack(track, localStream);
+                console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
+              } catch (e) {
+                console.warn('createPeerConnection(reuse): addTrack に失敗', e);
+              }
+            }
+          } else {
+            try {
+              peerConnection.addTrack(track, localStream);
+              console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
+            } catch (e) {
+              console.warn('createPeerConnection(reuse): addTrack に失敗', e);
+            }
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('createPeerConnection(reuse): トラック再設定中にエラー', e);
+    }
+
+    return;
+  }
+
   peerConnection = new RTCPeerConnection(configuration);
+  console.log('createPeerConnection: 新しいRTCPeerConnectionを作成しました');
 
   if (remoteStream) {
     remoteStream.getTracks().forEach(track => {
@@ -430,8 +492,12 @@ function createPeerConnection() {
   }
 
   peerConnection.ontrack = event => {
-    if (!remoteStream) remoteStream = new MediaStream();
-    remoteStream.addTrack(event.track);
+    if (event.streams && event.streams[0]) {
+      remoteStream = event.streams[0];
+    } else {
+      if (!remoteStream) remoteStream = new MediaStream();
+      remoteStream.addTrack(event.track);
+    }
 
     const remoteAudio = document.getElementById('remote-audio');
     if (remoteAudio) {
@@ -454,12 +520,17 @@ function createPeerConnection() {
   };
 
   if (localStream) {
-    localStream.getTracks().forEach(track => {
-      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
-      if (!alreadyAdded) {
-        peerConnection.addTrack(track, localStream);
-      }
-    });
+    try {
+      localStream.getTracks().forEach(track => {
+        const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
+        if (!alreadyAdded) {
+          peerConnection.addTrack(track, localStream);
+          console.log(`createPeerConnection(new): ローカルトラック(${track.kind})を追加しました`);
+        }
+      });
+    } catch (e) {
+      console.warn('createPeerConnection(new): ローカルトラック追加でエラー', e);
+    }
   }
 
   peerConnection.oniceconnectionstatechange = () => {
@@ -504,20 +575,36 @@ async function endCallCleanup() {
   console.log("=== 通話終了: ストリームと接続を解放 ===");
 
   try {
-    await remove(ref(db, 'signaling/candidates/A'));
-    await remove(ref(db, 'signaling/candidates/B'));
-    console.log('シグナリングの候補を削除しました');
+    await Promise.all([
+      remove(ref(db, 'signaling/candidates/A')),
+      remove(ref(db, 'signaling/candidates/B')),
+      remove(ref(db, 'signaling/offer')),
+      remove(ref(db, 'signaling/answer')),
+    ]);
+    console.log('シグナリングの候補とoffer/answerを削除しました');
   } catch (e) {
     console.error('候補削除エラー:', e);
   }
 
   if (remoteStream) {
-    remoteStream.getTracks().forEach(track => track.stop());
+    remoteStream.getTracks().forEach(track => {
+      try {
+        track.stop();
+      } catch (e) {
+        console.warn('remoteStream track stop error:', e);
+      }
+    });
     remoteStream = null;
   }
 
   if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
+    localStream.getTracks().forEach(track => {
+      try {
+        track.stop();
+      } catch (e) {
+        console.warn('localStream track stop error:', e);
+      }
+    });
     localStream = null;
   }
 
@@ -525,13 +612,16 @@ async function endCallCleanup() {
     peerConnection.ontrack = null;
     peerConnection.onicecandidate = null;
     peerConnection.oniceconnectionstatechange = null;
+
     try {
       await Promise.all(peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender)));
     } catch (e) {
       console.warn('peerConnection removeTrack error:', e);
     }
+
     peerConnection.close();
     await new Promise(resolve => setTimeout(resolve, 200));
+
     peerConnection = null;
   }
 
@@ -540,10 +630,25 @@ async function endCallCleanup() {
     remoteAudio.pause();
     remoteAudio.srcObject = null;
   }
+
+  console.log("=== endCallCleanup 完了 ===");
 }
 
 async function sendOffer() {
   createPeerConnection();
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
+      if (!alreadyAdded) {
+        console.log(`sendOffer: ローカルトラック(${track.kind})を追加`);
+        peerConnection.addTrack(track, localStream);
+      }
+    });
+  } else {
+    console.warn("sendOffer: localStream がまだありません");
+  }
+
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
 
@@ -583,6 +688,18 @@ async function sendAnswer() {
 
   createPeerConnection();
   await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
+      if (!alreadyAdded) {
+        console.log(`sendAnswer: ローカルトラック(${track.kind})を追加`);
+        peerConnection.addTrack(track, localStream);
+      }
+    });
+  } else {
+    console.warn("sendAnswer: localStream がまだありません");
+  }
 
   const answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
