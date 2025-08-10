@@ -1263,6 +1263,7 @@ await update(ref(db, 'callStatus'), {
 onValue(callStatusRef, (snapshot) => {
   const callData = snapshot.val();
   if (!callData) return;
+  window.location.reload();
 
   const iPressed = !!callData.users?.[currentUser];
   const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A'];
