@@ -369,6 +369,12 @@ let callStatus = 'none';
   await remove(ref(db, 'chatLog'));
   await remove(ref(db, 'roomUsers'));
   await remove(ref(db, 'callStatus'));
+await set(ref(db, 'callStatus'), {
+  status: 'none',
+  users: { A: false, B: false },
+  statusMessage: '',
+  timestamp: null
+});
   await remove(ref(db, 'signaling'));
   selectedCells.clear();
   localStorage.removeItem('currentUser');  
@@ -408,6 +414,8 @@ function createPeerConnection() {
 
     const remoteAudio = document.getElementById('remote-audio');
     if (remoteAudio) {
+      // 再生を確実にするために、一旦srcObjectをnullにしてからセットする
+      remoteAudio.srcObject = null;
       remoteAudio.srcObject = remoteStream;
       remoteAudio.play().catch(err => {
         console.warn('remoteAudio.play() blocked or failed:', err);
@@ -418,10 +426,21 @@ function createPeerConnection() {
       audio.autoplay = true;
       audio.playsInline = true;
       document.body.appendChild(audio);
+
+      audio.srcObject = null;
       audio.srcObject = remoteStream;
       audio.play().catch(err => console.warn("audio.play() error:", err));
     }
   };
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
+      if (!senderExists) {
+        peerConnection.addTrack(track, localStream);
+      }
+    });
+  }
 
   peerConnection.oniceconnectionstatechange = () => {
     const state = peerConnection.iceConnectionState;
@@ -474,7 +493,7 @@ function endCallCleanup() {
     peerConnection.ontrack = null;
     peerConnection.onicecandidate = null;
     peerConnection.oniceconnectionstatechange = null;
-    peerConnection.close();
+    peerConnection.close();  // closeは同期処理なのでawaitは不要
     peerConnection = null;
   }
 
@@ -611,7 +630,30 @@ async function getUserType(uid) {
 }
 
 async function updateCallStatus(status) {
-  await set(ref(db, 'callStatus'), status);
+  try {
+    const snap = await get(ref(db, 'callStatus'));
+    const prev = snap.exists() ? snap.val() : {};
+    const users = prev && prev.users ? prev.users : { A: false, B: false };
+
+    const statusMessage = status === 'waiting'
+      ? '相手が通話開始ボタンを押すのを待っています'
+      : (status === 'started' ? '通話が開始されました' : (status === 'ended' ? '通話が終了しました' : ''));
+
+    await set(ref(db, 'callStatus'), {
+      status,
+      users,
+      statusMessage,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('updateCallStatus error:', e);
+    await set(ref(db, 'callStatus'), {
+      status,
+      users: { A: false, B: false },
+      statusMessage: '',
+      timestamp: new Date().toISOString()
+    });
+  }
 }
 
 function resetUI() {
