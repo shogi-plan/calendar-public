@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>い2人予定調整カレンダー</h1>
+  <h1>2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -620,7 +620,7 @@ async function endCallCleanup() {
     }
 
     peerConnection.close();
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     peerConnection = null;
   }
@@ -1251,6 +1251,8 @@ await update(ref(db, 'callStatus'), {
     }
 
     callStatusDisplay.textContent = '通話は終了しました';
+    
+    window.location.reload();
 
   } catch (e) {
     console.error('通話終了処理でエラー:', e);
