@@ -488,7 +488,7 @@ peerConnection.ontrack = event => {
 
 async function endCallCleanup() {
   console.log("=== 通話終了: ストリームと接続を解放 ===");
-  
+
   try {
     await remove(ref(db, 'signaling/candidates/A'));
     await remove(ref(db, 'signaling/candidates/B'));
@@ -511,14 +511,19 @@ async function endCallCleanup() {
     peerConnection.ontrack = null;
     peerConnection.onicecandidate = null;
     peerConnection.oniceconnectionstatechange = null;
-    peerConnection.close();  // closeは同期処理なのでawaitは不要
+    try {
+      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+    } catch (e) {
+      console.warn('peerConnection removeTrack error:', e);
+    }
+    peerConnection.close();
     peerConnection = null;
   }
 
   const remoteAudio = document.getElementById('remote-audio');
   if (remoteAudio) {
-  	remoteAudio.pause();
-      remoteAudio.srcObject = null;
+    remoteAudio.pause();
+    remoteAudio.srcObject = null;
   }
 }
 
