@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>2人予定調整カレンダー</h1>
+  <h1>あ2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -396,8 +396,18 @@ lockedUserB = false;
     localStream = null;
   }
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    localStream.getAudioTracks().forEach(track => track.enabled = true);
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      video: false
+    });
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;
+      console.log('Audio track enabled:', track);
+    });
     return localStream;
   } catch (error) {
     console.error('startLocalStream error:', error);
@@ -445,7 +455,10 @@ function createPeerConnection() {
 
   if (localStream) {
     localStream.getTracks().forEach(track => {
-      peerConnection.addTrack(track, localStream);
+      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
+      if (!alreadyAdded) {
+        peerConnection.addTrack(track, localStream);
+      }
     });
   }
 
@@ -938,39 +951,45 @@ btnCallStart.addEventListener('click', async () => {
 
   try {
     if (peerConnection) {
-  try {
-    peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-    peerConnection.close();
-  } catch (e) {
-    console.warn('peerConnection close時のエラー:', e);
-  }
-  peerConnection = null;
-}
-
-if (localStream) {
-  localStream.getTracks().forEach(track => {
-    try {
-      track.stop();
-    } catch (e) {
-      console.warn('localStream track stop error:', e);
+      try {
+        peerConnection.getSenders().forEach(sender => {
+          try {
+            peerConnection.removeTrack(sender);
+          } catch (e) {
+            console.warn('removeTrack error:', e);
+          }
+        });
+        peerConnection.close();
+      } catch (e) {
+        console.warn('peerConnection close時のエラー:', e);
+      }
+      peerConnection = null;
     }
-  });
-  localStream = null;
-}
 
-await startLocalStream();
-
-resetMuteState();
-createPeerConnection();
-
-if (localStream) {
-  localStream.getTracks().forEach(track => {
-    const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
-    if (!senderExists) {
-      peerConnection.addTrack(track, localStream);
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn('localStream track stop error:', e);
+        }
+      });
+      localStream = null;
     }
-  });
-}
+
+    await startLocalStream();
+
+    resetMuteState();
+    createPeerConnection();
+
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
+        if (!senderExists) {
+          peerConnection.addTrack(track, localStream);
+        }
+      });
+    }
 
 const localAudio = document.getElementById('localAudio');
 if (localAudio) {
