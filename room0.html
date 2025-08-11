@@ -178,25 +178,27 @@
 
       // 空き状況更新
       async function updateRoomStatus() {
-        roomStatusDiv.innerHTML = "";
-        for (let i = 8; i <= 10; i++) {
-          const roomRef = ref(db, `room${i}/roomUsers`);
-          const snapshot = await get(roomRef);
-          const data = snapshot.exists() ? snapshot.val() : {};
-          const isASelected = !!data.A;
-          const isBSelected = !!data.B;
-          const vacant = !isASelected || !isBSelected;
-          const p = document.createElement("p");
-          p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
-          if (vacant && myUserName) {
-            const btn = document.createElement("button");
-            btn.textContent = "入室";
-            btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
-            p.appendChild(btn);
-          }
-          roomStatusDiv.appendChild(p);
-        }
-      }
+  roomStatusDiv.innerHTML = "";
+  for (let i = 8; i <= 10; i++) {  // 必要に応じて範囲変更
+    const selectRef = ref(db, `room${i}/selectUsers`);
+    const snapshot = await get(selectRef);
+    const selectData = snapshot.exists() ? snapshot.val() : { A: false, B: false };
+
+    const isASelected = selectData.A === true;
+    const isBSelected = selectData.B === true;
+    const vacant = !isASelected || !isBSelected;
+
+    const p = document.createElement("p");
+    p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
+    if (vacant && myUserName) {
+      const btn = document.createElement("button");
+      btn.textContent = "入室";
+      btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
+      p.appendChild(btn);
+    }
+    roomStatusDiv.appendChild(p);
+  }
+}
 
       // 入室処理
       async function joinRoom(num, slot) {
