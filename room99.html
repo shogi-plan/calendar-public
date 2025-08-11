@@ -655,6 +655,7 @@ async function endCallCleanup() {
   remoteDescription = null;
 
   console.log("=== endCallCleanup 完了 ===");
+  initializeUsers();
 }
 
 async function sendOffer() {
@@ -1274,8 +1275,6 @@ await update(ref(db, 'callStatus'), {
     }
 
     callStatusDisplay.textContent = '通話は終了しました';
-    
-    window.location.reload();
 
   } catch (e) {
     console.error('通話終了処理でエラー:', e);
@@ -1283,15 +1282,9 @@ await update(ref(db, 'callStatus'), {
   }
 });
 
-let hasReloaded = false;
 onValue(callStatusRef, (snapshot) => {
   const callData = snapshot.val();
   if (!callData) return;
-  if (callData.status === 'ended' && localCallStartPressed && !hasReloaded) {
-    hasReloaded = true;
-    window.location.reload();
-    return;
-    }
 
   const iPressed = !!callData.users?.[currentUser];
   const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A'];
