@@ -654,8 +654,25 @@ async function endCallCleanup() {
   localDescription = null;
   remoteDescription = null;
 
+  // 追加: ここで currentUser などもリセットしてユーザー状態を初期化
+  currentUser = '';
+  lockedUserA = false;
+  lockedUserB = false;
+
+  // UI初期化（ユーザー選択リセットなどもここで）
+  userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
+  userSelect.disabled = false;
+
+  // remoteAudioリセット（念のため再度）
+  if (remoteAudio) {
+    remoteAudio.pause();
+    remoteAudio.srcObject = null;
+  }
+
   console.log("=== endCallCleanup 完了 ===");
-  initializeUsers();
+
+  // initializeUsers() を呼んで状態同期＆UI更新
+  await initializeUsers();
 }
 
 async function sendOffer() {
