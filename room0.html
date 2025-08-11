@@ -5,12 +5,139 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>待合室</title>
   <style>
-    /* 省略: ここは前回のまま */
+    /* ベーススタイル */
+    body {
+      font-family: "Yu Gothic", "Meiryo", sans-serif;
+      margin: 10px;
+      padding: 0;
+      background: #f9f9f9;
+      color: #333;
+      line-height: 1.5;
+    }
+    h1, h2 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: bold;
+      text-align: center;
+    }
+    input[type="text"] {
+      width: 90%;
+      max-width: 400px;
+      font-size: 1rem;
+      padding: 8px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      box-sizing: border-box;
+    }
+    #roomStatus {
+      max-width: 400px;
+      margin: 0 auto 20px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    #roomStatus p {
+      margin: 8px 0;
+      font-size: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #roomStatus button {
+      padding: 5px 10px;
+      font-size: 0.9rem;
+      border: none;
+      border-radius: 4px;
+      background-color: #4caf50;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    #roomStatus button:hover {
+      background-color: #45a049;
+    }
+
+    #chatMessages {
+      max-width: 400px;
+      height: 200px;
+      margin: 0 auto 10px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+      overflow-y: auto;
+      font-size: 1rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #chatInput {
+      width: 70%;
+      max-width: 300px;
+      font-size: 1rem;
+      padding: 8px;
+      margin-left: 5%;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    #sendBtn, #clearBtn {
+      width: 20%;
+      max-width: 90px;
+      font-size: 1rem;
+      padding: 8px;
+      margin-left: 2%;
+      border: none;
+      border-radius: 4px;
+      background-color: #2196F3;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    #sendBtn:hover {
+      background-color: #1976D2;
+    }
+    #clearBtn {
+      background-color: #f44336;
+    }
+    #clearBtn:hover {
+      background-color: #d32f2f;
+    }
+
+    /* スマホ縦表示 */
+    @media (max-width: 480px) {
+      #chatInput, #sendBtn, #clearBtn {
+        width: 100%;
+        max-width: none;
+        margin-left: 0;
+        margin-bottom: 8px;
+      }
+      #sendBtn, #clearBtn {
+        font-size: 1.1rem;
+      }
+      #roomStatus p {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      #roomStatus button {
+        margin-top: 6px;
+        width: 100%;
+      }
+    }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getDatabase, ref, onValue, update, remove, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+    import { getDatabase, ref, get, set, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
+    // Firebase 設定（ここにあなたの設定を入れてください）
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
@@ -24,6 +151,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
+    // ファイル名からroom名取得
     const roomName = location.pathname.split('/').pop().replace('.html', '');
 
     let myUserName = "";
@@ -41,40 +169,35 @@
         myUserName = savedName;
       }
 
+      // ユーザー名入力イベント
       nameInput.addEventListener("input", () => {
         myUserName = nameInput.value.trim();
         localStorage.setItem(`${roomName}UserName`, myUserName);
-        // 部分的にupdateRoomStatus呼ぶなら引数使うか検討
+        updateRoomStatus();
       });
 
-      // 空き状況を描画する関数
-      function renderRoomStatus(allRoomUsers) {
-        roomStatusDiv.innerHTML = "";
-        for (let i = 8; i <= 10; i++) {
-          const roomUsers = allRoomUsers[`room${i}`]?.roomUsers || { A: false, B: false };
+      // 空き状況更新
+      async function updateRoomStatus() {
+  roomStatusDiv.innerHTML = "";
+  for (let i = 8; i <= 10; i++) {
+    const roomUsersSnapshot = await get(ref(db, `room${i}/roomUsers`));
+    const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
 
-          const isASelected = typeof roomUsers.A === "string" && roomUsers.A !== "";
-          const isBSelected = typeof roomUsers.B === "string" && roomUsers.B !== "";
-          const vacant = !isASelected || !isBSelected;
+    const isASelected = typeof roomUsers.A === "string" && roomUsers.A !== "";
+    const isBSelected = typeof roomUsers.B === "string" && roomUsers.B !== "";
+    const vacant = !isASelected || !isBSelected;
 
-          const p = document.createElement("p");
-          p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
-          if (vacant && myUserName) {
-            const btn = document.createElement("button");
-            btn.textContent = "入室";
-            btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
-            p.appendChild(btn);
-          }
-          roomStatusDiv.appendChild(p);
-        }
-      }
-
-      // Firebaseのroom全体をまとめて監視
-      const roomsRef = ref(db);
-      onValue(roomsRef, (snapshot) => {
-        const data = snapshot.val() || {};
-        renderRoomStatus(data);
-      });
+    const p = document.createElement("p");
+    p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
+    if (vacant && myUserName) {
+      const btn = document.createElement("button");
+      btn.textContent = "入室";
+      btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
+      p.appendChild(btn);
+    }
+    roomStatusDiv.appendChild(p);
+  }
+}
 
       // 入室処理
       async function joinRoom(num, slot) {
@@ -91,7 +214,7 @@
         chatInput.value = "";
       });
 
-      // チャット表示（リアルタイム）
+      // チャット表示
       onValue(ref(db, `${roomName}/chat`), (snapshot) => {
         chatMessages.innerHTML = "";
         snapshot.forEach((child) => {
@@ -110,16 +233,15 @@
         myUserName = "";
         nameInput.value = "";
         chatMessages.innerHTML = "";
-        // roomUsers の初期化も行う例
-        for (let i = 8; i <= 10; i++) {
-          await update(ref(db, `room${i}/roomUsers`), { A: false, B: false });
-        }
+        updateRoomStatus();
       });
+
+      updateRoomStatus();
     });
   </script>
 </head>
 <body>
-  <h1>待合室</h1>
+  <h1>あ待合室</h1>
   <label>ユーザー名: <input type="text" id="nameInput" autocomplete="off" /></label>
 
   <h2>空き状況</h2>
