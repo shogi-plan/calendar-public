@@ -183,9 +183,10 @@
     const roomUsersSnapshot = await get(ref(db, `room${i}/roomUsers`));
     const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
 
-    const isASelected = typeof roomUsers.A === "string" && roomUsers.A !== "";
-    const isBSelected = typeof roomUsers.B === "string" && roomUsers.B !== "";
-    const vacant = !isASelected || !isBSelected;
+    // 空き判定を簡単に
+    const isASelected = Boolean(roomUsers.A);
+    const isBSelected = Boolean(roomUsers.B);
+    const vacant = !(isASelected && isBSelected);
 
     const p = document.createElement("p");
     p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
@@ -241,7 +242,7 @@
   </script>
 </head>
 <body>
-  <h1>あ待合室</h1>
+  <h1>い待合室</h1>
   <label>ユーザー名: <input type="text" id="nameInput" autocomplete="off" /></label>
 
   <h2>空き状況</h2>
