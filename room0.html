@@ -180,13 +180,15 @@
       async function updateRoomStatus() {
   roomStatusDiv.innerHTML = "";
   for (let i = 8; i <= 10; i++) {
-    const roomUsersSnapshot = await get(ref(db, `room${i}/roomUsers`));
+    const roomUsersRef = ref(db, `room${i}/roomUsers`);
+    const roomUsersSnapshot = await get(roomUsersRef);
     const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
 
-    // 空き判定を簡単に
-    const isASelected = Boolean(roomUsers.A);
-    const isBSelected = Boolean(roomUsers.B);
-    const vacant = !(isASelected && isBSelected);
+    console.log(`room${i}/roomUsers:`, roomUsers);  // ここで中身を確認
+
+    const isASelected = typeof roomUsers.A === "string" && roomUsers.A !== "";
+    const isBSelected = typeof roomUsers.B === "string" && roomUsers.B !== "";
+    const vacant = !isASelected || !isBSelected;
 
     const p = document.createElement("p");
     p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
@@ -199,6 +201,7 @@
     roomStatusDiv.appendChild(p);
   }
 }
+
 
       // 入室処理
       async function joinRoom(num, slot) {
@@ -242,7 +245,7 @@
   </script>
 </head>
 <body>
-  <h1>い待合室</h1>
+  <h1>う待合室</h1>
   <label>ユーザー名: <input type="text" id="nameInput" autocomplete="off" /></label>
 
   <h2>空き状況</h2>
