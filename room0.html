@@ -179,12 +179,12 @@
       // 空き状況更新
       async function updateRoomStatus() {
   roomStatusDiv.innerHTML = "";
-  for (let i = 8; i <= 10; i++) {  // room1〜3を対象
+  for (let i = 8; i <= 10; i++) {
     const roomUsersSnapshot = await get(ref(db, `room${i}/roomUsers`));
     const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
 
-    const isASelected = roomUsers.A === true;
-    const isBSelected = roomUsers.B === true;
+    const isASelected = typeof roomUsers.A === "string" && roomUsers.A !== "";
+    const isBSelected = typeof roomUsers.B === "string" && roomUsers.B !== "";
     const vacant = !isASelected || !isBSelected;
 
     const p = document.createElement("p");
