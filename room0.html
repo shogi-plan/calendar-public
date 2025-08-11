@@ -176,28 +176,38 @@
         updateRoomStatus();
       });
 
-      // 空き状況更新
+      // 空き状況更新関数
       async function updateRoomStatus() {
-  roomStatusDiv.innerHTML = "";
-  for (let i = 8; i <= 10; i++) {
-    const roomUsersSnapshot = await get(ref(db, `room${i}/roomUsers`));
-    const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
+        roomStatusDiv.innerHTML = "";
+        for (let i = 8; i <= 10; i++) {
+          const roomUsersSnapshot = await get(ref(db, `room${i}/roomUsers`));
+          const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
 
-    const isASelected = typeof roomUsers.A === "string" && roomUsers.A !== "";
-    const isBSelected = typeof roomUsers.B === "string" && roomUsers.B !== "";
-    const vacant = !isASelected || !isBSelected;
+          const isASelected = typeof roomUsers.A === "string" && roomUsers.A !== "";
+          const isBSelected = typeof roomUsers.B === "string" && roomUsers.B !== "";
+          const vacant = !isASelected || !isBSelected;
 
-    const p = document.createElement("p");
-    p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
-    if (vacant && myUserName) {
-      const btn = document.createElement("button");
-      btn.textContent = "入室";
-      btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
-      p.appendChild(btn);
-    }
-    roomStatusDiv.appendChild(p);
-  }
-}
+          const p = document.createElement("p");
+          p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
+          if (vacant && myUserName) {
+            const btn = document.createElement("button");
+            btn.textContent = "入室";
+            btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
+            p.appendChild(btn);
+          }
+          roomStatusDiv.appendChild(p);
+        }
+      }
+
+      // リアルタイム監視セットアップ
+      function setupRealtimeRoomStatusListener() {
+        for (let i = 8; i <= 10; i++) {
+          const roomUsersRef = ref(db, `room${i}/roomUsers`);
+          onValue(roomUsersRef, () => {
+            updateRoomStatus();
+          });
+        }
+      }
 
       // 入室処理
       async function joinRoom(num, slot) {
@@ -214,7 +224,7 @@
         chatInput.value = "";
       });
 
-      // チャット表示
+      // チャット表示（リアルタイム監視）
       onValue(ref(db, `${roomName}/chat`), (snapshot) => {
         chatMessages.innerHTML = "";
         snapshot.forEach((child) => {
@@ -236,12 +246,14 @@
         updateRoomStatus();
       });
 
+      // 初期化
+      setupRealtimeRoomStatusListener();
       updateRoomStatus();
     });
   </script>
 </head>
 <body>
-  <h1>待合室</h1>
+  <h1>あ待合室</h1>
   <label>ユーザー名: <input type="text" id="nameInput" autocomplete="off" /></label>
 
   <h2>空き状況</h2>
