@@ -131,7 +131,7 @@
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getDatabase, ref, get, set, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+    import { getDatabase, ref, get, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
@@ -148,6 +148,8 @@
 
     const roomName = location.pathname.split('/').pop().replace('.html', '');
     let myUserName = "";
+
+    let latestRoomStatusCallId = 0;
 
     document.addEventListener("DOMContentLoaded", () => {
       const nameInput = document.getElementById("nameInput");
@@ -168,11 +170,28 @@
       });
 
       async function updateRoomStatus() {
-        roomStatusDiv.innerHTML = "";
+        const callId = ++latestRoomStatusCallId;
+        const frag = document.createDocumentFragment();
+
+        if (!myUserName) {
+          const p = document.createElement("p");
+          p.textContent = "ユーザー名を入力すると空き状況が表示されます";
+          frag.appendChild(p);
+          if (callId === latestRoomStatusCallId) {
+            roomStatusDiv.innerHTML = "";
+            roomStatusDiv.appendChild(frag);
+          }
+          return;
+        }
+
         for (let i = 7; i <= 10; i++) {
-          // 空き状況は roomUsers を参照
+          if (callId !== latestRoomStatusCallId) return;
+
           const roomUsersRef = ref(db, `room${i}/roomUsers`);
           const roomUsersSnapshot = await get(roomUsersRef);
+
+          if (callId !== latestRoomStatusCallId) return;
+
           const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
 
           const isASelected = roomUsers.A === true;
@@ -181,21 +200,24 @@
 
           const p = document.createElement("p");
           p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
-          if (vacant && myUserName) {
+          if (vacant) {
             const btn = document.createElement("button");
             btn.textContent = "入室";
             btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
             p.appendChild(btn);
           }
-          roomStatusDiv.appendChild(p);
+          frag.appendChild(p);
+        }
+
+        if (callId === latestRoomStatusCallId) {
+          roomStatusDiv.innerHTML = "";
+          roomStatusDiv.appendChild(frag);
         }
       }
 
       async function joinRoom(num, slot) {
         if (!myUserName) return alert("先にユーザー名を入力してください");
-        // roomUsers → 占有状態だけ保存
         await update(ref(db, `room${num}/roomUsers`), { [slot]: true });
-        // userNames → 実際のユーザー名を保存
         await update(ref(db, `room${num}/userNames`), { [slot]: myUserName });
         window.location.href = `room${num}.html`;
       }
@@ -217,10 +239,32 @@
         });
       });
 
+      // 修正：自分の名前と自分のチャットだけ削除する処理
       document.getElementById("clearBtn").addEventListener("click", async () => {
         if (!myUserName) return;
+
+        // ローカル保存のユーザー名を削除
         localStorage.removeItem(`${roomName}UserName`);
-        await remove(ref(db, `${roomName}/chat`));
+
+        // 自分が送信したチャットのみ削除
+        const chatRef = ref(db, `${roomName}/chat`);
+        const chatSnapshot = await get(chatRef);
+        chatSnapshot.forEach((child) => {
+          const msg = child.val();
+          if (msg.name === myUserName) {
+            remove(ref(db, `${roomName}/chat/${child.key}`));
+          }
+        });
+
+        // 自分のユーザー名をroomから削除
+        const userNamesRef = ref(db, `${roomName}/userNames`);
+        const userNamesSnapshot = await get(userNamesRef);
+        userNamesSnapshot.forEach((child) => {
+          if (child.val() === myUserName) {
+            remove(ref(db, `${roomName}/userNames/${child.key}`));
+          }
+        });
+
         myUserName = "";
         nameInput.value = "";
         chatMessages.innerHTML = "";
