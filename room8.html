@@ -158,7 +158,8 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
-  const callStatusRef = ref(db, 'callStatus');
+  const roomName = location.pathname.split('/').pop().replace('.html', '');
+  const callStatusRef = ref(db, `${roomName}/callStatus`);
   const userANameInput = document.getElementById('userAName');
   const userBNameInput = document.getElementById('userBName');
   const userSelect = document.getElementById('userSelect');
@@ -198,9 +199,9 @@ let callTimeoutId = null;
 let localCallStartPressed = false;
 
 const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-const signalingRef = ref(db, 'signaling');
+const signalingRef = ref(db, `${roomName}/signaling`);
 
-let currentUser = localStorage.getItem('currentUser') || '';
+let currentUser = localStorage.getItem(`${roomName}_currentUser`) || '';
 let selectedCells = new Set();
 let currentWeekOffset = 0;
 let holidays = {};
@@ -311,7 +312,7 @@ let callStatus = 'none';
   async function updateScheduleTable() {
     const monday = getMonday(new Date());
     monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const schedulesRef = ref(db, 'schedules');
+    const schedulesRef = ref(db, `${roomName}/schedules`);
     const snapshot = await get(schedulesRef);
     const schedules = snapshot.exists() ? snapshot.val() : {};
 
@@ -362,22 +363,22 @@ let callStatus = 'none';
 
   async function clearAllData() {
   if (!confirm('本当に全てのデータを削除しますか？')) return;
-  await remove(ref(db, 'userNames'));
+  await remove(ref(db, `${roomName}/userNames`));
   userANameInput.value = 'ユーザーA';
   userBNameInput.value = 'ユーザーB';
-  await remove(ref(db, 'schedules'));
-  await remove(ref(db, 'chatLog'));
-  await remove(ref(db, 'roomUsers'));
-  await remove(ref(db, 'callStatus'));
-await set(ref(db, 'callStatus'), {
+  await remove(ref(db, `${roomName}/schedules`));
+  await remove(ref(db, `${roomName}/chatLog`));
+  await remove(ref(db, `${roomName}/roomUsers`));
+  await remove(ref(db, `${roomName}/callStatus`));
+  await set(ref(db, `${roomName}/callStatus`), {
   status: 'none',
   users: { A: false, B: false },
   statusMessage: '',
   timestamp: null
 });
-  await remove(ref(db, 'signaling'));
+  await remove(ref(db, `${roomName}/signaling`));
   selectedCells.clear();
-  localStorage.removeItem('currentUser');  
+  localStorage.removeItem(`${roomName}_currentUser`);
 sessionStorage.setItem('wasCleared', '1');
 
 lockedUserA = false;
@@ -538,7 +539,7 @@ function createPeerConnection() {
     console.log('ICE connection state:', state);
 
     if (state === 'failed' || state === 'closed') {
-      update(ref(db, 'callStatus'), {
+      update(ref(db, `${roomName}/callStatus`), {
         status: 'ended',
         users: { A: false, B: false },
         statusMessage: 'ICE: ' + state
@@ -549,7 +550,7 @@ function createPeerConnection() {
     } else if (state === 'disconnected') {
       setTimeout(() => {
         if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
-          update(ref(db, 'callStatus'), {
+          update(ref(db, `${roomName}/callStatus`), {
             status: 'ended',
             users: { A: false, B: false },
             statusMessage: 'ICE: disconnected timeout'
@@ -564,7 +565,7 @@ function createPeerConnection() {
 
   peerConnection.onicecandidate = event => {
     if (event.candidate) {
-      const candRef = ref(db, `signaling/candidates/${currentUser}`);
+      const candRef = ref(db, `${roomName}/signaling/candidates/${currentUser}`);
       const newCandRef = push(candRef);
       set(newCandRef, { candidate: event.candidate.toJSON() });
     }
@@ -576,10 +577,10 @@ async function endCallCleanup() {
 
   try {
     await Promise.all([
-      remove(ref(db, 'signaling/candidates/A')),
-      remove(ref(db, 'signaling/candidates/B')),
-      remove(ref(db, 'signaling/offer')),
-      remove(ref(db, 'signaling/answer')),
+      remove(ref(db, `${roomName}/signaling/candidates/A`)),
+      remove(ref(db, `${roomName}/signaling/candidates/B`)),
+      remove(ref(db, `${roomName}/signaling/offer`)),
+      remove(ref(db, `${roomName}/signaling/answer`)),
     ]);
     console.log('シグナリングの候補とoffer/answerを削除しました');
   } catch (e) {
@@ -652,7 +653,7 @@ async function sendOffer() {
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
 
-  await set(ref(db, 'signaling/offer'), { sdp: offer.sdp, type: offer.type, from: currentUser });
+  await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: currentUser });
 }
 
 function startCallTimeout() {
@@ -677,12 +678,12 @@ function startCallTimeout() {
       localStream = null;
     }
 
-    await remove(ref(db, 'signaling'));
+    await remove(ref(db, `${roomName}/signaling`));
   }, 30000);
 }
 
 async function sendAnswer() {
-  const offerSnapshot = await get(ref(db, 'signaling/offer'));
+  const offerSnapshot = await get(ref(db, `${roomName}/signaling/offer`));
   if (!offerSnapshot.exists()) return;
   const offer = offerSnapshot.val();
 
@@ -704,11 +705,11 @@ async function sendAnswer() {
   const answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
 
-  await set(ref(db, 'signaling/answer'), { sdp: answer.sdp, type: answer.type, from: currentUser });
+  await set(ref(db, `${roomName}/signaling/answer`), { sdp: answer.sdp, type: answer.type, from: currentUser });
 }
 
 function listenSignaling() {
-  onValue(ref(db, 'signaling/offer'), snapshot => {
+  onValue(ref(db, `${roomName}/signaling/offer`), snapshot => {
     const offer = snapshot.val();
     if (!offer || offer.from === currentUser) return;
     handleOffer(offer);
@@ -720,7 +721,7 @@ function listenSignaling() {
     await sendAnswer();
   }
 
-  onValue(ref(db, 'signaling/answer'), async snapshot => {
+  onValue(ref(db, `${roomName}/signaling/answer`), async snapshot => {
     const answer = snapshot.val();
     if (!answer || answer.from === currentUser) return;
     if (peerConnection) {
@@ -728,7 +729,7 @@ function listenSignaling() {
     }
   });
 
-  onValue(ref(db, 'signaling/candidates/A'), snapshot => {
+  onValue(ref(db, `${roomName}/signaling/candidates/A`), snapshot => {
     if (currentUser === 'B') {
       const candidates = snapshot.val();
       if (!candidates) return;
@@ -740,7 +741,7 @@ function listenSignaling() {
     }
   });
 
-  onValue(ref(db, 'signaling/candidates/B'), snapshot => {
+  onValue(ref(db, `${roomName}/signaling/candidates/B`), snapshot => {
     if (currentUser === 'A') {
       const candidates = snapshot.val();
       if (!candidates) return;
@@ -752,9 +753,8 @@ function listenSignaling() {
     }
   });
 
-  onValue(ref(db, 'roomUsers'), snapshot => {
+  onValue(ref(db, `${roomName}/roomUsers`), snapshot => {
   const roomUsers = snapshot.val() || {};
-
   userSelect.innerHTML = '';
 
   const options = [{ value: '', text: '選択して下さい' }];
@@ -781,13 +781,13 @@ function listenSignaling() {
 }
 
 async function getUserType(uid) {
-  const snapshot = await get(ref(db, `users/${uid}/type`));
+  const snapshot = await get(ref(db, `${roomName}/users/${uid}/type`));
   return snapshot.exists() ? snapshot.val() : null;
 }
 
 async function updateCallStatus(status) {
   try {
-    const snap = await get(ref(db, 'callStatus'));
+    const snap = await get(ref(db, `${roomName}/callStatus`));
     const prev = snap.exists() ? snap.val() : {};
     const users = prev && prev.users ? prev.users : { A: false, B: false };
 
@@ -795,7 +795,7 @@ async function updateCallStatus(status) {
       ? '相手が通話開始ボタンを押すのを待っています'
       : (status === 'started' ? '通話が開始されました' : (status === 'ended' ? '通話が終了しました' : ''));
 
-    await set(ref(db, 'callStatus'), {
+    await set(ref(db, `${roomName}/callStatus`), {
       status,
       users,
       statusMessage,
@@ -803,7 +803,7 @@ async function updateCallStatus(status) {
     });
   } catch (e) {
     console.error('updateCallStatus error:', e);
-    await set(ref(db, 'callStatus'), {
+    await set(ref(db, `${roomName}/callStatus`), {
       status,
       users: { A: false, B: false },
       statusMessage: '',
@@ -871,7 +871,7 @@ if (remoteStream) {
   if (!text) return;
 
   const userName = currentUser;
-  const newMsgRef = ref(db, 'chatLog');
+  const newMsgRef = ref(db, `${roomName}/chatLog`);
   const snapshot = await get(newMsgRef);
   const chatData = snapshot.exists() ? snapshot.val() : [];
   chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
@@ -911,7 +911,7 @@ async function initializeUsers() {
   }
 
   if (currentUser) {
-  const roomUsersRef = ref(db, 'roomUsers');
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snapshot = await get(roomUsersRef);
   const roomUsers = snapshot.exists() ? snapshot.val() : {};
 
@@ -932,7 +932,7 @@ async function initializeUsers() {
   return;
 }
 
-  const roomUsersRef = ref(db, 'roomUsers');
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snapshot = await get(roomUsersRef);
   const roomUsers = snapshot.exists() ? snapshot.val() : {};
 
@@ -977,15 +977,15 @@ userSelect.addEventListener('change', async e => {
     sessionStorage.removeItem('wasCleared');
   }
 
-  const roomUsersSnapshot = await get(ref(db, 'roomUsers'));
+  const roomUsersSnapshot = await get(ref(db, `${roomName}/roomUsers`));
   const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
 
   if (val === 'A') {
     if (!roomUsers.A) {
       currentUser = 'A';
-      await update(ref(db, 'roomUsers'), { A: true });
+      await update(ref(db, `${roomName}/roomUsers`), { A: true });
       userSelect.disabled = true;
-      localStorage.setItem('currentUser', 'A');
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
     } else {
       alert('ユーザーAは既に確定しています');
       e.target.value = '';
@@ -993,9 +993,9 @@ userSelect.addEventListener('change', async e => {
   } else if (val === 'B') {
     if (!roomUsers.B) {
       currentUser = 'B';
-      await update(ref(db, 'roomUsers'), { B: true });
+      await update(ref(db, `${roomName}/roomUsers`), { B: true });
       userSelect.disabled = true;
-      localStorage.setItem('currentUser', 'B');
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
     } else {
       alert('ユーザーBは既に確定しています');
       e.target.value = '';
@@ -1007,16 +1007,16 @@ initializeUsers();
 listenSignaling();
 
   userANameInput.addEventListener('input', () => {
-  set(ref(db, 'userNames/A'), userANameInput.value);
+  set(ref(db, `${roomName}/userNames/A`), userANameInput.value);
   renderCalendar();
 });
 
 userBNameInput.addEventListener('input', () => {
-  set(ref(db, 'userNames/B'), userBNameInput.value);
+  set(ref(db, `${roomName}/userNames/B`), userBNameInput.value);
   renderCalendar();
 });
 
-const userNamesRef = ref(db, 'userNames');
+const userNamesRef = ref(db, `${roomName}/userNames`);
 
 onValue(userNamesRef, (snapshot) => {
   const data = snapshot.val() || {};
@@ -1116,7 +1116,7 @@ if (localAudio) {
   });
 }
 
-    await remove(ref(db, 'signaling'));
+    await remove(ref(db, `${roomName}/signaling`));
 
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
@@ -1178,7 +1178,7 @@ btnCallEnd.addEventListener('click', async () => {
       callData.users[currentUser] = false;
     }
 
-await update(ref(db, 'callStatus'), {
+await update(ref(db, `${roomName}/callStatus`), {
   status: 'ended',
   users: { A: false, B: false },
   statusMessage: '通話が切断されました'
@@ -1245,12 +1245,14 @@ await update(ref(db, 'callStatus'), {
 }
 
     try {
-      await remove(ref(db, 'signaling'));
+      await remove(ref(db, `${roomName}/signaling`));
     } catch (e) {
       console.error('signaling remove error:', e);
     }
 
     callStatusDisplay.textContent = '通話は終了しました';
+    
+    window.location.reload();
 
   } catch (e) {
     console.error('通話終了処理でエラー:', e);
@@ -1258,9 +1260,15 @@ await update(ref(db, 'callStatus'), {
   }
 });
 
+let hasReloaded = false;
 onValue(callStatusRef, (snapshot) => {
   const callData = snapshot.val();
   if (!callData) return;
+  if (callData.status === 'ended' && localCallStartPressed && !hasReloaded) {
+    hasReloaded = true;
+    window.location.reload();
+    return;
+    }
 
   const iPressed = !!callData.users?.[currentUser];
   const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A'];
@@ -1347,8 +1355,8 @@ onValue(callStatusRef, (snapshot) => {
   }
 });
 
-onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
-onValue(ref(db, 'chatLog'), snapshot => {
+onValue(ref(db, `${roomName}/schedules`), snapshot => updateScheduleTable());
+onValue(ref(db, `${roomName}/chatLog`), snapshot => {
   const chatData = snapshot.exists() ? snapshot.val() : [];
   renderChat(chatData);
 });
