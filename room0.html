@@ -179,7 +179,7 @@
       // 空き状況更新
       async function updateRoomStatus() {
   roomStatusDiv.innerHTML = "";
-  for (let i = 8; i <= 10; i++) {
+  for (let i = 7; i <= 10; i++) {
     const roomUsersRef = ref(db, `room${i}/roomUsers`);
     const roomUsersSnapshot = await get(roomUsersRef);
     const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
