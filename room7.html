@@ -312,7 +312,7 @@ let callStatus = 'none';
   async function updateScheduleTable() {
     const monday = getMonday(new Date());
     monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const schedulesRef = ref(db, 'schedules');
+    const schedulesRef = ref(db, `${roomName}/schedules`);
     const snapshot = await get(schedulesRef);
     const schedules = snapshot.exists() ? snapshot.val() : {};
 
