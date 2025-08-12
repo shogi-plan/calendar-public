@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>待合室</title>
   <style>
-    /* ベーススタイル */
     body {
       font-family: "Yu Gothic", "Meiryo", sans-serif;
       margin: 10px;
@@ -65,7 +64,6 @@
     #roomStatus button:hover {
       background-color: #45a049;
     }
-
     #chatMessages {
       max-width: 400px;
       height: 200px;
@@ -111,8 +109,6 @@
     #clearBtn:hover {
       background-color: #d32f2f;
     }
-
-    /* スマホ縦表示 */
     @media (max-width: 480px) {
       #chatInput, #sendBtn, #clearBtn {
         width: 100%;
@@ -137,7 +133,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getDatabase, ref, get, set, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-    // Firebase 設定（ここにあなたの設定を入れてください）
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
@@ -151,9 +146,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // ファイル名からroom名取得
     const roomName = location.pathname.split('/').pop().replace('.html', '');
-
     let myUserName = "";
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -162,55 +155,51 @@
       const chatMessages = document.getElementById("chatMessages");
       const chatInput = document.getElementById("chatInput");
 
-      // 保存済みユーザー名復元
       const savedName = localStorage.getItem(`${roomName}UserName`);
       if (savedName) {
         nameInput.value = savedName;
         myUserName = savedName;
       }
 
-      // ユーザー名入力イベント
       nameInput.addEventListener("input", () => {
         myUserName = nameInput.value.trim();
         localStorage.setItem(`${roomName}UserName`, myUserName);
         updateRoomStatus();
       });
 
-      // 空き状況更新
       async function updateRoomStatus() {
-  roomStatusDiv.innerHTML = "";
-  for (let i = 7; i <= 10; i++) {
-    const roomUsersRef = ref(db, `room${i}/roomUsers`);
-    const roomUsersSnapshot = await get(roomUsersRef);
-    const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
+        roomStatusDiv.innerHTML = "";
+        for (let i = 7; i <= 10; i++) {
+          // 空き状況は roomUsers を参照
+          const roomUsersRef = ref(db, `room${i}/roomUsers`);
+          const roomUsersSnapshot = await get(roomUsersRef);
+          const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
 
-    console.log(`room${i}/roomUsers:`, roomUsers);  // ここで中身を確認
+          const isASelected = roomUsers.A === true;
+          const isBSelected = roomUsers.B === true;
+          const vacant = !isASelected || !isBSelected;
 
-    const isASelected = typeof roomUsers.A === "string" && roomUsers.A !== "";
-    const isBSelected = typeof roomUsers.B === "string" && roomUsers.B !== "";
-    const vacant = !isASelected || !isBSelected;
+          const p = document.createElement("p");
+          p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
+          if (vacant && myUserName) {
+            const btn = document.createElement("button");
+            btn.textContent = "入室";
+            btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
+            p.appendChild(btn);
+          }
+          roomStatusDiv.appendChild(p);
+        }
+      }
 
-    const p = document.createElement("p");
-    p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
-    if (vacant && myUserName) {
-      const btn = document.createElement("button");
-      btn.textContent = "入室";
-      btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
-      p.appendChild(btn);
-    }
-    roomStatusDiv.appendChild(p);
-  }
-}
-
-
-      // 入室処理
       async function joinRoom(num, slot) {
         if (!myUserName) return alert("先にユーザー名を入力してください");
-        await update(ref(db, `room${num}/roomUsers`), { [slot]: myUserName });
+        // roomUsers → 占有状態だけ保存
+        await update(ref(db, `room${num}/roomUsers`), { [slot]: true });
+        // userNames → 実際のユーザー名を保存
+        await update(ref(db, `room${num}/userNames`), { [slot]: myUserName });
         window.location.href = `room${num}.html`;
       }
 
-      // チャット送信
       document.getElementById("sendBtn").addEventListener("click", async () => {
         if (!myUserName || !chatInput.value.trim()) return;
         const msgRef = push(ref(db, `${roomName}/chat`));
@@ -218,7 +207,6 @@
         chatInput.value = "";
       });
 
-      // チャット表示
       onValue(ref(db, `${roomName}/chat`), (snapshot) => {
         chatMessages.innerHTML = "";
         snapshot.forEach((child) => {
@@ -229,7 +217,6 @@
         });
       });
 
-      // 入力情報削除
       document.getElementById("clearBtn").addEventListener("click", async () => {
         if (!myUserName) return;
         localStorage.removeItem(`${roomName}UserName`);
@@ -245,14 +232,14 @@
   </script>
 </head>
 <body>
-  <h1>う待合室</h1>
+  <h1>待合室</h1>
   <label>ユーザー名: <input type="text" id="nameInput" autocomplete="off" /></label>
 
   <h2>空き状況</h2>
   <div id="roomStatus"></div>
 
   <h2>チャット</h2>
-  <div id="chatMessages" aria-live="polite" style="border:1px solid #ccc; height:200px; overflow:auto; margin-bottom:5px;"></div>
+  <div id="chatMessages" aria-live="polite"></div>
   <input type="text" id="chatInput" placeholder="メッセージ" autocomplete="off" />
   <button id="sendBtn">送信</button>
   <button id="clearBtn">入力情報削除</button>
