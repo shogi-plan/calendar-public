@@ -916,19 +916,19 @@ async function initializeUsers() {
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snapshot = await get(roomUsersRef);
   const roomUsers = snapshot.exists() ? snapshot.val() : {};
-  // ここでlocalStorageからcurrentUserを取得して反映させる
-  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+
+  let savedUser = localStorage.getItem(`${roomName}_currentUser`);
   if (savedUser) {
     currentUser = savedUser;
+  } else {
+    if (roomUsers.A) currentUser = 'A';
+    else if (roomUsers.B) currentUser = 'B';
+    else currentUser = '';
   }
 
-  // currentUserがあればFirebaseにも登録されているか確認し、なければ登録
+  // 選択肢生成
+  userSelect.innerHTML = '';
   if (currentUser) {
-    if (!roomUsers[currentUser]) {
-      await update(roomUsersRef, { [currentUser]: true });
-    }
-    // 選択肢をcurrentUserのみで作成し、選択状態にする
-    userSelect.innerHTML = '';
     const option = document.createElement('option');
     option.value = currentUser;
     option.textContent = currentUser;
@@ -936,43 +936,32 @@ async function initializeUsers() {
     userSelect.appendChild(option);
     userSelect.disabled = true;
 
-    if (currentUser === 'A') lockedUserA = true;
-    else if (currentUser === 'B') lockedUserB = true;
+    if (!roomUsers[currentUser]) {
+      await update(roomUsersRef, { [currentUser]: true });
+    }
+  } else {
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = '選択して下さい';
+    userSelect.appendChild(defaultOption);
 
-    renderCalendar();
-    return;
-  }
-
-  if (sessionStorage.getItem('wasCleared') === '1') {
-    currentUser = '';
-    lockedUserA = false;
-    lockedUserB = false;
-    userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
+    if (!roomUsers.A) {
+      const optionA = document.createElement('option');
+      optionA.value = 'A';
+      optionA.textContent = 'A';
+      userSelect.appendChild(optionA);
+    }
+    if (!roomUsers.B) {
+      const optionB = document.createElement('option');
+      optionB.value = 'B';
+      optionB.textContent = 'B';
+      userSelect.appendChild(optionB);
+    }
     userSelect.disabled = false;
-    return;
   }
 
-  if (currentUser) {
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snapshot = await get(roomUsersRef);
-  const roomUsers = snapshot.exists() ? snapshot.val() : {};
-
-  if (!roomUsers[currentUser]) {
-    await update(roomUsersRef, { [currentUser]: true });
-  }
-
-  if (currentUser === 'A') {
-    lockedUserA = true;
-    userSelect.innerHTML = '<option value="A" selected>A</option>';
-    userSelect.disabled = true;
-  } else if (currentUser === 'B') {
-    lockedUserB = true;
-    userSelect.innerHTML = '<option value="B" selected>B</option>';
-    userSelect.disabled = true;
-  }
   renderCalendar();
-  return;
-}
+  // ここで return は不要
 
   if (!roomUsers.A) {
     currentUser = 'A';
