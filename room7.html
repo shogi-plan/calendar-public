@@ -141,7 +141,10 @@
   <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
 </div>
 </div>
-
+<audio id="remote-audio" autoplay></audio><br />
+<label for="volume-control">相手の音量：</label>
+<input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
+<audio id="localAudio" autoplay muted style="display:none;"></audio>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
   import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
@@ -166,7 +169,6 @@
   const calendar = document.getElementById('calendar');
   const chatLog = document.getElementById('chatLog');
   const chatInput = document.getElementById('chatInput');
-
   const btnMarkOk = document.getElementById('btn-mark-ok');
   const btnMarkNo = document.getElementById('btn-mark-no');
   const btnClearCell = document.getElementById('btn-clear-cell');
@@ -178,6 +180,14 @@
   const btnCallStart = document.getElementById('btn-call-start');
   const btnCallEnd = document.getElementById('btn-call-end');
   const btnMute = document.getElementById('btn-mute');
+  const volumeControl = document.getElementById('volume-control');
+  
+  volumeControl.addEventListener('input', () => {
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) {
+    remoteAudio.volume = parseFloat(volumeControl.value);
+  }
+});
 
   let isMuted = false;
   let remoteStream = null;
@@ -342,24 +352,26 @@ let callStatus = 'none';
   }
 
   async function applyToSelectedCells(value) {
-    if (selectedCells.size === 0) return;
-    const updates = {};
-    selectedCells.forEach(key => {
-      updates[`schedules/${key}/${currentUser}`] = value;
-    });
-    await update(ref(db), updates);
-    selectedCells.clear();
-  }
+  if (selectedCells.size === 0 || !currentUser) return;
+  const updatesObj = {};
+  selectedCells.forEach(key => {
+    updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = value;
+  });
+  await update(ref(db), updatesObj);
+  selectedCells.clear();
+  updateScheduleTable();
+}
 
-  async function clearSelectedCells() {
-    if (selectedCells.size === 0) return;
-    const updates = {};
-    selectedCells.forEach(key => {
-      updates[`schedules/${key}/${currentUser}`] = null;
-    });
-    await update(ref(db), updates);
-    selectedCells.clear();
-  }
+async function clearSelectedCells() {
+  if (selectedCells.size === 0 || !currentUser) return;
+  const updatesObj = {};
+  selectedCells.forEach(key => {
+    updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = null;
+  });
+  await update(ref(db), updatesObj);
+  selectedCells.clear();
+  updateScheduleTable();
+}
 
   async function clearAllData() {
   if (!confirm('本当に全てのデータを削除しますか？')) return;
@@ -901,6 +913,36 @@ if (remoteStream) {
   }
 
 async function initializeUsers() {
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  const snapshot = await get(roomUsersRef);
+  const roomUsers = snapshot.exists() ? snapshot.val() : {};
+  // ここでlocalStorageからcurrentUserを取得して反映させる
+  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+  if (savedUser) {
+    currentUser = savedUser;
+  }
+
+  // currentUserがあればFirebaseにも登録されているか確認し、なければ登録
+  if (currentUser) {
+    if (!roomUsers[currentUser]) {
+      await update(roomUsersRef, { [currentUser]: true });
+    }
+    // 選択肢をcurrentUserのみで作成し、選択状態にする
+    userSelect.innerHTML = '';
+    const option = document.createElement('option');
+    option.value = currentUser;
+    option.textContent = currentUser;
+    option.selected = true;
+    userSelect.appendChild(option);
+    userSelect.disabled = true;
+
+    if (currentUser === 'A') lockedUserA = true;
+    else if (currentUser === 'B') lockedUserB = true;
+
+    renderCalendar();
+    return;
+  }
+
   if (sessionStorage.getItem('wasCleared') === '1') {
     currentUser = '';
     lockedUserA = false;
@@ -931,10 +973,6 @@ async function initializeUsers() {
   renderCalendar();
   return;
 }
-
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snapshot = await get(roomUsersRef);
-  const roomUsers = snapshot.exists() ? snapshot.val() : {};
 
   if (!roomUsers.A) {
     currentUser = 'A';
@@ -1442,11 +1480,11 @@ function resetMuteState() {
   }
 })();
 
-</script>
-<audio id="remote-audio" autoplay></audio><br />
-<label for="volume-control">相手の音量：</label>
-<input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
-<audio id="localAudio" autoplay muted style="display:none;"></audio>
+volumeControl.addEventListener('input', () => {
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) remoteAudio.volume = parseFloat(volumeControl.value);
+});
 
+</script>
 </body>
 </html>
