@@ -376,8 +376,6 @@ async function clearSelectedCells() {
   async function clearAllData() {
   if (!confirm('本当に全てのデータを削除しますか？')) return;
   await remove(ref(db, `${roomName}/userNames`));
-  userANameInput.value = 'ユーザーA';
-  userBNameInput.value = 'ユーザーB';
   await remove(ref(db, `${roomName}/schedules`));
   await remove(ref(db, `${roomName}/chatLog`));
   await remove(ref(db, `${roomName}/roomUsers`));
