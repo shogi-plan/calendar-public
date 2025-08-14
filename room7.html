@@ -102,13 +102,11 @@
 </div>
 
 <div class="controls">
-  <label>A：<input type="text" id="userAName" placeholder="名前" value="ユーザーA" /></label>
-  <label>B：<input type="text" id="userBName" placeholder="名前" value="ユーザーB" /></label>
-  <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span><select id="userSelect">
-    <option value="" selected>選択して下さい</option>
-    <option value="A">A</option>
-    <option value="B">B</option>
-  </select></label>
+  <label>ユーザーA：<input type="text" id="userAName" autocomplete="off" /></label>
+  <label>ユーザーB：<input type="text" id="userBName" autocomplete="off" /></label>
+  <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span><select id="userSelect" disabled>
+  <option value="" selected>未選択</option>
+</select></label>
 </div>
 
 <div class="controls">
@@ -376,8 +374,8 @@ async function clearSelectedCells() {
   async function clearAllData() {
   if (!confirm('本当に全てのデータを削除しますか？')) return;
   await remove(ref(db, `${roomName}/userNames`));
-  userANameInput.value = 'ユーザーA';
-  userBNameInput.value = 'ユーザーB';
+  userANameInput.value = '';
+  userBNameInput.value = '';
   await remove(ref(db, `${roomName}/schedules`));
   await remove(ref(db, `${roomName}/chatLog`));
   await remove(ref(db, `${roomName}/roomUsers`));
@@ -398,8 +396,8 @@ lockedUserB = false;
 
   currentUser = '';
   
-  userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
-  userSelect.disabled = false;
+  userSelect.innerHTML = '<option value="" selected>未選択</option>';
+  userSelect.disabled = true;
   
   updateCallStatusUI('none');
   }
@@ -765,30 +763,9 @@ function listenSignaling() {
     }
   });
 
-  onValue(ref(db, `${roomName}/roomUsers`), snapshot => {
-  const roomUsers = snapshot.val() || {};
-  userSelect.innerHTML = '';
-
-  const options = [{ value: '', text: '選択して下さい' }];
-
-  if (!roomUsers.A || currentUser === 'A') {
-    options.push({ value: 'A', text: 'A' });
-  }
-  if (!roomUsers.B || currentUser === 'B') {
-    options.push({ value: 'B', text: 'B' });
-  }
-
-  options.forEach(opt => {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.text;
-    if (opt.value === currentUser) {
-      option.selected = true;
-    }
-    userSelect.appendChild(option);
-  });
-
-  userSelect.value = currentUser || '';
+  onValue(ref(db, `${roomName}/roomUsers`), () => {
+  // セレクトは表示専用。現在の選択状態だけ反映。
+  updateUserSelectDisplay();
 });
 }
 
@@ -822,6 +799,16 @@ async function updateCallStatus(status) {
       timestamp: new Date().toISOString()
     });
   }
+}
+
+function updateUserSelectDisplay() {
+  userSelect.innerHTML = '';
+  const opt = document.createElement('option');
+  opt.value = currentUser || '';
+  opt.textContent = currentUser ? currentUser : '未選択';
+  opt.selected = true;
+  userSelect.appendChild(opt);
+  userSelect.disabled = true; // 常に表示のみ
 }
 
 function resetUI() {
@@ -917,78 +904,15 @@ async function initializeUsers() {
   const snapshot = await get(roomUsersRef);
   const roomUsers = snapshot.exists() ? snapshot.val() : {};
 
-  let savedUser = localStorage.getItem(`${roomName}_currentUser`);
-  if (savedUser) {
-    currentUser = savedUser;
-  } else {
-    if (roomUsers.A) currentUser = 'A';
-    else if (roomUsers.B) currentUser = 'B';
-    else currentUser = '';
+  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+  currentUser = savedUser || '';
+
+  // Saved があれば空いている場合は占有フラグだけ合わせる
+  if (currentUser && !roomUsers[currentUser]) {
+    await update(roomUsersRef, { [currentUser]: true });
   }
 
-  // 選択肢生成
-  userSelect.innerHTML = '';
-  if (currentUser) {
-    const option = document.createElement('option');
-    option.value = currentUser;
-    option.textContent = currentUser;
-    option.selected = true;
-    userSelect.appendChild(option);
-    userSelect.disabled = true;
-
-    if (!roomUsers[currentUser]) {
-      await update(roomUsersRef, { [currentUser]: true });
-    }
-  } else {
-    const defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = '選択して下さい';
-    userSelect.appendChild(defaultOption);
-
-    if (!roomUsers.A) {
-      const optionA = document.createElement('option');
-      optionA.value = 'A';
-      optionA.textContent = 'A';
-      userSelect.appendChild(optionA);
-    }
-    if (!roomUsers.B) {
-      const optionB = document.createElement('option');
-      optionB.value = 'B';
-      optionB.textContent = 'B';
-      userSelect.appendChild(optionB);
-    }
-    userSelect.disabled = false;
-  }
-
-  renderCalendar();
-  // ここで return は不要
-
-  if (!roomUsers.A) {
-    currentUser = 'A';
-    lockedUserA = true;
-    await update(roomUsersRef, { A: true });
-    userSelect.innerHTML = '<option value="A" selected>A</option>';
-    userSelect.disabled = true;
-  } else if (!roomUsers.B) {
-  currentUser = '';
-  lockedUserB = false;
-  if (!lockedUserA) lockedUserA = !!roomUsers.A;
-  userSelect.innerHTML = `<option value="" selected>選択して下さい</option>`;
-
-if (!roomUsers.A) {
-  userSelect.innerHTML += `<option value="A">A</option>`;
-}
-if (!roomUsers.B) {
-  userSelect.innerHTML += `<option value="B">B</option>`;
-}
-
-userSelect.disabled = false;
-currentUser = ''; 
-  } else {
-    currentUser = '';
-    userSelect.innerHTML = '<option value="" selected>満室です</option>';
-    userSelect.disabled = true;
-  }
+  updateUserSelectDisplay();
   renderCalendar();
 }
 
@@ -1033,26 +957,70 @@ userSelect.addEventListener('change', async e => {
 initializeUsers();
 listenSignaling();
 
-  userANameInput.addEventListener('input', () => {
-  set(ref(db, `${roomName}/userNames/A`), userANameInput.value);
+  userANameInput.addEventListener('input', async () => {
+  const val = userANameInput.value.trim();
+  await set(ref(db, `${roomName}/userNames/A`), val);
+  if (!currentUser && val) {
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    const snap = await get(roomUsersRef);
+    const roomUsers = snap.exists() ? snap.val() : {};
+    if (!roomUsers.A) {
+      currentUser = 'A';
+      await update(roomUsersRef, { A: true });
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+      updateUserSelectDisplay();
+    }
+  }
   renderCalendar();
 });
 
-userBNameInput.addEventListener('input', () => {
-  set(ref(db, `${roomName}/userNames/B`), userBNameInput.value);
+userBNameInput.addEventListener('input', async () => {
+  const val = userBNameInput.value.trim();
+  await set(ref(db, `${roomName}/userNames/B`), val);
+  if (!currentUser && val) {
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    const snap = await get(roomUsersRef);
+    const roomUsers = snap.exists() ? snap.val() : {};
+    if (!roomUsers.B) {
+      currentUser = 'B';
+      await update(roomUsersRef, { B: true });
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
+      updateUserSelectDisplay();
+    }
+  }
   renderCalendar();
 });
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
-onValue(userNamesRef, (snapshot) => {
+onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
-  if (data.A !== undefined) {
-    userANameInput.value = data.A;
+  if (data.A !== undefined) userANameInput.value = data.A || '';
+  if (data.B !== undefined) userBNameInput.value = data.B || '';
+
+  if (!currentUser) {
+    const nameA = (data.A || '').trim();
+    const nameB = (data.B || '').trim();
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    const snap = await get(roomUsersRef);
+    const roomUsers = snap.exists() ? snap.val() : {};
+
+    if (nameA && !nameB && !roomUsers.A) {
+      currentUser = 'A';
+      await update(roomUsersRef, { A: true });
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+    } else if (!nameA && nameB && !roomUsers.B) {
+      currentUser = 'B';
+      await update(roomUsersRef, { B: true });
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
+    } else {
+      // 両方ある or どちらもない → savedUser が無ければ未選択のまま
+    }
+    updateUserSelectDisplay();
+  } else {
+    updateUserSelectDisplay();
   }
-  if (data.B !== undefined) {
-    userBNameInput.value = data.B;
-  }
+
   renderCalendar();
 });
 
