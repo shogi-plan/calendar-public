@@ -139,6 +139,7 @@
   <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
 </div>
 </div>
+<div id="debugLocalStorage" style="color:red;"></div>
 <audio id="remote-audio" autoplay></audio><br />
 <label for="volume-control">相手の音量：</label>
 <input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
@@ -1491,7 +1492,9 @@ volumeControl.addEventListener('input', () => {
   const remoteAudio = document.getElementById('remote-audio');
   if (remoteAudio) remoteAudio.volume = parseFloat(volumeControl.value);
 });
-
+const debugDiv = document.getElementById('debugLocalStorage');
+  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+  debugDiv.textContent = `localStorage ${roomName}_currentUser: ${savedUser}`;
 </script>
 </body>
 </html>
