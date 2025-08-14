@@ -939,7 +939,33 @@ if (savedUser) {
   }
 }
 
-// --- イベントハンドラ ---
+// ページ読み込み時にFirebaseのユーザー状態をUIに反映
+document.addEventListener('DOMContentLoaded', async () => {
+  const roomUsersSnapshot = await get(ref(db, `${roomName}/roomUsers`));
+  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
+
+  let savedUser = localStorage.getItem(`${roomName}_currentUser`);
+
+  // 1. localStorage優先、無ければFirebase状態を利用
+  if (savedUser) {
+    currentUser = savedUser;
+  } else if (roomUsers.A && !roomUsers.B) {
+    currentUser = 'A';
+  } else if (!roomUsers.A && roomUsers.B) {
+    currentUser = 'B';
+  } else {
+    currentUser = '';
+  }
+
+  // 2. UI反映
+  if (currentUser) {
+    userSelect.value = currentUser;
+    userSelect.disabled = true; // 選択固定
+    localStorage.setItem(`${roomName}_currentUser`, currentUser);
+  }
+});
+
+// changeイベントはそのまま利用（修正前と同じ）
 userSelect.addEventListener('change', async e => {
   const val = e.target.value;
 
@@ -959,8 +985,7 @@ userSelect.addEventListener('change', async e => {
     if (!roomUsers.A) {
       currentUser = 'A';
       await update(ref(db, `${roomName}/roomUsers`), { A: true });
-      userSelect.value = 'A';       // 表示同期
-      userSelect.disabled = true;   // 完全無効化
+      userSelect.disabled = true;
       localStorage.setItem(`${roomName}_currentUser`, 'A');
     } else {
       alert('ユーザーAは既に確定しています');
@@ -970,8 +995,7 @@ userSelect.addEventListener('change', async e => {
     if (!roomUsers.B) {
       currentUser = 'B';
       await update(ref(db, `${roomName}/roomUsers`), { B: true });
-      userSelect.value = 'B';       // 表示同期
-      userSelect.disabled = true;   // 完全無効化
+      userSelect.disabled = true;
       localStorage.setItem(`${roomName}_currentUser`, 'B');
     } else {
       alert('ユーザーBは既に確定しています');
