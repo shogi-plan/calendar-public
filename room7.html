@@ -139,7 +139,6 @@
   <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
 </div>
 </div>
-<div id="debugLocalStorage" style="color:red;"></div>
 <audio id="remote-audio" autoplay></audio><br />
 <label for="volume-control">相手の音量：</label>
 <input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
@@ -210,7 +209,15 @@ let localCallStartPressed = false;
 const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const signalingRef = ref(db, `${roomName}/signaling`);
 
+// ページロード時の currentUser 設定
 let currentUser = localStorage.getItem(`${roomName}_currentUser`) || '';
+
+// UI の選択状態に反映
+if (currentUser) {
+  userSelect.value = currentUser;   // <select> の選択状態をセット
+  userSelect.disabled = true;       // 完全無効化する場合
+}
+
 let selectedCells = new Set();
 let currentWeekOffset = 0;
 let holidays = {};
@@ -917,37 +924,15 @@ async function initializeUsers() {
   renderCalendar();
 }
 
-// --- 初期化時にユーザー名を復元して反映 ---
-let savedUser = localStorage.getItem(`${roomName}_currentUser`);
-if (savedUser) {
-  currentUser = savedUser;
-  userSelect.value = currentUser; // セレクト表示を同期
-  userSelect.disabled = true;     // 完全無効化
-} else {
-  // Firebaseから確認（例：どちらか確定済みなら同期）
-  const roomUsersSnapshot = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
-  
-  if (roomUsers.A && !roomUsers.B) {
-    currentUser = 'A';
-  } else if (roomUsers.B && !roomUsers.A) {
-    currentUser = 'B';
-  }
-
-  if (currentUser) {
-    userSelect.value = currentUser; // 表示反映
-    userSelect.disabled = true;     // 完全無効化
-  }
-}
-
-// ページ読み込み時にFirebaseのユーザー状態をUIに反映
 document.addEventListener('DOMContentLoaded', async () => {
-  const roomUsersSnapshot = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
-
+  // 1. localStorage から currentUser を取得
   let savedUser = localStorage.getItem(`${roomName}_currentUser`);
 
-  // 1. localStorage優先、無ければFirebase状態を利用
+  // 2. Firebase から roomUsers を取得
+  const roomUsersSnapshot = await get(ref(db, `${roomName}/roomUsers`));
+  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
+
+  // 3. currentUser を決定
   if (savedUser) {
     currentUser = savedUser;
   } else if (roomUsers.A && !roomUsers.B) {
@@ -958,22 +943,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentUser = '';
   }
 
-  // 2. UI反映
+  // 4. UI に反映（currentUser があれば）
   if (currentUser) {
-    userSelect.value = currentUser;
-    userSelect.disabled = true; // 選択固定
-    localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    userSelect.value = currentUser;   // セレクト表示を同期
+    userSelect.disabled = true;       // 完全無効化
+    localStorage.setItem(`${roomName}_currentUser`, currentUser); // 保存
   }
 });
 
-// changeイベントはそのまま利用（修正前と同じ）
+// 完全無効化する場合、change は実質使わないが残す
 userSelect.addEventListener('change', async e => {
   const val = e.target.value;
-
-  if (val === '') {
-    currentUser = '';
-    return;
-  }
+  if (val === '') return;
 
   if (sessionStorage.getItem('wasCleared') === '1') {
     sessionStorage.removeItem('wasCleared');
@@ -1492,9 +1473,7 @@ volumeControl.addEventListener('input', () => {
   const remoteAudio = document.getElementById('remote-audio');
   if (remoteAudio) remoteAudio.volume = parseFloat(volumeControl.value);
 });
-const debugDiv = document.getElementById('debugLocalStorage');
-  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-  debugDiv.textContent = `localStorage ${roomName}_currentUser: ${savedUser}`;
+
 </script>
 </body>
 </html>
