@@ -916,6 +916,30 @@ async function initializeUsers() {
   renderCalendar();
 }
 
+// --- 初期化時にユーザー名を復元して反映 ---
+let savedUser = localStorage.getItem(`${roomName}_currentUser`);
+if (savedUser) {
+  currentUser = savedUser;
+  userSelect.value = currentUser; // セレクト表示を同期
+  userSelect.disabled = true;     // 完全無効化
+} else {
+  // Firebaseから確認（例：どちらか確定済みなら同期）
+  const roomUsersSnapshot = await get(ref(db, `${roomName}/roomUsers`));
+  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
+  
+  if (roomUsers.A && !roomUsers.B) {
+    currentUser = 'A';
+  } else if (roomUsers.B && !roomUsers.A) {
+    currentUser = 'B';
+  }
+
+  if (currentUser) {
+    userSelect.value = currentUser; // 表示反映
+    userSelect.disabled = true;     // 完全無効化
+  }
+}
+
+// --- イベントハンドラ ---
 userSelect.addEventListener('change', async e => {
   const val = e.target.value;
 
@@ -935,7 +959,8 @@ userSelect.addEventListener('change', async e => {
     if (!roomUsers.A) {
       currentUser = 'A';
       await update(ref(db, `${roomName}/roomUsers`), { A: true });
-      userSelect.disabled = true;
+      userSelect.value = 'A';       // 表示同期
+      userSelect.disabled = true;   // 完全無効化
       localStorage.setItem(`${roomName}_currentUser`, 'A');
     } else {
       alert('ユーザーAは既に確定しています');
@@ -945,7 +970,8 @@ userSelect.addEventListener('change', async e => {
     if (!roomUsers.B) {
       currentUser = 'B';
       await update(ref(db, `${roomName}/roomUsers`), { B: true });
-      userSelect.disabled = true;
+      userSelect.value = 'B';       // 表示同期
+      userSelect.disabled = true;   // 完全無効化
       localStorage.setItem(`${roomName}_currentUser`, 'B');
     } else {
       alert('ユーザーBは既に確定しています');
