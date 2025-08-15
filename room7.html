@@ -1045,6 +1045,7 @@ onValue(userNamesRef, async (snapshot) => {
   if (data.A !== undefined) userANameInput.value = data.A || '';
   if (data.B !== undefined) userBNameInput.value = data.B || '';
 
+  // currentUser が未選択の場合は自動決定
   if (!currentUser) {
     const nameA = (data.A || '').trim();
     const nameB = (data.B || '').trim();
@@ -1060,13 +1061,11 @@ onValue(userNamesRef, async (snapshot) => {
       currentUser = 'B';
       await update(roomUsersRef, { B: true });
       localStorage.setItem(`${roomName}_currentUser`, 'B');
-    } else {
-      // 両方ある or どちらもない → savedUser が無ければ未選択のまま
     }
-    updateUserSelectDisplay();
-  } else {
-    updateUserSelectDisplay();
   }
+
+  // 名前が取得できた後に必ず select 表示を更新
+  updateUserSelectDisplay();
 
   renderCalendar();
 });
