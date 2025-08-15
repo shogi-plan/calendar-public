@@ -817,8 +817,8 @@ function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
 
   let displayName = '';
-  if (currentUser === 'A') displayName = userANameInput.value || 'A';
-  else if (currentUser === 'B') displayName = userBNameInput.value || 'B';
+  if (currentUser === 'A') displayName = userANameInput.value.trim() || 'A';
+  else if (currentUser === 'B') displayName = userBNameInput.value.trim() || 'B';
   else displayName = '未選択';
 
   const opt = document.createElement('option');
@@ -826,8 +826,7 @@ function updateUserSelectDisplay() {
   opt.textContent = displayName;
   opt.selected = true;
   userSelect.appendChild(opt);
-
-  userSelect.disabled = true; // 表示専用
+  userSelect.disabled = true; // 常に表示専用
 }
 
 function resetUI() {
@@ -1041,13 +1040,14 @@ onValue(userNamesRef, async (snapshot) => {
   if (data.A !== undefined) userANameInput.value = data.A || '';
   if (data.B !== undefined) userBNameInput.value = data.B || '';
 
-  // currentUser が未選択の場合は自動決定
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  const snap = await get(roomUsersRef);
+  const roomUsers = snap.exists() ? snap.val() : {};
+
+  // currentUser が未設定なら、自動選択
   if (!currentUser) {
     const nameA = (data.A || '').trim();
     const nameB = (data.B || '').trim();
-    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-    const snap = await get(roomUsersRef);
-    const roomUsers = snap.exists() ? snap.val() : {};
 
     if (nameA && !nameB && !roomUsers.A) {
       currentUser = 'A';
@@ -1057,12 +1057,12 @@ onValue(userNamesRef, async (snapshot) => {
       currentUser = 'B';
       await update(roomUsersRef, { B: true });
       localStorage.setItem(`${roomName}_currentUser`, 'B');
-    }
+    } 
+    // 両方ある or どちらもない → currentUser は未選択
   }
 
-  // 名前が取得できた後に必ず select 表示を更新
+  // UI反映は必ず最後に
   updateUserSelectDisplay();
-
   renderCalendar();
 });
 
