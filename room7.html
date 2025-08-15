@@ -815,18 +815,12 @@ async function updateCallStatus(status) {
 
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
-
-  let displayName = '';
-  if (currentUser === 'A') displayName = userANameInput.value.trim() || 'A';
-  else if (currentUser === 'B') displayName = userBNameInput.value.trim() || 'B';
-  else displayName = '未選択';
-
   const opt = document.createElement('option');
   opt.value = currentUser || '';
-  opt.textContent = displayName;
+  opt.textContent = currentUser || '未選択';  // 名前ではなく A/B
   opt.selected = true;
   userSelect.appendChild(opt);
-  userSelect.disabled = true; // 常に表示専用
+  userSelect.disabled = true;
 }
 
 function resetUI() {
@@ -1040,28 +1034,23 @@ onValue(userNamesRef, async (snapshot) => {
   if (data.A !== undefined) userANameInput.value = data.A || '';
   if (data.B !== undefined) userBNameInput.value = data.B || '';
 
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snap = await get(roomUsersRef);
-  const roomUsers = snap.exists() ? snap.val() : {};
-
-  // currentUser が未設定なら、自動選択
   if (!currentUser) {
-    const nameA = (data.A || '').trim();
-    const nameB = (data.B || '').trim();
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    const snap = await get(roomUsersRef);
+    const roomUsers = snap.exists() ? snap.val() : {};
 
-    if (nameA && !nameB && !roomUsers.A) {
-      currentUser = 'A';
-      await update(roomUsersRef, { A: true });
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (!nameA && nameB && !roomUsers.B) {
-      currentUser = 'B';
-      await update(roomUsersRef, { B: true });
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
-    } 
-    // 両方ある or どちらもない → currentUser は未選択
+    // currentUser が未設定なら、空いているユーザーを自動選択
+    if (!roomUsers.A && roomUsers.B) currentUser = 'A';
+    else if (roomUsers.A && !roomUsers.B) currentUser = 'B';
+    else if (!roomUsers.A && !roomUsers.B) currentUser = ''; // 両方空なら未選択
+
+    if (currentUser) {
+    await update(roomUsersRef, { [currentUser]: true });
+    localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    }
   }
 
-  // UI反映は必ず最後に
+  // UI反映は最後に必ず呼ぶ
   updateUserSelectDisplay();
   renderCalendar();
 });
