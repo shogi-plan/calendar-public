@@ -816,8 +816,19 @@ async function updateCallStatus(status) {
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
   const opt = document.createElement('option');
+
+  // currentUser がある場合に名前を優先表示
+  let displayName = currentUser || '未選択';
+
+  // 最小限修正: 入力欄の値があればそれを表示
+  if (currentUser === 'A' && userANameInput.value.trim()) {
+    displayName = userANameInput.value.trim();
+  } else if (currentUser === 'B' && userBNameInput.value.trim()) {
+    displayName = userBNameInput.value.trim();
+  }
+
   opt.value = currentUser || '';
-  opt.textContent = currentUser ? currentUser : '未選択';
+  opt.textContent = displayName;
   opt.selected = true;
   userSelect.appendChild(opt);
   userSelect.disabled = true; // 常に表示のみ
