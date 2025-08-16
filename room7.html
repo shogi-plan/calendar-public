@@ -1031,28 +1031,28 @@ const userNamesRef = ref(db, `${roomName}/userNames`);
 
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
-  if (data.A !== undefined) userANameInput.value = data.A || '';
-  if (data.B !== undefined) userBNameInput.value = data.B || '';
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  const snap = await get(roomUsersRef);
+  const roomUsers = snap.exists() ? snap.val() : {};
 
+  // ユーザーA
+  userANameInput.value = data.A || '';
+
+  // ユーザーB
+  userBNameInput.value = data.B || '';
+
+  // currentUser が未設定の時だけ割り当て
   if (!currentUser) {
-    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-    const snap = await get(roomUsersRef);
-    const roomUsers = snap.exists() ? snap.val() : {};
-
-    const nameA = (data.A || '').trim();
-    const nameB = (data.B || '').trim();
-
-    // ユーザー名の有無と roomUsers の状態を見て片方だけ true にする
-    if (nameA && !nameB && !roomUsers.A) {
+    if (!roomUsers.A && !data.A) {
       currentUser = 'A';
-      await update(roomUsersRef, { A: true, B: false });
+      await update(roomUsersRef, { A: true });
       localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (!nameA && nameB && !roomUsers.B) {
+    } else if (!roomUsers.B && !data.B) {
       currentUser = 'B';
-      await update(roomUsersRef, { A: false, B: true });
+      await update(roomUsersRef, { B: true });
       localStorage.setItem(`${roomName}_currentUser`, 'B');
     }
-    // 両方名前あり or 両方空の場合 → currentUser 未選択
+    // 両方埋まっていたら currentUser は設定されない
   }
 
   updateUserSelectDisplay();
