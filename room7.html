@@ -1039,18 +1039,22 @@ onValue(userNamesRef, async (snapshot) => {
     const snap = await get(roomUsersRef);
     const roomUsers = snap.exists() ? snap.val() : {};
 
-    // currentUser が未設定なら、空いているユーザーを自動選択
-    if (!roomUsers.A && roomUsers.B) currentUser = 'A';
-    else if (roomUsers.A && !roomUsers.B) currentUser = 'B';
-    else if (!roomUsers.A && !roomUsers.B) currentUser = ''; // 両方空なら未選択
+    const nameA = (data.A || '').trim();
+    const nameB = (data.B || '').trim();
 
-    if (currentUser) {
-    await update(roomUsersRef, { [currentUser]: true });
-    localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    // ユーザー名の有無と roomUsers の状態を見て片方だけ true にする
+    if (nameA && !nameB && !roomUsers.A) {
+      currentUser = 'A';
+      await update(roomUsersRef, { A: true, B: false });
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+    } else if (!nameA && nameB && !roomUsers.B) {
+      currentUser = 'B';
+      await update(roomUsersRef, { A: false, B: true });
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
     }
+    // 両方名前あり or 両方空の場合 → currentUser 未選択
   }
 
-  // UI反映は最後に必ず呼ぶ
   updateUserSelectDisplay();
   renderCalendar();
 });
