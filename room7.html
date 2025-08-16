@@ -1035,30 +1035,28 @@ onValue(userNamesRef, async (snapshot) => {
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
 
-  // UI更新
+  // UI更新（名前は常に反映）
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // roomUsers の補完
-  const updates = {};
-  if (data.A && !roomUsers.A) updates.A = true;
-  if (data.B && !roomUsers.B) updates.B = true;
-  if (Object.keys(updates).length > 0) {
-    await update(roomUsersRef, updates);
+  // currentUser が未確定の場合のみ自動割当
+  if (!currentUser) {
+    // ユーザーAが空きかつ名前が存在する場合
+    if (data.A && !roomUsers.A) {
+      currentUser = 'A';
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+      await update(roomUsersRef, { A: true });
+    }
+    // ユーザーBが空きかつ名前が存在する場合
+    else if (data.B && !roomUsers.B) {
+      currentUser = 'B';
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
+      await update(roomUsersRef, { B: true });
+    }
+    // 両方埋まっていれば currentUser は未設定のまま
   }
 
-  // まだ currentUser が未確定なら、ここで割り当て
-  // まだ currentUser が未確定なら、ここで割り当て
-if (!currentUser) {
-  if (data.A && !data.B) {
-    currentUser = 'A';
-    localStorage.setItem(`${roomName}_currentUser`, 'A');
-  } else if (data.B && !data.A) {
-    currentUser = 'B';
-    localStorage.setItem(`${roomName}_currentUser`, 'B');
-  }
-}
-
+  // UI に反映
   updateUserSelectDisplay();
   renderCalendar();
 });
