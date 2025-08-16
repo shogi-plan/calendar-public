@@ -993,38 +993,31 @@ userSelect.addEventListener('change', async e => {
 initializeUsers();
 listenSignaling();
 
-  userANameInput.addEventListener('input', async () => {
-  const val = userANameInput.value.trim();
-  await set(ref(db, `${roomName}/userNames/A`), val);
-  if (!currentUser && val) {
-    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-    const snap = await get(roomUsersRef);
-    const roomUsers = snap.exists() ? snap.val() : {};
-    if (!roomUsers.A) {
+  // --- ユーザー名入力時のハンドラ ---
+userANameInput.addEventListener('input', async () => {
+  const name = userANameInput.value.trim();
+  if (name) {
+    await update(userNamesRef, { A: name });
+    await update(ref(db, `${roomName}/roomUsers`), { A: true });
+    if (!currentUser) {
       currentUser = 'A';
-      await update(roomUsersRef, { A: true });
       localStorage.setItem(`${roomName}_currentUser`, 'A');
       updateUserSelectDisplay();
     }
   }
-  renderCalendar();
 });
 
 userBNameInput.addEventListener('input', async () => {
-  const val = userBNameInput.value.trim();
-  await set(ref(db, `${roomName}/userNames/B`), val);
-  if (!currentUser && val) {
-    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-    const snap = await get(roomUsersRef);
-    const roomUsers = snap.exists() ? snap.val() : {};
-    if (!roomUsers.B) {
+  const name = userBNameInput.value.trim();
+  if (name) {
+    await update(userNamesRef, { B: name });
+    await update(ref(db, `${roomName}/roomUsers`), { B: true });
+    if (!currentUser) {
       currentUser = 'B';
-      await update(roomUsersRef, { B: true });
       localStorage.setItem(`${roomName}_currentUser`, 'B');
       updateUserSelectDisplay();
     }
   }
-  renderCalendar();
 });
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
@@ -1035,28 +1028,38 @@ onValue(userNamesRef, async (snapshot) => {
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
 
-  // UI更新（名前は常に反映）
+  // --- UI 更新 ---
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // currentUser が未確定の場合のみ自動割当
-  if (!currentUser) {
-    // ユーザーAが空きかつ名前が存在する場合
-    if (data.A && !roomUsers.A) {
-      currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-      await update(roomUsersRef, { A: true });
-    }
-    // ユーザーBが空きかつ名前が存在する場合
-    else if (data.B && !roomUsers.B) {
-      currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
-      await update(roomUsersRef, { B: true });
-    }
-    // 両方埋まっていれば currentUser は未設定のまま
+  // --- roomUsers の補完 ---
+  const updates = {};
+  if (data.A && !roomUsers.A) updates.A = true;
+  if (data.B && !roomUsers.B) updates.B = true;
+  if (Object.keys(updates).length > 0) {
+    await update(roomUsersRef, updates);
   }
 
-  // UI に反映
+  // --- currentUser の割当 ---
+  if (!currentUser) {
+    // まだ誰も選択されていない場合
+    if (data.A && roomUsers.A && !roomUsers.B) {
+      currentUser = 'A';
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+    } else if (data.B && roomUsers.B && !roomUsers.A) {
+      currentUser = 'B';
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
+    }
+  } else if (currentUser === 'A' && data.B && roomUsers.B) {
+    // 自分はAだが、相手がBを入力した → このブラウザはBになる
+    currentUser = 'B';
+    localStorage.setItem(`${roomName}_currentUser`, 'B');
+  } else if (currentUser === 'B' && data.A && roomUsers.A) {
+    // 自分はBだが、相手がAを入力した → このブラウザはAになる
+    currentUser = 'A';
+    localStorage.setItem(`${roomName}_currentUser`, 'A');
+  }
+
   updateUserSelectDisplay();
   renderCalendar();
 });
