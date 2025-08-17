@@ -383,21 +383,38 @@ async function clearSelectedCells() {
   updateScheduleTable();
 }
 
-  async function clearAllData() {
+  let isClearingData = false;
+
+async function clearAllData() {
   if (!confirm('本当に全てのデータを削除しますか？')) return;
+
+  isClearingData = true; // フラグON
+
   await remove(ref(db, `${roomName}/userNames`));
-  userANameInput.value = '';
-  userBNameInput.value = '';
   await remove(ref(db, `${roomName}/schedules`));
   await remove(ref(db, `${roomName}/chatLog`));
-  await set(ref(db, `${roomName}/roomUsers`), { A: null, B: null });
+  await remove(ref(db, `${roomName}/roomUsers`));
   await remove(ref(db, `${roomName}/callStatus`));
   await set(ref(db, `${roomName}/callStatus`), {
-  status: 'none',
-  users: { A: false, B: false },
-  statusMessage: '',
-  timestamp: null
-});
+    status: 'none',
+    users: { A: false, B: false },
+    statusMessage: '',
+    timestamp: null
+  });
+  await remove(ref(db, `${roomName}/signaling`));
+
+  userANameInput.value = '';
+  userBNameInput.value = '';
+  selectedCells.clear();
+  localStorage.removeItem(`${roomName}_currentUser`);
+  currentUser = '';
+  userSelect.innerHTML = '<option value="" selected>未選択</option>';
+  userSelect.disabled = true;
+
+  updateCallStatusUI('none');
+
+  isClearingData = false; // フラグOFF
+
   await remove(ref(db, `${roomName}/signaling`));
   selectedCells.clear();
   localStorage.removeItem(`${roomName}_currentUser`);
@@ -999,20 +1016,20 @@ listenSignaling();
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
-// ----- Firebase userNames 監視 -----
+// onValue 内でチェック
 onValue(userNamesRef, async (snapshot) => {
+  if (isClearingData) return; // 初期化中は処理しない
+
   const data = snapshot.val() || {};
-
-  // UI に名前を反映
-  userANameInput.value = data.A || '';
-  userBNameInput.value = data.B || '';
-
-  // roomUsers を取得
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
 
-  // Firebase 上の roomUsers が未設定のものを補完
+  // 名前欄に反映
+  userANameInput.value = data.A || '';
+  userBNameInput.value = data.B || '';
+
+  // roomUsers 補完
   const updates = {};
   if (data.A && !roomUsers.A) updates.A = true;
   if (data.B && !roomUsers.B) updates.B = true;
@@ -1020,7 +1037,7 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // 自分の currentUser が未設定なら、自動割り当て
+  // currentUser 未設定なら割り当て
   if (!currentUser) {
     if (!roomUsers.A) {
       currentUser = 'A';
