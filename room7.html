@@ -1029,20 +1029,20 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // --- currentUser が未設定なら userNames の存在で決める ---
-  if (!currentUser) {
-    if (data.A) {
-      currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (data.B) {
+  // --- currentUser の自動選択 ---
+  // まだ currentUser が未設定 または currentUser が空でローカルに選択されていない場合のみ切り替え
+  if (!currentUser || !roomUsers[currentUser]) {
+    if (data.B && !roomUsers.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
+    } else if (data.A && !roomUsers.A) {
+      currentUser = 'A';
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
     } else {
       currentUser = '';
     }
   }
 
-  // --- currentUser が設定済みでも表示は正しく更新 ---
   updateUserSelectDisplay();
   renderCalendar();
 });
