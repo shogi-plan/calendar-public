@@ -933,31 +933,18 @@ async function initializeUsers() {
   renderCalendar();
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-  // 1. localStorage から currentUser を取得
-  let savedUser = localStorage.getItem(`${roomName}_currentUser`);
+document.addEventListener('DOMContentLoaded', () => {
+  // localStorage から currentUser を復元
+  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
 
-  // 2. Firebase から roomUsers を取得
-  const roomUsersSnapshot = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
-
-  // 3. currentUser を決定
   if (savedUser) {
-    currentUser = savedUser;
-  } else if (roomUsers.A && !roomUsers.B) {
-    currentUser = 'A';
-  } else if (!roomUsers.A && roomUsers.B) {
-    currentUser = 'B';
+    currentUser = savedUser;   // A または B
   } else {
-    currentUser = '';
+    currentUser = '';          // 未選択のまま
   }
 
-  // 4. UI に反映（currentUser があれば）
-  if (currentUser) {
-    userSelect.value = currentUser;   // セレクト表示を同期
-    userSelect.disabled = true;       // 完全無効化
-    localStorage.setItem(`${roomName}_currentUser`, currentUser); // 保存
-  }
+  // UI 更新
+  updateUserSelectDisplay();
 });
 
 // 完全無効化する場合、change は実質使わないが残す
@@ -1003,19 +990,18 @@ const userNamesRef = ref(db, `${roomName}/userNames`);
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
-  // 名前欄に反映（手入力可能）
+  // 名前欄に反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // roomUsers 取得
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
 
-  // --- ★ userNames と roomUsers を同期させる処理 ---
+  // --- userNames と roomUsers の同期 ---
   const syncUpdates = {};
-  if (!data.A && roomUsers.A) syncUpdates.A = null; // Aの名前が無いなら割当解除
-  if (!data.B && roomUsers.B) syncUpdates.B = null; // Bの名前が無いなら割当解除
+  if (!data.A && roomUsers.A) syncUpdates.A = null;
+  if (!data.B && roomUsers.B) syncUpdates.B = null;
   if (Object.keys(syncUpdates).length > 0) {
     await update(roomUsersRef, syncUpdates);
   }
@@ -1028,12 +1014,14 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // --- currentUser が未設定なら、空いている方に自動割り当て ---
+  // --- currentUser の割当ロジック ---
   if (!currentUser) {
-    if (data.A && !roomUsers.A) {
+    if (data.A && !roomUsers.B) {
+      // Aの名前がある & Bが未割当 → このブラウザをAに
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (data.B && !roomUsers.B) {
+    } else if (data.B && !roomUsers.A) {
+      // Bの名前がある & Aが未割当 → このブラウザをBに
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
     }
