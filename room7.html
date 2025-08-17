@@ -1018,12 +1018,10 @@ onValue(userNamesRef, async (snapshot) => {
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // roomUsers を取得
+  // roomUsers を補完
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
-
-  // roomUsers が未設定なら補完
   const updates = {};
   if (data.A && !roomUsers.A) updates.A = true;
   if (data.B && !roomUsers.B) updates.B = true;
@@ -1031,7 +1029,8 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // 🔽 修正ポイント：currentUser が未設定なら userNames を基準に割り当て
+  // --- ここが重要 ---
+  // currentUser が未設定なら、userNames の存在を基準に決める
   if (!currentUser) {
     if (data.B) {
       currentUser = 'B';
