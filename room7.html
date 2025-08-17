@@ -390,7 +390,7 @@ async function clearSelectedCells() {
   userBNameInput.value = '';
   await remove(ref(db, `${roomName}/schedules`));
   await remove(ref(db, `${roomName}/chatLog`));
-  await remove(ref(db, `${roomName}/roomUsers`));
+  await set(ref(db, `${roomName}/roomUsers`), { A: null, B: null });
   await remove(ref(db, `${roomName}/callStatus`));
   await set(ref(db, `${roomName}/callStatus`), {
   status: 'none',
@@ -1000,7 +1000,6 @@ listenSignaling();
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
-// --- Firebase から名前を取得して UI に反映 ---
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
@@ -1013,7 +1012,15 @@ onValue(userNamesRef, async (snapshot) => {
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
 
-  // roomUsers が未設定のものを補完
+  // --- ★ userNames と roomUsers を同期させる処理 ---
+  const syncUpdates = {};
+  if (!data.A && roomUsers.A) syncUpdates.A = null; // Aの名前が無いなら割当解除
+  if (!data.B && roomUsers.B) syncUpdates.B = null; // Bの名前が無いなら割当解除
+  if (Object.keys(syncUpdates).length > 0) {
+    await update(roomUsersRef, syncUpdates);
+  }
+
+  // --- roomUsers の補完 ---
   const updates = {};
   if (data.A && !roomUsers.A) updates.A = true;
   if (data.B && !roomUsers.B) updates.B = true;
@@ -1021,12 +1028,12 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // currentUser が未設定なら、空いている方に自動割り当て
+  // --- currentUser が未設定なら、空いている方に自動割り当て ---
   if (!currentUser) {
-    if (!roomUsers.A) {
+    if (data.A && !roomUsers.A) {
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (!roomUsers.B) {
+    } else if (data.B && !roomUsers.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
     }
