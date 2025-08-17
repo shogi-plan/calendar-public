@@ -1030,7 +1030,7 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // currentUser が未設定なら、自ブラウザで入力済み/取得済みのユーザーに割り当て
+  // currentUser が未設定なら、userNames を基準に割り当て
   if (!currentUser) {
     if (data.A && !roomUsers.A) {
       currentUser = 'A';
@@ -1041,8 +1041,8 @@ onValue(userNamesRef, async (snapshot) => {
     }
   }
 
-  // currentUser が既に設定済みの場合は変更しない
-  // これで他ブラウザの変更によって自ブラウザが勝手に変わらない
+  // currentUser がまだ未設定の場合（userNames にも何もない）なら空白
+  if (!currentUser) currentUser = '';
 
   updateUserSelectDisplay();
   renderCalendar();
