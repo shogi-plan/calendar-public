@@ -1018,11 +1018,12 @@ onValue(userNamesRef, async (snapshot) => {
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
+  // roomUsers を取得
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
 
-  // roomUsers に補完
+  // roomUsers が未設定なら補完
   const updates = {};
   if (data.A && !roomUsers.A) updates.A = true;
   if (data.B && !roomUsers.B) updates.B = true;
@@ -1030,14 +1031,16 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // 未割り当てなら空いてる方に自動割り当て
+  // 🔽 修正ポイント：currentUser が未設定なら userNames を基準に割り当て
   if (!currentUser) {
-    if (data.A && !roomUsers.A) {
-      currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (data.B && !roomUsers.B) {
+    if (data.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
+    } else if (data.A) {
+      currentUser = 'A';
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+    } else {
+      currentUser = '';
     }
   }
 
