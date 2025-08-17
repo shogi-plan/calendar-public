@@ -830,7 +830,7 @@ async function updateCallStatus(status) {
   }
 }
 
-// --- ユーザー選択表示更新 ---
+// --- ユーザー選択表示を更新 ---
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
   const opt = document.createElement('option');
@@ -1010,11 +1010,10 @@ listenSignaling();
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
-// --- Firebase userNames 監視 ---
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
-  // 名前欄に反映（空なら空文字、手入力可）
+  // 名前欄に反映（手入力可能）
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
@@ -1023,20 +1022,20 @@ onValue(userNamesRef, async (snapshot) => {
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
 
-  // roomUsers が未設定のものを補完（空文字は補完しない）
+  // roomUsers が未設定のものを補完
   const updates = {};
-  if (data.A && data.A.trim() && !roomUsers.A) updates.A = true;
-  if (data.B && data.B.trim() && !roomUsers.B) updates.B = true;
+  if (data.A && !roomUsers.A) updates.A = true;
+  if (data.B && !roomUsers.B) updates.B = true;
   if (Object.keys(updates).length > 0) {
     await update(roomUsersRef, updates);
   }
 
-  // currentUser が未設定なら、空いている方に割り当て
+  // currentUser が未設定なら、自ブラウザで入力済み/取得済みのユーザーに割り当て
   if (!currentUser) {
-    if (data.A && data.A.trim() && !roomUsers.A) {
+    if (data.A && !roomUsers.A) {
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (data.B && data.B.trim() && !roomUsers.B) {
+    } else if (data.B && !roomUsers.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
     }
@@ -1046,10 +1045,10 @@ onValue(userNamesRef, async (snapshot) => {
   renderCalendar();
 });
 
-// --- ユーザー名直接入力時 ---
 userANameInput.addEventListener('input', async () => {
   const name = userANameInput.value.trim();
   if (!name) return;
+
   await update(userNamesRef, { A: name });
   await update(ref(db, `${roomName}/roomUsers`), { A: true });
 
@@ -1063,6 +1062,7 @@ userANameInput.addEventListener('input', async () => {
 userBNameInput.addEventListener('input', async () => {
   const name = userBNameInput.value.trim();
   if (!name) return;
+
   await update(userNamesRef, { B: name });
   await update(ref(db, `${roomName}/roomUsers`), { B: true });
 
