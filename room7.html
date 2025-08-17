@@ -830,12 +830,13 @@ async function updateCallStatus(status) {
   }
 }
 
+// --- ユーザー選択表示更新 ---
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
   const opt = document.createElement('option');
   if (currentUser) {
     opt.value = currentUser;
-    opt.textContent = currentUser; // "A" または "B"
+    opt.textContent = currentUser; // A/B を表示
   } else {
     opt.value = '';
     opt.textContent = '未選択';
@@ -950,10 +951,9 @@ async function initializeUsers() {
   renderCalendar();
 }
 
-// ----- ページロード時の currentUser 初期化 -----
+// --- DOMContentLoaded で localStorage と Firebase から currentUser 初期化 ---
 document.addEventListener('DOMContentLoaded', async () => {
   let savedUser = localStorage.getItem(`${roomName}_currentUser`);
-
   const roomUsersSnapshot = await get(ref(db, `${roomName}/roomUsers`));
   const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
 
@@ -965,12 +965,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentUser = 'B';
   } else {
     currentUser = '';
-  }
-
-  if (currentUser) {
-    userSelect.value = currentUser;
-    userSelect.disabled = true;
-    localStorage.setItem(`${roomName}_currentUser`, currentUser);
   }
 
   updateUserSelectDisplay();
@@ -1016,33 +1010,33 @@ listenSignaling();
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
-// onValue 内でチェック
+// --- Firebase userNames 監視 ---
 onValue(userNamesRef, async (snapshot) => {
-  if (isClearingData) return; // 初期化中は処理しない
-
   const data = snapshot.val() || {};
+
+  // 名前欄に反映（空なら空文字、手入力可）
+  userANameInput.value = data.A || '';
+  userBNameInput.value = data.B || '';
+
+  // roomUsers 取得
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snap = await get(roomUsersRef);
   const roomUsers = snap.exists() ? snap.val() : {};
 
-  // 名前欄に反映
-  userANameInput.value = data.A || '';
-  userBNameInput.value = data.B || '';
-
-  // roomUsers 補完
+  // roomUsers が未設定のものを補完（空文字は補完しない）
   const updates = {};
-  if (data.A && !roomUsers.A) updates.A = true;
-  if (data.B && !roomUsers.B) updates.B = true;
+  if (data.A && data.A.trim() && !roomUsers.A) updates.A = true;
+  if (data.B && data.B.trim() && !roomUsers.B) updates.B = true;
   if (Object.keys(updates).length > 0) {
     await update(roomUsersRef, updates);
   }
 
-  // currentUser 未設定なら割り当て
+  // currentUser が未設定なら、空いている方に割り当て
   if (!currentUser) {
-    if (!roomUsers.A) {
+    if (data.A && data.A.trim() && !roomUsers.A) {
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (!roomUsers.B) {
+    } else if (data.B && data.B.trim() && !roomUsers.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
     }
@@ -1052,35 +1046,31 @@ onValue(userNamesRef, async (snapshot) => {
   renderCalendar();
 });
 
-// ----- 名前入力時のイベント -----
+// --- ユーザー名直接入力時 ---
 userANameInput.addEventListener('input', async () => {
   const name = userANameInput.value.trim();
   if (!name) return;
+  await update(userNamesRef, { A: name });
+  await update(ref(db, `${roomName}/roomUsers`), { A: true });
 
-  // currentUser が未設定なら自分を先に割り当て
   if (!currentUser) {
     currentUser = 'A';
     localStorage.setItem(`${roomName}_currentUser`, 'A');
     updateUserSelectDisplay();
   }
-
-  // Firebase 更新
-  await update(userNamesRef, { A: name });
-  await update(ref(db, `${roomName}/roomUsers`), { A: true });
 });
 
 userBNameInput.addEventListener('input', async () => {
   const name = userBNameInput.value.trim();
   if (!name) return;
+  await update(userNamesRef, { B: name });
+  await update(ref(db, `${roomName}/roomUsers`), { B: true });
 
   if (!currentUser) {
     currentUser = 'B';
     localStorage.setItem(`${roomName}_currentUser`, 'B');
     updateUserSelectDisplay();
   }
-
-  await update(userNamesRef, { B: name });
-  await update(ref(db, `${roomName}/roomUsers`), { B: true });
 });
 
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
