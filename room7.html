@@ -1041,6 +1041,9 @@ onValue(userNamesRef, async (snapshot) => {
     }
   }
 
+  // currentUser が既に設定済みの場合は変更しない
+  // これで他ブラウザの変更によって自ブラウザが勝手に変わらない
+
   updateUserSelectDisplay();
   renderCalendar();
 });
