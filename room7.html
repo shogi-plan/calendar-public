@@ -834,6 +834,8 @@ async function updateCallStatus(status) {
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
   const opt = document.createElement('option');
+
+  // currentUser があれば選択、無ければ未選択
   if (currentUser) {
     opt.value = currentUser;
     opt.textContent = currentUser; // A or B
@@ -843,6 +845,19 @@ function updateUserSelectDisplay() {
   }
   opt.selected = true;
   userSelect.appendChild(opt);
+
+  // 満室なら追加表示
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  get(roomUsersRef).then(snap => {
+    const roomUsers = snap.exists() ? snap.val() : {};
+    if (roomUsers.A && roomUsers.B) {
+      const fullOpt = document.createElement('option');
+      fullOpt.value = 'full';
+      fullOpt.textContent = '満室';
+      userSelect.appendChild(fullOpt);
+    }
+  });
+
   userSelect.disabled = true;
 }
 
@@ -935,30 +950,25 @@ if (remoteStream) {
   }
 
 async function initializeUsers() {
-  const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  const snap = await get(roomUsersRef);
+  const roomUsers = snap.exists() ? snap.val() : {};
 
-  // ブラウザごとの選択状態
   const savedUser = localStorage.getItem(`${roomName}_currentUser`);
   currentUser = savedUser || '';
 
-  // savedUser があれば、そのユーザーだけ true にする
+  // Saved があれば roomUsers を更新
   if (currentUser && !roomUsers[currentUser]) {
-    await update(ref(db, `${roomName}/roomUsers`), { [currentUser]: true });
+    await update(roomUsersRef, { [currentUser]: true });
   }
 
   updateUserSelectDisplay();
   renderCalendar();
 }
 
+// --- DOMContentLoaded で初期化 ---
 document.addEventListener('DOMContentLoaded', async () => {
-  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-  if (savedUser) {
-    currentUser = savedUser;
-  } else {
-    currentUser = '';
-  }
-  updateUserSelectDisplay();
+  await initializeUsers();
 });
 
 // 完全無効化する場合、change は実質使わないが残す
@@ -1020,63 +1030,49 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // currentUser の割り当て条件を厳密化
-  // 1. currentUser 未設定
-  // 2. currentUser の名前欄が空 → 他ブラウザで削除された場合
-  if (!currentUser || (!data[currentUser] && roomUsers[currentUser])) {
-    if (data.A && !roomUsers.A) {
+  // currentUser が未設定なら自動割当
+  if (!currentUser) {
+    if (!roomUsers.A) {
       currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (data.B && !roomUsers.B) {
+    } else if (!roomUsers.B) {
       currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
     } else {
       currentUser = '';
     }
+    localStorage.setItem(`${roomName}_currentUser`, currentUser);
   }
 
-  // UI 更新
   updateUserSelectDisplay();
+  renderCalendar();
 });
 
-// --- ユーザー名入力イベント ---
-// 自ブラウザで名前を入力した場合に currentUser を設定
+// --- 名前入力イベント ---
 userANameInput.addEventListener('input', async () => {
   const name = userANameInput.value.trim();
-  if (!name) {
-    await remove(ref(db, `${roomName}/userNames/A`));
-    if (currentUser === 'A') {
-      currentUser = '';
-      localStorage.removeItem(`${roomName}_currentUser`);
-      await update(ref(db, `${roomName}/roomUsers`), { A: false });
-    }
-  } else {
+  if (name) {
+    currentUser = 'A';
+    localStorage.setItem(`${roomName}_currentUser`, 'A');
     await set(ref(db, `${roomName}/userNames/A`), name);
-    if (!currentUser) {
-      currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-      await update(ref(db, `${roomName}/roomUsers`), { A: true });
-    }
+    await update(ref(db, `${roomName}/roomUsers`), { A: true });
+  } else {
+    await remove(ref(db, `${roomName}/userNames/A`));
+    await update(ref(db, `${roomName}/roomUsers`), { A: false });
+    if (currentUser === 'A') currentUser = '';
   }
   updateUserSelectDisplay();
 });
 
 userBNameInput.addEventListener('input', async () => {
   const name = userBNameInput.value.trim();
-  if (!name) {
-    await remove(ref(db, `${roomName}/userNames/B`));
-    if (currentUser === 'B') {
-      currentUser = '';
-      localStorage.removeItem(`${roomName}_currentUser`);
-      await update(ref(db, `${roomName}/roomUsers`), { B: false });
-    }
-  } else {
+  if (name) {
+    currentUser = 'B';
+    localStorage.setItem(`${roomName}_currentUser`, 'B');
     await set(ref(db, `${roomName}/userNames/B`), name);
-    if (!currentUser) {
-      currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
-      await update(ref(db, `${roomName}/roomUsers`), { B: true });
-    }
+    await update(ref(db, `${roomName}/roomUsers`), { B: true });
+  } else {
+    await remove(ref(db, `${roomName}/userNames/B`));
+    await update(ref(db, `${roomName}/roomUsers`), { B: false });
+    if (currentUser === 'B') currentUser = '';
   }
   updateUserSelectDisplay();
 });
