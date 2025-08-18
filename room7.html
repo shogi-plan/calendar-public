@@ -1011,6 +1011,7 @@ listenSignaling();
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
 // --- Firebase から userNames を監視 ---
+// --- 初期処理（firebase監視）
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
@@ -1018,27 +1019,18 @@ onValue(userNamesRef, async (snapshot) => {
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // roomUsers を補完
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snap = await get(roomUsersRef);
-  const roomUsers = snap.exists() ? snap.val() : {};
-  const updates = {};
-  if (data.A && !roomUsers.A) updates.A = true;
-  if (data.B && !roomUsers.B) updates.B = true;
-  if (Object.keys(updates).length > 0) {
-    await update(roomUsersRef, updates);
-  }
+  // roomUsers 補完処理（省略）
 
-  // --- currentUser の自動選択 ---
-  // まだ currentUser が未設定 または currentUser が空でローカルに選択されていない場合のみ切り替え
-  if (!currentUser || !roomUsers[currentUser]) {
-    if (data.B && !roomUsers.B) {
-      currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
-    } else if (data.A && !roomUsers.A) {
+  // currentUser が未設定の場合のみ自動割り当て
+  if (!currentUser) {
+    if (!data.A) {
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
+    } else if (!data.B) {
+      currentUser = 'B';
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
     } else {
+      // 両方埋まってたら未選択のまま
       currentUser = '';
     }
   }
@@ -1047,31 +1039,27 @@ onValue(userNamesRef, async (snapshot) => {
   renderCalendar();
 });
 
-// --- ユーザー名入力イベント ---
-userANameInput.addEventListener('input', async () => {
+// --- 入力イベント時に currentUser を決める ---
+userANameInput.addEventListener('input', () => {
   const name = userANameInput.value.trim();
-  if (!name) return;
-
-  await update(userNamesRef, { A: name });
-  await update(ref(db, `${roomName}/roomUsers`), { A: true });
-
-  if (!currentUser) {   // まだ未設定なら割り当て
+  if (name) {
     currentUser = 'A';
     localStorage.setItem(`${roomName}_currentUser`, 'A');
+    set(ref(db, `${roomName}/userNames/A`), name);
+  } else {
+    remove(ref(db, `${roomName}/userNames/A`));
   }
   updateUserSelectDisplay();
 });
 
-userBNameInput.addEventListener('input', async () => {
+userBNameInput.addEventListener('input', () => {
   const name = userBNameInput.value.trim();
-  if (!name) return;
-
-  await update(userNamesRef, { B: name });
-  await update(ref(db, `${roomName}/roomUsers`), { B: true });
-
-  if (!currentUser) {   // まだ未設定なら割り当て
+  if (name) {
     currentUser = 'B';
     localStorage.setItem(`${roomName}_currentUser`, 'B');
+    set(ref(db, `${roomName}/userNames/B`), name);
+  } else {
+    remove(ref(db, `${roomName}/userNames/B`));
   }
   updateUserSelectDisplay();
 });
