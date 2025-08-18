@@ -1005,7 +1005,7 @@ const userNamesRef = ref(db, `${roomName}/userNames`);
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
-  // 入力欄に反映
+  // 名前欄に反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
@@ -1020,12 +1020,14 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // currentUser が未設定なら、名前がある方を割り当て
-  if (!currentUser) {
-    if (data.A) {
+  // currentUser の割り当て条件を厳密化
+  // 1. currentUser 未設定
+  // 2. currentUser の名前欄が空 → 他ブラウザで削除された場合
+  if (!currentUser || (!data[currentUser] && roomUsers[currentUser])) {
+    if (data.A && !roomUsers.A) {
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
-    } else if (data.B) {
+    } else if (data.B && !roomUsers.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
     } else {
@@ -1033,7 +1035,7 @@ onValue(userNamesRef, async (snapshot) => {
     }
   }
 
-  // UI 更新は必ず currentUser 割り当て後
+  // UI 更新
   updateUserSelectDisplay();
 });
 
