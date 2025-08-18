@@ -1014,22 +1014,32 @@ const userNamesRef = ref(db, `${roomName}/userNames`);
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
-  // 入力欄へ反映
+  // 名前欄へ反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // 名前の有無から roomUsers を毎回確定
+  // roomUsers 更新
   const nextRoomUsers = {
     A: !!data.A,
     B: !!data.B
   };
-  // 余計な読み取りをせず、常に set で上書き（仕様上「名前がある＝使用中」）
   await set(ref(db, `${roomName}/roomUsers`), nextRoomUsers);
 
-  // 満室フラグ更新（UI表示用）
+  // 満室フラグ
   isRoomFull = nextRoomUsers.A && nextRoomUsers.B;
 
-  // UI は currentUser をそのまま表示（ここで currentUser をいじらない！）
+  // 🔑 ここがポイント：
+  // まだ currentUser が未選択なら Firebase の状態を見て自動で割り当てる
+  if (!currentUser) {
+    if (!nextRoomUsers.A) {
+      currentUser = 'A';
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+    } else if (!nextRoomUsers.B) {
+      currentUser = 'B';
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
+    }
+  }
+
   updateUserSelectDisplay();
   renderCalendar();
 });
