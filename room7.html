@@ -1005,14 +1005,14 @@ const userNamesRef = ref(db, `${roomName}/userNames`);
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
-  // 名前欄に反映
+  // 入力欄に反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
   // roomUsers 補完
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const snap = await get(roomUsersRef);
-  const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
+  const roomUsers = snap.exists() ? snap.val() : {};
   const updates = {};
   if (data.A && !roomUsers.A) updates.A = true;
   if (data.B && !roomUsers.B) updates.B = true;
@@ -1020,21 +1020,21 @@ onValue(userNamesRef, async (snapshot) => {
     await update(roomUsersRef, updates);
   }
 
-  // --- currentUser が未設定の場合のみ割り当て ---
+  // currentUser が未設定なら、名前がある方を割り当て
   if (!currentUser) {
-    if (data.A && !roomUsers.A) {
+    if (data.A) {
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
-      await update(roomUsersRef, { A: true });
-    } else if (data.B && !roomUsers.B) {
+    } else if (data.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
-      await update(roomUsersRef, { B: true });
+    } else {
+      currentUser = '';
     }
   }
 
+  // UI 更新は必ず currentUser 割り当て後
   updateUserSelectDisplay();
-  renderCalendar();
 });
 
 // --- ユーザー名入力イベント ---
