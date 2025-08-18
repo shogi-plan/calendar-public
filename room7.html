@@ -830,19 +830,24 @@ async function updateCallStatus(status) {
   }
 }
 
-// --- ユーザー選択表示を更新 ---
+let isRoomFull = false; // 満室表示用のフラグをグローバルに1つ
+
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
   const opt = document.createElement('option');
 
-  // currentUser があれば選択、無ければ未選択
   if (currentUser) {
-    opt.value = currentUser;
-    opt.textContent = currentUser; // A or B
+    // このブラウザで確定している側だけを表示
+    opt.value = currentUser;      // 'A' or 'B'
+    opt.textContent = currentUser;
+    userSelect.disabled = true;   // 表示専用にするなら true のままでOK
   } else {
+    // 未選択。満室なら「満室」を表示、そうでなければ「未選択」
     opt.value = '';
-    opt.textContent = '未選択';
+    opt.textContent = isRoomFull ? '満室' : '未選択';
+    userSelect.disabled = isRoomFull; // 満室のときだけ無効化
   }
+
   opt.selected = true;
   userSelect.appendChild(opt);
 
@@ -952,18 +957,11 @@ if (remoteStream) {
   }
 
 async function initializeUsers() {
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snapshot = await get(roomUsersRef);
-  const roomUsers = snapshot.exists() ? snapshot.val() : { A: false, B: false };
+  // このブラウザの選択は localStorage を真実とする
+  const saved = localStorage.getItem(`${roomName}_currentUser`);
+  currentUser = saved || '';
 
-  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-  currentUser = savedUser || '';
-
-  // savedUser がある場合は roomUsers を合わせる
-  if (currentUser && !roomUsers[currentUser]) {
-    await update(roomUsersRef, { [currentUser]: true });
-  }
-
+  // UI は currentUser だけで描画（roomUsers を参照して上書きしない）
   updateUserSelectDisplay();
   renderCalendar();
 }
@@ -1013,61 +1011,39 @@ listenSignaling();
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
-// --- 初期処理（firebase監視）
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
-  // 名前欄に反映
+  // 入力欄へ反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // roomUsers の状態を取得
-  const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : {};
+  // 名前の有無から roomUsers を毎回確定
+  const nextRoomUsers = {
+    A: !!data.A,
+    B: !!data.B
+  };
+  // 余計な読み取りをせず、常に set で上書き（仕様上「名前がある＝使用中」）
+  await set(ref(db, `${roomName}/roomUsers`), nextRoomUsers);
 
-  // --- 割り当てロジック ---
-  if (!currentUser) {
-    if (data.A && !data.B) {
-      // Aが埋まってるなら自分はB
-      currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
-      await update(ref(db, `${roomName}/roomUsers`), { B: true });
-    } else if (!data.A && data.B) {
-      // Bが埋まってるなら自分はA
-      currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-      await update(ref(db, `${roomName}/roomUsers`), { A: true });
-    } else if (data.A && data.B) {
-      // 両方埋まっている → 未選択のまま
-      currentUser = '';
-      localStorage.removeItem(`${roomName}_currentUser`);
-    }
-  }
+  // 満室フラグ更新（UI表示用）
+  isRoomFull = nextRoomUsers.A && nextRoomUsers.B;
 
+  // UI は currentUser をそのまま表示（ここで currentUser をいじらない！）
   updateUserSelectDisplay();
   renderCalendar();
 });
 
-// --- 名前入力時に currentUser を決め、roomUsers を更新 ---
 userANameInput.addEventListener('input', async () => {
   const name = userANameInput.value.trim();
   if (!name) {
     await remove(ref(db, `${roomName}/userNames/A`));
-    return;
-  }
-
-  await set(ref(db, `${roomName}/userNames/A`), name);
-
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snap = await get(roomUsersRef);
-  const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
-
-  if (!roomUsers.A) {
+  } else {
+    await set(ref(db, `${roomName}/userNames/A`), name);
+    // このブラウザはAに確定（他ブラウザは未選択のまま）
     currentUser = 'A';
-    await update(roomUsersRef, { A: true });
     localStorage.setItem(`${roomName}_currentUser`, 'A');
   }
-
   updateUserSelectDisplay();
 });
 
@@ -1075,21 +1051,12 @@ userBNameInput.addEventListener('input', async () => {
   const name = userBNameInput.value.trim();
   if (!name) {
     await remove(ref(db, `${roomName}/userNames/B`));
-    return;
-  }
-
-  await set(ref(db, `${roomName}/userNames/B`), name);
-
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snap = await get(roomUsersRef);
-  const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
-
-  if (!roomUsers.B) {
+  } else {
+    await set(ref(db, `${roomName}/userNames/B`), name);
+    // このブラウザはBに確定
     currentUser = 'B';
-    await update(roomUsersRef, { B: true });
     localStorage.setItem(`${roomName}_currentUser`, 'B');
   }
-
   updateUserSelectDisplay();
 });
 
