@@ -1016,24 +1016,24 @@ const userNamesRef = ref(db, `${roomName}/userNames`);
 // --- 初期処理（firebase監視）
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
+
+  // 名前欄に反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snap = await get(roomUsersRef);
-  const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
-  const updates = {};
+  // roomUsers の状態を取得
+  const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
+  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : {};
 
-  if (data.A && !roomUsers.A) updates.A = true;
-  if (data.B && !roomUsers.B) updates.B = true;
-  if (Object.keys(updates).length > 0) await update(roomUsersRef, updates);
-
-  // currentUser が未設定なら空きスロットを割り当て
+  // currentUser が未設定なら Firebase の状態から割り当て
   if (!currentUser) {
-    if (!roomUsers.A && data.A) currentUser = 'A';
-    else if (!roomUsers.B && data.B) currentUser = 'B';
-    else currentUser = '';
-    if (currentUser) localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    if (data.A && roomUsers.A) {
+      currentUser = 'A';
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+    } else if (data.B && roomUsers.B) {
+      currentUser = 'B';
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
+    }
   }
 
   updateUserSelectDisplay();
