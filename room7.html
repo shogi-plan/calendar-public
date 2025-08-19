@@ -831,39 +831,24 @@ async function updateCallStatus(status) {
 }
 
 // --- ユーザー選択表示を更新 ---
+// --- ユーザー選択表示を更新 ---
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
   const opt = document.createElement('option');
 
+  // currentUser があれば選択、無ければ未選択
   if (currentUser) {
     opt.value = currentUser;
-    opt.textContent = currentUser;
+    opt.textContent = currentUser; // A or B
+    userSelect.disabled = true;    // 常に非アクティブ
   } else {
     opt.value = '';
     opt.textContent = '未選択';
+    userSelect.disabled = true;    // 未選択でも非アクティブ
   }
+
   opt.selected = true;
   userSelect.appendChild(opt);
-
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  get(roomUsersRef).then(snap => {
-    const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
-
-    // 満室か currentUser が決まっている場合は非アクティブ
-    if ((roomUsers.A && roomUsers.B) || currentUser) {
-      userSelect.disabled = true;
-    } else {
-      userSelect.disabled = false;
-    }
-
-    // 両方埋まっている場合、満室表示も追加
-    if (roomUsers.A && roomUsers.B) {
-      const fullOpt = document.createElement('option');
-      fullOpt.value = 'full';
-      fullOpt.textContent = '満室';
-      userSelect.appendChild(fullOpt);
-    }
-  });
 }
 
 function resetUI() {
@@ -1030,28 +1015,52 @@ listenSignaling();
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
 // --- 初期処理（firebase監視）
+// --- 初期処理（firebase監視）
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
+  // 名前欄に反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
+  // roomUsers の状態を取得
   const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
+  // --- 割り当てロジック ---
   if (!currentUser) {
-    // まず A を優先
-    if (data.A && !roomUsers.A) {
-      currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-      await update(ref(db, `${roomName}/roomUsers`), { A: true });
-    } else if (data.B && !roomUsers.B) {
-      currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
-      await update(ref(db, `${roomName}/roomUsers`), { B: true });
+    if (data.A && !data.B) {
+      // A が既に埋まっている場合 → 自分は B
+      if (!roomUsers.B) {
+        currentUser = 'B';
+        localStorage.setItem(`${roomName}_currentUser`, 'B');
+        await update(ref(db, `${roomName}/roomUsers`), { B: true });
+      }
+    } else if (!data.A && data.B) {
+      // B が埋まっている場合 → 自分は A
+      if (!roomUsers.A) {
+        currentUser = 'A';
+        localStorage.setItem(`${roomName}_currentUser`, 'A');
+        await update(ref(db, `${roomName}/roomUsers`), { A: true });
+      }
     } else if (data.A && data.B) {
+      // 両方埋まっている → 未選択のまま
       currentUser = '';
       localStorage.removeItem(`${roomName}_currentUser`);
+    } else if (data.A) {
+      // A だけ名前がある → 自分は B
+      if (!roomUsers.B) {
+        currentUser = 'B';
+        localStorage.setItem(`${roomName}_currentUser`, 'B');
+        await update(ref(db, `${roomName}/roomUsers`), { B: true });
+      }
+    } else if (data.B) {
+      // B だけ名前がある → 自分は A
+      if (!roomUsers.A) {
+        currentUser = 'A';
+        localStorage.setItem(`${roomName}_currentUser`, 'A');
+        await update(ref(db, `${roomName}/roomUsers`), { A: true });
+      }
     }
   }
 
