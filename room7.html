@@ -1014,7 +1014,6 @@ listenSignaling();
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
-// --- 修正版 onValue(userNamesRef) ---
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
@@ -1022,28 +1021,26 @@ onValue(userNamesRef, async (snapshot) => {
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // roomUsers の状態を取得
-  const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
-  // --- 自ブラウザで currentUser が未設定の場合のみ割り当て ---
+  // 自ブラウザで currentUser が未決定の場合のみ割り当て
   if (!currentUser) {
-    let assignedUser = '';
-
     if (data.A && !roomUsers.A) {
-      assignedUser = 'A';
+      // 名前があり、Aが空いている場合は自分をAに
+      currentUser = 'A';
+      await update(roomUsersRef, { A: true });
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
     } else if (data.B && !roomUsers.B) {
-      assignedUser = 'B';
-    }
-
-    if (assignedUser) {
-      currentUser = assignedUser;
-      await update(ref(db, `${roomName}/roomUsers`), { [assignedUser]: true });
-      localStorage.setItem(`${roomName}_currentUser`, assignedUser);
+      // 名前があり、Bが空いている場合は自分をBに
+      currentUser = 'B';
+      await update(roomUsersRef, { B: true });
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
     }
   }
 
-  // UI更新
+  // ドロップダウン表示更新
   updateUserSelectDisplay();
   renderCalendar();
 });
