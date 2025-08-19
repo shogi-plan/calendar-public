@@ -1015,32 +1015,43 @@ listenSignaling();
 const userNamesRef = ref(db, `${roomName}/userNames`);
 
 // --- Firebase監視で名前取得
+// --- 初期処理（firebase監視）
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
+  // 名前欄に反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
+  // roomUsers の状態を取得
   const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : {};
 
-  // currentUser 未設定の時だけ自動割り当て
+  // --- 割り当てロジック ---
   if (!currentUser) {
     if (data.A && !data.B) {
+      // Aが存在 → currentUser は A に割り当て
       currentUser = 'A';
-      await update(ref(db, `${roomName}/roomUsers`), { A: true });
       localStorage.setItem(`${roomName}_currentUser`, 'A');
+      if (!roomUsers.A) {
+        await update(ref(db, `${roomName}/roomUsers`), { A: true });
+      }
     } else if (!data.A && data.B) {
+      // Bが存在 → currentUser は B に割り当て
       currentUser = 'B';
-      await update(ref(db, `${roomName}/roomUsers`), { B: true });
       localStorage.setItem(`${roomName}_currentUser`, 'B');
+      if (!roomUsers.B) {
+        await update(ref(db, `${roomName}/roomUsers`), { B: true });
+      }
     } else {
-      currentUser = ''; // 両方ある場合や両方ない場合は未選択
+      // 両方存在または両方空 → currentUser は未選択、roomUsers は変更しない
+      currentUser = '';
       localStorage.removeItem(`${roomName}_currentUser`);
     }
   }
 
   updateUserSelectDisplay();
+  renderCalendar();
 });
 
 userANameInput.addEventListener('input', async () => {
