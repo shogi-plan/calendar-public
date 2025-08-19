@@ -941,27 +941,34 @@ if (remoteStream) {
 
 async function initializeUsers() {
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const snapshot = await get(roomUsersRef);
-  const roomUsers = snapshot.exists() ? snapshot.val() : { A: false, B: false };
+  const roomUsersSnap = await get(roomUsersRef);
+  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
   const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
+  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
 
-  // 自動割り当てロジックを1箇所に集約
-  if (savedUser && !roomUsers[savedUser]) {
+  if (savedUser) {
+    // 保存済みユーザーを維持
     currentUser = savedUser;
-    await update(roomUsersRef, { [currentUser]: true });
-  } else if (!savedUser) {
-    if (roomUsers.A && !roomUsers.B) {
-      currentUser = 'B';
-      await update(roomUsersRef, { B: true });
-    } else if (!roomUsers.A && roomUsers.B) {
+    if (!roomUsers[currentUser]) {
+      await update(roomUsersRef, { [currentUser]: true });
+    }
+  } else {
+    // 名前が入力済みかつ空でない場合のみ割り当て
+    if (userNames.A && userNames.A.trim() !== '' && !roomUsers.A) {
       currentUser = 'A';
-      await update(roomUsersRef, { A: true });
+    } else if (userNames.B && userNames.B.trim() !== '' && !roomUsers.B) {
+      currentUser = 'B';
     } else {
       currentUser = '';
     }
+
     if (currentUser) {
+      await update(roomUsersRef, { [currentUser]: true });
       localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    } else {
+      localStorage.removeItem(`${roomName}_currentUser`);
     }
   }
 
@@ -1025,29 +1032,21 @@ onValue(userNamesRef, async (snapshot) => {
   const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
+  // --- 厳密な排他制御（最小限修正） ---
   if (!currentUser) {
-    // 1. 入力された名前を優先
-    if (userANameInput.value && !roomUsers.A) {
+    // 自ブラウザの localStorage に保存されていない場合のみ割り当て
+    if (data.A && !roomUsers.A) {
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
-      await update(roomUsersRef, { A: true });
-    } else if (userBNameInput.value && !roomUsers.B) {
+      await update(roomUsersRef, { A: true, B: false }); // B は false に固定
+    } else if (data.B && !roomUsers.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
-      await update(roomUsersRef, { B: true });
-    } 
-    // 2. 入力がない場合は従来ロジック
-    else if (!roomUsers.A) {
-      currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-      await update(roomUsersRef, { A: true });
-    } else if (!roomUsers.B) {
-      currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
-      await update(roomUsersRef, { B: true });
+      await update(roomUsersRef, { A: false, B: true }); // A は false に固定
     } else {
       currentUser = '';
       localStorage.removeItem(`${roomName}_currentUser`);
+      await update(roomUsersRef, { A: false, B: false });
     }
   }
 
