@@ -1024,35 +1024,27 @@ onValue(userNamesRef, async (snapshot) => {
 
   // roomUsers の状態を取得
   const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
+  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : {};
 
   // --- 割り当てロジック ---
   if (!currentUser) {
-    // A が空いている場合
+    // 名前が入力されている場合のみ自動割り当て
     if (data.A && !data.B && !roomUsers.B) {
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
       await update(ref(db, `${roomName}/roomUsers`), { B: true });
     } 
-    // B が空いている場合
     else if (!data.A && data.B && !roomUsers.A) {
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
       await update(ref(db, `${roomName}/roomUsers`), { A: true });
     } 
-    // 両方空いている場合、優先的に A を割り当て
+    // 両方空の場合は自動割り当てせず、currentUser は空
     else if (!data.A && !data.B) {
-      if (!roomUsers.A) {
-        currentUser = 'A';
-        localStorage.setItem(`${roomName}_currentUser`, 'A');
-        await update(ref(db, `${roomName}/roomUsers`), { A: true });
-      } else if (!roomUsers.B) {
-        currentUser = 'B';
-        localStorage.setItem(`${roomName}_currentUser`, 'B');
-        await update(ref(db, `${roomName}/roomUsers`), { B: true });
-      }
+      currentUser = '';
+      localStorage.removeItem(`${roomName}_currentUser`);
     } 
-    // 両方埋まっている場合 → 未選択
+    // 両方埋まっている場合も未選択
     else if (data.A && data.B) {
       currentUser = '';
       localStorage.removeItem(`${roomName}_currentUser`);
