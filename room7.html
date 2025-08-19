@@ -1017,34 +1017,29 @@ const userNamesRef = ref(db, `${roomName}/userNames`);
 // --- 初期処理（firebase監視）
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
+  const nameA = data.A || '';
+  const nameB = data.B || '';
 
-  // 名前欄に反映
-  userANameInput.value = data.A || '';
-  userBNameInput.value = data.B || '';
+  userANameInput.value = nameA;
+  userBNameInput.value = nameB;
 
-  // roomUsers の状態を取得（A/Bの空きだけを見る）
   const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
-  // --- 割り当てロジック ---
-  // 自ブラウザで currentUser が未決定のときだけ、空きを見て割り当てる
+  // currentUser がまだ決まっていない場合のみ、自動割り当て
   if (!currentUser) {
-    if (data.A && !roomUsers.A) {
-      // Aの名前が存在していて、Aが空いている → Aだけをtrueにする
+    if (nameA && !roomUsers.A) {
       currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
       await update(ref(db, `${roomName}/roomUsers`), { A: true });
-    } else if (data.B && !roomUsers.B) {
-      // Bの名前が存在していて、Bが空いている → Bだけをtrueにする
+      localStorage.setItem(`${roomName}_currentUser`, 'A');
+    } else if (nameB && !roomUsers.B) {
       currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
       await update(ref(db, `${roomName}/roomUsers`), { B: true });
+      localStorage.setItem(`${roomName}_currentUser`, 'B');
     }
-    // 両方埋まり or どちらの名前も未入力なら、currentUserは決めない（書き込まない）
   }
 
   updateUserSelectDisplay();
-  renderCalendar();
 });
 
 userANameInput.addEventListener('input', async () => {
