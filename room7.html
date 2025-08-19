@@ -1035,22 +1035,25 @@ onValue(userNamesRef, async (snapshot) => {
   // --- localStorage から currentUser を復元 ---
   if (!currentUser) {
     const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-    if (savedUser && roomUsers[savedUser]) {
-      currentUser = savedUser; // 自ブラウザで以前決定したユーザーを復元
+    if (savedUser) {
+      currentUser = savedUser;
+      // 自ブラウザで既に決定済みなら roomUsers に true を反映
+      if (!roomUsers[currentUser]) {
+        await update(roomUsersRef, { [currentUser]: true });
+      }
     } else {
-      // localStorage に値がなければ空き状況を確認して割り当て
+      // 自ブラウザで currentUser 未決定なら、名前取得に応じて割り当て
       if (data.A && !roomUsers.A) {
         currentUser = 'A';
-        await update(roomUsersRef, { A: true, B: false });
+        await update(roomUsersRef, { A: true });
+        localStorage.setItem(`${roomName}_currentUser`, 'A');
       } else if (data.B && !roomUsers.B) {
         currentUser = 'B';
-        await update(roomUsersRef, { A: false, B: true });
+        await update(roomUsersRef, { B: true });
+        localStorage.setItem(`${roomName}_currentUser`, 'B');
       } else {
         currentUser = '';
-        await update(roomUsersRef, { A: false, B: false });
       }
-
-      if (currentUser) localStorage.setItem(`${roomName}_currentUser`, currentUser);
     }
   }
 
