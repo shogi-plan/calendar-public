@@ -1028,14 +1028,16 @@ onValue(userNamesRef, async (snapshot) => {
   // --- 割り当てロジック ---
   if (!currentUser) {
     if (data.A && !roomUsers.A) {
-      // 自ブラウザで A が空いていれば割当
+      // 空いているAを自ブラウザに割り当て
       currentUser = 'A';
       localStorage.setItem(`${roomName}_currentUser`, 'A');
+      // Aだけ true に書き込む
       await update(ref(db, `${roomName}/roomUsers`), { A: true });
     } else if (data.B && !roomUsers.B) {
-      // 自ブラウザで B が空いていれば割当
+      // 空いているBを自ブラウザに割り当て
       currentUser = 'B';
       localStorage.setItem(`${roomName}_currentUser`, 'B');
+      // Bだけ true に書き込む
       await update(ref(db, `${roomName}/roomUsers`), { B: true });
     }
     // 両方埋まっていれば currentUser は空のまま
