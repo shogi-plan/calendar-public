@@ -1025,22 +1025,25 @@ onValue(userNamesRef, async (snapshot) => {
   const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
-  // 自ブラウザで currentUser が未決定の場合のみ割り当て
+  // --- 厳密な排他制御 ---
   if (!currentUser) {
     if (data.A && !roomUsers.A) {
-      // 名前があり、Aが空いている場合は自分をAに
+      // A が空いていれば A を割り当て
       currentUser = 'A';
-      await update(roomUsersRef, { A: true });
       localStorage.setItem(`${roomName}_currentUser`, 'A');
+      await update(roomUsersRef, { A: true });
     } else if (data.B && !roomUsers.B) {
-      // 名前があり、Bが空いている場合は自分をBに
+      // B が空いていれば B を割り当て
       currentUser = 'B';
-      await update(roomUsersRef, { B: true });
       localStorage.setItem(`${roomName}_currentUser`, 'B');
+      await update(roomUsersRef, { B: true });
+    } else {
+      // 両方埋まっている場合は未選択
+      currentUser = '';
+      localStorage.removeItem(`${roomName}_currentUser`);
     }
   }
 
-  // ドロップダウン表示更新
   updateUserSelectDisplay();
   renderCalendar();
 });
