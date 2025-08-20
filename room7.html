@@ -819,35 +819,34 @@ async function updateCallStatus(status) {
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
 
-  const optionEmpty = document.createElement('option');
-  optionEmpty.value = '';
-  optionEmpty.textContent = '未選択';
-  optionEmpty.selected = currentUser === '';
-  userSelect.appendChild(optionEmpty);
+  // 手動変更可能にするため、常に有効
+  userSelect.disabled = false;
 
-  const optionA = document.createElement('option');
-  optionA.value = 'A';
-  optionA.textContent = 'A';
-  optionA.selected = currentUser === 'A';
-  userSelect.appendChild(optionA);
+  // 選択肢は固定
+  const options = [
+    { value: '', text: '未選択' },
+    { value: 'A', text: 'A' },
+    { value: 'B', text: 'B' }
+  ];
 
-  const optionB = document.createElement('option');
-  optionB.value = 'B';
-  optionB.textContent = 'B';
-  optionB.selected = currentUser === 'B';
-  userSelect.appendChild(optionB);
-
-  userSelect.disabled = false; // 手動変更を常に可能にする
+  options.forEach(optData => {
+    const opt = document.createElement('option');
+    opt.value = optData.value;
+    opt.textContent = optData.text;
+    if (currentUser === optData.value) opt.selected = true;
+    userSelect.appendChild(opt);
+  });
 }
 
-// --- ユーザー選択変更イベント ---
-userSelect.addEventListener('change', (e) => {
+// --- ドロップダウン変更イベント ---
+userSelect.addEventListener('change', e => {
   const val = e.target.value;
-  if (val === '' || val === currentUser) return;
-
   currentUser = val;
-  localStorage.setItem(`${roomName}_currentUser`, currentUser);
-  updateUserSelectDisplay();
+  if (val) {
+    localStorage.setItem(`${roomName}_currentUser`, val);
+  } else {
+    localStorage.removeItem(`${roomName}_currentUser`);
+  }
 });
 
 function resetUI() {
@@ -944,13 +943,15 @@ async function initializeUsers() {
   const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
-  // localStorage から currentUser 復元
   const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
+  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
 
   if (savedUser) {
+    // 保存済みユーザーを維持
     currentUser = savedUser;
   } else {
-    // 未設定なら roomUsers を参照して割り当て
+    // currentUser 未設定時のみ自動割り当て
     if (roomUsers.A && !roomUsers.B) {
       currentUser = 'A';
     } else if (roomUsers.B && !roomUsers.A) {
@@ -958,14 +959,17 @@ async function initializeUsers() {
     } else if (roomUsers.A && roomUsers.B) {
       currentUser = 'B'; // 両方 true の場合は B を優先
     } else {
-      currentUser = ''; // どちらも false なら未選択
+      currentUser = ''; // 未選択
     }
+
     if (currentUser) {
       localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    } else {
+      localStorage.removeItem(`${roomName}_currentUser`);
     }
   }
 
-  // ユーザー選択表示を更新（手動でも変更可能）
+  // --- ドロップダウン選択肢を常に A/B にして更新 ---
   updateUserSelectDisplay();
 }
 
