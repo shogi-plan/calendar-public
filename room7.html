@@ -1017,30 +1017,36 @@ const userNamesRef = ref(db, `${roomName}/userNames`);
 onValue(userNamesRef, async (snapshot) => {
   const data = snapshot.val() || {};
 
+  // 名前欄に反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
+  // roomUsers を取得（読み込みのみ）
   const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
+  // currentUser が未決定の場合のみ割り当て
   if (!currentUser) {
     const savedUser = localStorage.getItem(`${roomName}_currentUser`);
     if (savedUser) {
       currentUser = savedUser;
-      // Firebase には書き込まない
+      // 書き込みは行わない
     } else {
-      if (data.A && !roomUsers.A) {
+      // 名前が入力済みかつ空いている方を優先的に割り当て
+      if (data.A && data.A.trim() !== '' && !roomUsers.A) {
         currentUser = 'A';
         localStorage.setItem(`${roomName}_currentUser`, 'A');
-      } else if (data.B && !roomUsers.B) {
+      } else if (data.B && data.B.trim() !== '' && !roomUsers.B) {
         currentUser = 'B';
         localStorage.setItem(`${roomName}_currentUser`, 'B');
       } else {
         currentUser = '';
+        localStorage.removeItem(`${roomName}_currentUser`);
       }
     }
   }
 
+  // UI を更新
   updateUserSelectDisplay();
   renderCalendar();
 });
