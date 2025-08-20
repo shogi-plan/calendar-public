@@ -946,46 +946,33 @@ async function initializeUsers() {
   const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
-  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
-  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
-
-  // localStorage から保存済み currentUser を復元
   const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+
   if (savedUser) {
+    // 自ブラウザで currentUser が決まっていれば維持
     currentUser = savedUser;
   } else {
-    // currentUser 未設定で、roomUsers に true がある方を選択
-    if (!currentUser) {
-      if (roomUsers.A) {
-        currentUser = 'A';
-      } else if (roomUsers.B) {
-        currentUser = 'B';
-      } else {
-        currentUser = '';
-      }
+    // 未選択の場合のみ自動割り当て
+    if (roomUsers.A && !roomUsers.B) {
+      currentUser = 'A';
+    } else if (roomUsers.B && !roomUsers.A) {
+      currentUser = 'B';
+    } else if (roomUsers.A && roomUsers.B) {
+      // 両方埋まっている場合はBを割り当て
+      currentUser = 'B';
+    } else {
+      currentUser = '';
+    }
+
+    // 自動割り当てした場合は localStorage に保存
+    if (currentUser) {
+      localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    } else {
+      localStorage.removeItem(`${roomName}_currentUser`);
     }
   }
 
-  // ドロップダウンリスト更新
-  userSelect.innerHTML = '';
-  ['A', 'B'].forEach(u => {
-    const opt = document.createElement('option');
-    opt.value = u;
-    opt.textContent = u;
-    if (currentUser === u) opt.selected = true;
-    userSelect.appendChild(opt);
-  });
-  if (!currentUser) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '未選択';
-    opt.selected = true;
-    userSelect.prepend(opt);
-  }
-
-  userSelect.disabled = false; // 手動変更可能
-
-  renderCalendar();
+  updateUserSelectDisplay();
 }
 
 // --- DOMContentLoaded で初期化 ---
