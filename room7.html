@@ -818,27 +818,23 @@ async function updateCallStatus(status) {
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
 
-  // 固定で A と B を表示
-  const options = ['A', 'B'];
-
-  options.forEach(optValue => {
-    const opt = document.createElement('option');
-    opt.value = optValue;
-    opt.textContent = optValue;
-    if (currentUser === optValue) {
-      opt.selected = true;
-    }
-    userSelect.appendChild(opt);
-  });
-
-  // 未選択用のオプションも追加
+  // 未選択オプションを先頭に追加
   const noneOpt = document.createElement('option');
   noneOpt.value = '';
   noneOpt.textContent = '未選択';
   if (!currentUser) noneOpt.selected = true;
-  userSelect.insertBefore(noneOpt, userSelect.firstChild);
+  userSelect.appendChild(noneOpt);
 
-  // 手動変更可能
+  // 固定で A と B のオプション
+  ['A', 'B'].forEach(optValue => {
+    const opt = document.createElement('option');
+    opt.value = optValue;
+    opt.textContent = optValue;
+    if (currentUser === optValue) opt.selected = true;
+    userSelect.appendChild(opt);
+  });
+
+  // 手動変更可能にする
   userSelect.disabled = false;
 }
 
@@ -952,8 +948,9 @@ async function initializeUsers() {
 
   // 自ブラウザで currentUser が未設定の場合のみ自動割り当て
   if (!currentUser) {
+    // 両方 true の場合は B を優先
     if (roomUsers.A && roomUsers.B) {
-      currentUser = 'B';  // 両方 true の場合は B を優先
+      currentUser = 'B';
     } else if (roomUsers.A) {
       currentUser = 'A';
     } else if (roomUsers.B) {
@@ -963,7 +960,6 @@ async function initializeUsers() {
     }
   }
 
-  // ドロップダウンを更新（手動変更可能なまま）
   updateUserSelectDisplay();
 }
 
