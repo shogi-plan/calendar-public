@@ -129,9 +129,11 @@
       }
     }
   </style>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getDatabase, ref, get, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+ <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+  import { 
+    getDatabase, ref, get, remove, update, onValue, push, runTransaction 
+  } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
@@ -216,11 +218,55 @@
       }
 
       async function joinRoom(num, slot) {
-        if (!myUserName) return alert("先にユーザー名を入力してください");
-        await update(ref(db, `room${num}/roomUsers`), { [slot]: true });
-        await update(ref(db, `room${num}/userNames`), { [slot]: myUserName });
-        window.location.href = `room${num}.html`;
+  if (!myUserName || !myUserName.trim()) {
+    alert("先にユーザー名を入力してください");
+    return;
+  }
+
+  const roomRef = ref(db, `room${num}`);
+
+  try {
+    const result = await runTransaction(roomRef, (roomData) => {
+      // 初期化（安全に既存データを尊重しつつ不足を補う）
+      if (roomData == null || typeof roomData !== "object") {
+        roomData = {};
       }
+      if (!roomData.roomUsers || typeof roomData.roomUsers !== "object") {
+        roomData.roomUsers = { A: false, B: false };
+      } else {
+        // 片方だけ存在などの歪みを補正
+        roomData.roomUsers.A = roomData.roomUsers.A === true;
+        roomData.roomUsers.B = roomData.roomUsers.B === true;
+      }
+      if (!roomData.userNames || typeof roomData.userNames !== "object") {
+        roomData.userNames = { A: "", B: "" };
+      } else {
+        if (typeof roomData.userNames.A !== "string") roomData.userNames.A = "";
+        if (typeof roomData.userNames.B !== "string") roomData.userNames.B = "";
+      }
+
+      // 既に埋まっていれば更新せず中断（committed=false になる）
+      if (roomData.roomUsers[slot] === true) {
+        return; // 変更なし
+      }
+
+      // 席確保＋名前登録を同時に行う
+      roomData.roomUsers[slot] = true;
+      roomData.userNames[slot] = myUserName;
+
+      return roomData; // これがDBに反映される
+    });
+
+    if (result.committed) {
+      window.location.href = `room${num}.html`;
+    } else {
+      alert("入室に失敗しました。他の人が先に入室しました。");
+    }
+  } catch (e) {
+    console.error("入室処理でエラー:", e);
+    alert("入室処理でエラーが発生しました");
+  }
+}
 
       document.getElementById("sendBtn").addEventListener("click", async () => {
         if (!myUserName || !chatInput.value.trim()) return;
