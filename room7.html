@@ -946,28 +946,16 @@ async function initializeUsers() {
   const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
-  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-
-  if (savedUser) {
-    // 自ブラウザで currentUser が決まっていれば維持
-    currentUser = savedUser;
-  } else {
-    // 未選択の場合のみ自動割り当て
+  // 自ブラウザで currentUser が未選択の場合のみ自動割り当て
+  if (!currentUser) {
     if (roomUsers.A && roomUsers.B) {
-      currentUser = 'B'; // 両方埋まっている場合はB
+      currentUser = 'B';  // 両方 true の場合は B を設定
     } else if (roomUsers.A) {
       currentUser = 'A';
     } else if (roomUsers.B) {
       currentUser = 'B';
     } else {
-      currentUser = '';
-    }
-
-    // 自動割り当てした場合は localStorage に保存
-    if (currentUser) {
-      localStorage.setItem(`${roomName}_currentUser`, currentUser);
-    } else {
-      localStorage.removeItem(`${roomName}_currentUser`);
+      currentUser = '';  // 両方 false の場合は未選択
     }
   }
 
