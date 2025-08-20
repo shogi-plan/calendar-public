@@ -105,7 +105,7 @@
   <label>ユーザーA：<input type="text" id="userAName" autocomplete="off" /></label>
   <label>ユーザーB：<input type="text" id="userBName" autocomplete="off" /></label>
   <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span>
-  <select id="userSelect" disabled>
+  <select id="userSelect">
   <option value="">未選択</option>
   <option value="A">ユーザーA</option>
   <option value="B">ユーザーB</option>
@@ -213,15 +213,7 @@ let localCallStartPressed = false;
 const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const signalingRef = ref(db, `${roomName}/signaling`);
 
-// ページロード時の currentUser 設定
 let currentUser = localStorage.getItem(`${roomName}_currentUser`) || '';
-
-// UI の選択状態に反映
-if (currentUser) {
-  userSelect.value = currentUser;   // <select> の選択状態をセット
-  userSelect.disabled = true;       // 完全無効化する場合
-}
-
 let selectedCells = new Set();
 let currentWeekOffset = 0;
 let holidays = {};
@@ -390,6 +382,7 @@ async function clearAllData() {
 
   isClearingData = true; // フラグON
 
+  // Firebase のデータ削除
   await remove(ref(db, `${roomName}/userNames`));
   await remove(ref(db, `${roomName}/schedules`));
   await remove(ref(db, `${roomName}/chatLog`));
@@ -403,33 +396,31 @@ async function clearAllData() {
   });
   await remove(ref(db, `${roomName}/signaling`));
 
+  // 入力欄クリア
   userANameInput.value = '';
   userBNameInput.value = '';
+
+  // 選択セルリセット
   selectedCells.clear();
+
+  // localStorage / currentUser をリセット
   localStorage.removeItem(`${roomName}_currentUser`);
   currentUser = '';
-  userSelect.innerHTML = '<option value="" selected>未選択</option>';
-  userSelect.disabled = true;
 
+  // sessionStorage やロックフラグのリセット
+  sessionStorage.setItem('wasCleared', '1');
+  lockedUserA = false;
+  lockedUserB = false;
+
+  // ドロップダウンリストを固定項目に戻す
+  updateUserSelectDisplay();
+
+  // 通話ステータスもリセット
   updateCallStatusUI('none');
 
   isClearingData = false; // フラグOFF
+}
 
-  await remove(ref(db, `${roomName}/signaling`));
-  selectedCells.clear();
-  localStorage.removeItem(`${roomName}_currentUser`);
-sessionStorage.setItem('wasCleared', '1');
-
-lockedUserA = false;
-lockedUserB = false;
-
-  currentUser = '';
-  
-  userSelect.innerHTML = '<option value="" selected>未選択</option>';
-  userSelect.disabled = true;
-  
-  updateCallStatusUI('none');
-  }
   async function startLocalStream() {
   if (localStream) {
     localStream.getTracks().forEach(track => track.stop());
@@ -830,26 +821,51 @@ async function updateCallStatus(status) {
   }
 }
 
-// --- ユーザー選択表示を更新 ---
-// --- ユーザー選択表示を更新 ---
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
-  const opt = document.createElement('option');
 
-  // currentUser があれば選択、無ければ未選択
-  if (currentUser) {
-    opt.value = currentUser;
-    opt.textContent = currentUser; // A or B
-    userSelect.disabled = true;    // 常に非アクティブ
+  // A の選択肢
+  const optionA = document.createElement('option');
+  optionA.value = 'A';
+  optionA.textContent = 'A';
+  userSelect.appendChild(optionA);
+
+  // B の選択肢
+  const optionB = document.createElement('option');
+  optionB.value = 'B';
+  optionB.textContent = 'B';
+  userSelect.appendChild(optionB);
+
+  // 未選択オプション
+  const optionNone = document.createElement('option');
+  optionNone.value = '';
+  optionNone.textContent = '未選択';
+  userSelect.appendChild(optionNone);
+
+  // currentUser があれば選択状態にする
+  if (currentUser === 'A' || currentUser === 'B') {
+    userSelect.value = currentUser;
   } else {
-    opt.value = '';
-    opt.textContent = '未選択';
-    userSelect.disabled = true;    // 未選択でも非アクティブ
+    userSelect.value = '';
   }
 
-  opt.selected = true;
-  userSelect.appendChild(opt);
+  // ドロップダウンは常に有効
+  userSelect.disabled = false;
 }
+
+// --- ドロップダウン手動変更イベント ---
+userSelect.addEventListener('change', async (e) => {
+  const val = e.target.value;
+  if (val === '') {
+    currentUser = '';
+    localStorage.removeItem(`${roomName}_currentUser`);
+    return;
+  }
+
+  // 選択されたユーザーを currentUser に反映
+  currentUser = val;
+  localStorage.setItem(`${roomName}_currentUser`, currentUser);
+});
 
 function resetUI() {
   localCallStartPressed = false;
@@ -940,31 +956,23 @@ if (remoteStream) {
   }
 
 async function initializeUsers() {
+  // Firebase の roomUsers を読み込むだけ
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
+  // localStorage から currentUser を復元（自動割り当ては不要）
   const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
-  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
-
   if (savedUser) {
     currentUser = savedUser;
-    // roomUsers への書き込みはしない
   } else {
-    if (userNames.A && userNames.A.trim() !== '' && !roomUsers.A) {
-      currentUser = 'A';
-    } else if (userNames.B && userNames.B.trim() !== '' && !roomUsers.B) {
-      currentUser = 'B';
-    } else {
-      currentUser = '';
-    }
+    currentUser = '';
+  }
 
-    if (currentUser) {
-      localStorage.setItem(`${roomName}_currentUser`, currentUser);
-    } else {
-      localStorage.removeItem(`${roomName}_currentUser`);
-    }
+  // currentUser が未選択で、Firebase の roomUsers に A または B が true の場合は選択状態に反映
+  if (!currentUser) {
+    if (roomUsers.A) currentUser = 'A';
+    else if (roomUsers.B) currentUser = 'B';
   }
 
   updateUserSelectDisplay();
@@ -976,80 +984,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initializeUsers();
 });
 
-// 完全無効化する場合、change は実質使わないが残す
-userSelect.addEventListener('change', async e => {
-  const val = e.target.value;
-  if (val === '') return;
-
-  if (sessionStorage.getItem('wasCleared') === '1') {
-    sessionStorage.removeItem('wasCleared');
-  }
-
-  const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : {};
-
-  if (val === 'A') {
-    if (!roomUsers.A) {
-      currentUser = 'A';
-      localStorage.setItem(`${roomName}_currentUser`, 'A');
-      userSelect.disabled = true;
-    } else {
-      alert('ユーザーAは既に入力済みです');
-      e.target.value = '';
-    }
-  } else if (val === 'B') {
-    if (!roomUsers.B) {
-      currentUser = 'B';
-      localStorage.setItem(`${roomName}_currentUser`, 'B');
-      userSelect.disabled = true;
-    } else {
-      alert('ユーザーBは既に入力済みです');
-      e.target.value = '';
-    }
-  }
-});
-
 initializeUsers();
 listenSignaling();
 
 const userNamesRef = ref(db, `${roomName}/userNames`);
-
-onValue(userNamesRef, async (snapshot) => {
+onValue(userNamesRef, (snapshot) => {
   const data = snapshot.val() || {};
-
-  // 名前欄に反映
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // roomUsers を取得（読み込みのみ）
-  const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
-
-  // currentUser が未決定の場合のみ割り当て
+  // 👇 修正：両方 false の場合は割り当てしない
   if (!currentUser) {
-    const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+    get(ref(db, `${roomName}/roomUsers`)).then((snap) => {
+      const roomUsers = snap.val() || { A: false, B: false };
 
-    if (savedUser) {
-      currentUser = savedUser;
-      // 書き込みは行わない
-    } else {
-      // 名前が入力済みかつ roomUsers が false の方を優先して割り当て
-      if (data.A && data.A.trim() !== '' && roomUsers.A === false) {
-        currentUser = 'A';
-        localStorage.setItem(`${roomName}_currentUser`, 'A');
-      } else if (data.B && data.B.trim() !== '' && roomUsers.B === false) {
-        currentUser = 'B';
-        localStorage.setItem(`${roomName}_currentUser`, 'B');
-      } else {
-        currentUser = '';
-        localStorage.removeItem(`${roomName}_currentUser`);
+      if (roomUsers.A === false && roomUsers.B === false) {
+        // 誰も入ってないときは自動割り当てしない
+        return;
       }
-    }
-  }
 
-  // UI を更新
-  updateUserSelectDisplay();
-  renderCalendar();
+      if (!roomUsers.A) {
+        currentUser = 'A';
+      } else if (!roomUsers.B) {
+        currentUser = 'B';
+      }
+
+      if (currentUser) {
+        localStorage.setItem(`${roomName}_currentUser`, currentUser);
+        userSelect.value = currentUser;
+        updateUserSelectDisplay();
+      }
+    });
+  }
 });
 
 userANameInput.addEventListener('input', async () => {
@@ -1058,19 +1024,7 @@ userANameInput.addEventListener('input', async () => {
     await remove(ref(db, `${roomName}/userNames/A`));
     return;
   }
-
   await set(ref(db, `${roomName}/userNames/A`), name);
-
-  const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
-
-  if (!currentUser && !roomUsers.A) {
-    currentUser = 'A';
-    localStorage.setItem(`${roomName}_currentUser`, 'A');
-    // Firebase には書き込まない
-  }
-
-  updateUserSelectDisplay();
 });
 
 userBNameInput.addEventListener('input', async () => {
@@ -1079,19 +1033,7 @@ userBNameInput.addEventListener('input', async () => {
     await remove(ref(db, `${roomName}/userNames/B`));
     return;
   }
-
   await set(ref(db, `${roomName}/userNames/B`), name);
-
-  const roomUsersSnap = await get(ref(db, `${roomName}/roomUsers`));
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
-
-  if (!currentUser && !roomUsers.B) {
-    currentUser = 'B';
-    localStorage.setItem(`${roomName}_currentUser`, 'B');
-    // Firebase には書き込まない
-  }
-
-  updateUserSelectDisplay();
 });
 
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
