@@ -816,25 +816,29 @@ async function updateCallStatus(status) {
 }
 
 function updateUserSelectDisplay() {
-  userSelect.innerHTML = ''; // 一旦クリア
+  userSelect.innerHTML = '';
 
-  // 未選択項目を追加
-  const optNone = document.createElement('option');
-  optNone.value = '';
-  optNone.textContent = '未選択';
-  optNone.selected = !currentUser; // currentUser が未設定なら選択
-  userSelect.appendChild(optNone);
+  // 固定で A と B を表示
+  const options = ['A', 'B'];
 
-  // 固定で A, B の候補を追加
-  ['A', 'B'].forEach(u => {
+  options.forEach(optValue => {
     const opt = document.createElement('option');
-    opt.value = u;
-    opt.textContent = u;
-    if (currentUser === u) opt.selected = true;
+    opt.value = optValue;
+    opt.textContent = optValue;
+    if (currentUser === optValue) {
+      opt.selected = true;
+    }
     userSelect.appendChild(opt);
   });
 
-  // ドロップダウンは常に操作可能にする
+  // 未選択用のオプションも追加
+  const noneOpt = document.createElement('option');
+  noneOpt.value = '';
+  noneOpt.textContent = '未選択';
+  if (!currentUser) noneOpt.selected = true;
+  userSelect.insertBefore(noneOpt, userSelect.firstChild);
+
+  // 手動変更可能
   userSelect.disabled = false;
 }
 
@@ -946,19 +950,20 @@ async function initializeUsers() {
   const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
-  // 自ブラウザで currentUser が未選択の場合のみ自動割り当て
+  // 自ブラウザで currentUser が未設定の場合のみ自動割り当て
   if (!currentUser) {
     if (roomUsers.A && roomUsers.B) {
-      currentUser = 'B';  // 両方 true の場合は B を設定
+      currentUser = 'B';  // 両方 true の場合は B を優先
     } else if (roomUsers.A) {
       currentUser = 'A';
     } else if (roomUsers.B) {
       currentUser = 'B';
     } else {
-      currentUser = '';  // 両方 false の場合は未選択
+      currentUser = ''; // 両方 false の場合は未選択
     }
   }
 
+  // ドロップダウンを更新（手動変更可能なまま）
   updateUserSelectDisplay();
 }
 
