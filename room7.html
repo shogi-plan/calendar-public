@@ -953,12 +953,11 @@ async function initializeUsers() {
     currentUser = savedUser;
   } else {
     // 未選択の場合のみ自動割り当て
-    if (roomUsers.A && !roomUsers.B) {
+    if (roomUsers.A && roomUsers.B) {
+      currentUser = 'B'; // 両方埋まっている場合はB
+    } else if (roomUsers.A) {
       currentUser = 'A';
-    } else if (roomUsers.B && !roomUsers.A) {
-      currentUser = 'B';
-    } else if (roomUsers.A && roomUsers.B) {
-      // 両方埋まっている場合はBを割り当て
+    } else if (roomUsers.B) {
       currentUser = 'B';
     } else {
       currentUser = '';
