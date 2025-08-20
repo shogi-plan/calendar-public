@@ -1028,15 +1028,16 @@ onValue(userNamesRef, async (snapshot) => {
   // currentUser が未決定の場合のみ割り当て
   if (!currentUser) {
     const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+
     if (savedUser) {
       currentUser = savedUser;
       // 書き込みは行わない
     } else {
-      // 名前が入力済みかつ空いている方を優先的に割り当て
-      if (data.A && data.A.trim() !== '' && !roomUsers.A) {
+      // 名前が入力済みかつ roomUsers が false の方を優先して割り当て
+      if (data.A && data.A.trim() !== '' && roomUsers.A === false) {
         currentUser = 'A';
         localStorage.setItem(`${roomName}_currentUser`, 'A');
-      } else if (data.B && data.B.trim() !== '' && !roomUsers.B) {
+      } else if (data.B && data.B.trim() !== '' && roomUsers.B === false) {
         currentUser = 'B';
         localStorage.setItem(`${roomName}_currentUser`, 'B');
       } else {
