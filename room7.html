@@ -117,7 +117,7 @@
   <button id="btn-mark-ok">選択セルに○</button>
   <button id="btn-mark-no">選択セルに×</button>
   <button id="btn-clear-cell">選択セルを削除</button>
-  <button id="btn-clear-all">全データ削除</button>
+  <button id="btn-clear-all">退室</button>
 </div>
 
 <div class="controls">
@@ -378,7 +378,7 @@ async function clearSelectedCells() {
   let isClearingData = false;
 
 async function clearAllData() {
-  if (!confirm('本当に全てのデータを削除しますか？')) return;
+  if (!confirm('全てのデータを削除して、退室しますか？')) return;
 
   isClearingData = true; // フラグON
 
@@ -413,6 +413,9 @@ async function clearAllData() {
   sessionStorage.setItem('wasCleared', '1');
   lockedUserA = false;
   lockedUserB = false;
+  
+  // ブラウザバックで前のページに戻る
+  history.back();
 }
 
   async function startLocalStream() {
@@ -842,11 +845,15 @@ function updateUserSelectDisplay() {
 userSelect.addEventListener('change', e => {
   const val = e.target.value;
   currentUser = val;
+
   if (val) {
     localStorage.setItem(`${roomName}_currentUser`, val);
   } else {
     localStorage.removeItem(`${roomName}_currentUser`);
   }
+
+  // 手動で変更した場合のみリロード
+  window.location.reload();
 });
 
 function resetUI() {
