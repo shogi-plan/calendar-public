@@ -995,23 +995,41 @@ onValue(userNamesRef, (snapshot) => {
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // currentUser が未設定の場合のみ自動割り当て
-  if (!currentUser) {
-    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-    get(roomUsersRef).then((snap) => {
-      const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
-      if (roomUsers.A && !roomUsers.B) {
-        currentUser = 'A';
-      } else if (roomUsers.B && !roomUsers.A) {
-        currentUser = 'B';
-      } else if (roomUsers.A && roomUsers.B) {
-        currentUser = 'B'; // 両方 true の場合は B を優先
-      } else {
-        currentUser = '';
-      }
-      updateUserSelectDisplay();
-    });
+  // すでに currentUser が決まっていたら何もしない
+  if (currentUser) return;
+
+  // localStorage に保存されているか確認
+  const storedUser = localStorage.getItem(`${roomName}_currentUser`);
+  if (storedUser) {
+    currentUser = storedUser;
+    userSelect.value = currentUser;
+    updateUserSelectDisplay();
+    return;
   }
+
+  // localStorage にも currentUser が無い場合のみ、roomUsers を見て自動割り当て
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  get(roomUsersRef).then((snap) => {
+    const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
+
+    // 割り当てロジック
+    if (roomUsers.A && !roomUsers.B) {
+      currentUser = 'A';
+    } else if (roomUsers.B && !roomUsers.A) {
+      currentUser = 'B';
+    } else if (roomUsers.A && roomUsers.B) {
+      currentUser = 'B'; // 両方 true の場合は B を優先
+    } else {
+      currentUser = '';  // 両方 false の場合は未選択のまま
+    }
+
+    // 選ばれた場合のみ localStorage に保存
+    if (currentUser) {
+      localStorage.setItem(`${roomName}_currentUser`, currentUser);
+      userSelect.value = currentUser;
+    }
+    updateUserSelectDisplay();
+  });
 });
 
 userANameInput.addEventListener('input', async () => {
