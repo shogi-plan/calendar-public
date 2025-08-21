@@ -261,10 +261,12 @@
       window.location.href = `room${num}.html`;
     } else {
       alert("入室に失敗しました。他の人が先に入室しました。");
+      window.location.reload();
     }
   } catch (e) {
     console.error("入室処理でエラー:", e);
     alert("入室処理でエラーが発生しました");
+    window.location.reload();
   }
 }
 
