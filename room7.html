@@ -818,7 +818,7 @@ async function updateCallStatus(status) {
   }
 }
 
-// --- ユーザー選択表示更新 ---
+// --- ユーザー選択ドロップダウンの表示更新 ---
 function updateUserSelectDisplay() {
   userSelect.innerHTML = '';
 
@@ -988,49 +988,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 initializeUsers();
 listenSignaling();
 
-// --- userNames 変更監視 ---
-const userNamesRef = ref(db, `${roomName}/userNames`);
+// --- Firebase userNames の監視 ---
 onValue(userNamesRef, (snapshot) => {
   const data = snapshot.val() || {};
   userANameInput.value = data.A || '';
   userBNameInput.value = data.B || '';
 
-  // すでに決まっている場合は何もしない（ブラウザごとに固定）
-  if (currentUser) return;
+  // currentUser が未設定の場合のみ自動割り当て
+  if (!currentUser) {
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    get(roomUsersRef).then((snap) => {
+      const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
 
-  // localStorage に保存されているか確認
-  const storedUser = localStorage.getItem(`${roomName}_currentUser`);
-  if (storedUser !== null) {
-    currentUser = storedUser;
-    userSelect.value = currentUser;
-    updateUserSelectDisplay();
-    return;
+      // 優先順: B > A > 未選択
+      if (roomUsers.B) {
+        currentUser = 'B';
+      } else if (roomUsers.A) {
+        currentUser = 'A';
+      } else {
+        currentUser = ''; // 未選択
+      }
+
+      updateUserSelectDisplay();
+    });
   }
-
-  // localStorage にも currentUser が無い場合のみ、自動割り当て
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  get(roomUsersRef).then((snap) => {
-    const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
-
-    if (roomUsers.A && !roomUsers.B) {
-      currentUser = 'A';
-    } else if (roomUsers.B && !roomUsers.A) {
-      currentUser = 'B';
-    } else if (roomUsers.A && roomUsers.B) {
-      currentUser = 'B'; // 両方 true の場合は B 優先
-    } else {
-      currentUser = ''; // 両方 false → 未選択
-    }
-
-    // 自動決定した場合のみ localStorage に保存
-    if (currentUser) {
-      localStorage.setItem(`${roomName}_currentUser`, currentUser);
-      userSelect.value = currentUser;
-    }
-    updateUserSelectDisplay();
-  });
 });
 
+// --- ユーザー名変更時の Firebase 更新 ---
 userANameInput.addEventListener('input', async () => {
   const name = userANameInput.value.trim();
   if (!name) {
