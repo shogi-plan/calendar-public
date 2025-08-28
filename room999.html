@@ -1,0 +1,2370 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>2人予定調整カレンダー + オンライン将棋</title>
+<style>
+  /* ===== 共通（コード① の CSS） ===== */
+  body {
+    font-family: sans-serif;
+    margin: 0; padding: 1em;
+    font-size: 16px;
+    box-sizing: border-box;
+  }
+  .title-container {
+    text-align: center;
+    margin-bottom: 1em;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    margin-bottom: 1em;
+    justify-content: center;
+    align-items: center;
+  }
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.2em;
+  }
+  input, select, button {
+    font-size: 1em;
+    padding: 0.4em 0.7em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    text-align: center;
+    padding: 0.3em;
+    vertical-align: top;
+    user-select: none;
+    word-break: break-word;
+  }
+  th {
+    position: sticky;
+    top: 0;
+    background: #f0f0f0;
+    z-index: 10;
+  }
+  th.weekend, td.weekend {
+    color: red;
+  }
+  th.holiday, td.holiday {
+    color: red;
+  }
+  td.selected {
+    border: 3px solid orange !important;
+    background-color: inherit !important;
+  }
+  td.both {
+    background-color: #ccffcc !important;
+  }
+  .userA {
+    color: blue;
+    font-weight: bold;
+  }
+  .userB {
+    color: green;
+    font-weight: bold;
+  }
+  .chat {
+    margin-top: 2em;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .chat-log {
+    border: 1px solid #ccc;
+    height: 200px;
+    overflow-y: auto;
+    padding: 0.5em;
+    background: #fafafa;
+  }
+  .chat-message {
+    margin-bottom: 0.5em;
+    white-space: pre-wrap;
+  }
+  @media screen and (max-width: 600px) {
+    table, thead, tbody, th, td, tr {
+      font-size: 12px;
+    }
+  }
+
+  /* ===== 将棋アプリの CSS（コード②） ===== */
+:root{
+  --ui-font: 14px;
+  --ui-font-lg: 16px;
+  --btn-pad-y: 8px;
+  --btn-pad-x: 12px;
+}
+h1.shogi{ font-size: clamp(16px, 2.4vw, 20px); margin: 6px 0 10px; text-align:center; }
+
+#shogiContainer{ margin-top:18px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+#controlsWrapper{ display:flex; flex-direction:column; align-items:center; width:100%; max-width:1000px; box-sizing:border-box; }
+#controlsHeader{ cursor:pointer; user-select:none; margin-bottom:6px; }
+#controlsShogi{
+  margin-top:8px; display:flex; flex-wrap:wrap; gap:10px;
+  justify-content:center; align-items:center;
+  font-size: var(--ui-font);
+}
+#controlsShogi label{ display:flex; align-items:center; gap:6px; }
+#controlsShogi input[type="number"], #controlsShogi select{
+  font-size: var(--ui-font);
+  padding: 4px 6px;
+}
+#timeMinutes, #timeSeconds{ width:40px; }
+#controlsShogi button{
+  font-size: var(--ui-font-lg);
+  padding: var(--btn-pad-y) var(--btn-pad-x);
+  border-radius:8px; border:1px solid #666; background:#f7f7f7; cursor:pointer;
+}
+#controlsShogi button:hover{ background:#efefef; }
+#timebar{ margin:8px 0 6px; font-size: var(--ui-font-lg); }
+
+/* board */
+#board{
+  display:grid; grid-template-columns:repeat(9,1fr); grid-template-rows:repeat(9,1fr);
+  gap:0; border:3px solid #333; width:60vmin; height:60vmin; max-width:720px; position:relative;
+  transition: transform 0.18s ease;
+  transform-origin: center center;
+}
+#board.flipped{ transform: rotate(180deg); }
+
+.cell{
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  background:#f5deb3; border:1px solid #999; font-weight:bold;
+  font-size: clamp(14px, 3.8vmin, 28px);
+  user-select:none; transition:background-color .08s;
+  position:relative; overflow:hidden;
+}
+.selected{ outline:3px solid #ffcd00; background:#fff5a6; }
+
+.piece{ display:flex; align-items:center; justify-content:center; width:100%; height:100%; line-height:1; box-sizing:border-box; }
+.piece.promoted{ color:#b30000; font-weight:700; }
+.piece.opposite{ transform: rotate(180deg); }
+
+/* hands */
+#hands{ margin-top:10px; display:flex; flex-wrap:nowrap; gap:18px; justify-content:center; font-size: var(--ui-font-lg); align-items:flex-start; width:100%; box-sizing:border-box; padding:0 10px; }
+.hand-block{ display:flex; flex-direction:column; align-items:center; gap:6px; width:220px; box-sizing:border-box; }
+.hand-label{ display:block; text-align:center; min-height:1.2em; }
+.hand{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; width:100%; min-height:44px; border:1px solid #ddd; padding:6px; box-sizing:border-box; background:#fff; border-radius:6px; overflow:auto; max-height:120px; align-items:center; }
+.hand span{ display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border-radius:8px; background:#fff; border:1px solid #aaa; cursor:pointer; font-size:1.0em; }
+.hand span.selected{ outline:3px solid #ffcd00; background:#fff5a6; }
+#handG span{ display:inline-flex; transform: rotate(180deg); }
+
+/* kifu list */
+#kifuPanel{ display:none; width:95vw; max-width:640px; margin-top:12px; }
+#kifuPanel h2{ font-size: var(--ui-font-lg); margin: 8px 0; }
+#kifuList{ border:1px solid #999; padding:8px; border-radius:8px; max-height:220px; overflow:auto; background:#fff; list-style: none; margin:0; padding-left:0; }
+#kifuList li{ padding:6px 8px; border-bottom:1px solid #eee; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+#kifuList li.kifu-selected{ background:#eaf6ff; outline:2px solid #9cd2ff; }
+
+#kansoControls{ width:95vw; max-width:640px; margin-top:8px; display:flex; justify-content:center; gap:12px; }
+#kansoControls button{ font-size:14px; padding:8px 12px; border-radius:8px; }
+
+.hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="title-container">
+  <h1>2人予定調整カレンダー</h1>
+</div>
+
+<div class="controls">
+  <label>ユーザーA：<input type="text" id="userAName" autocomplete="off" /></label>
+  <label>ユーザーB：<input type="text" id="userBName" autocomplete="off" /></label>
+  <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span>
+  <select id="userSelect">
+  <option value="">未選択</option>
+  <option value="A">ユーザーA</option>
+  <option value="B">ユーザーB</option>
+  </select>
+  </label>
+</div>
+
+<div class="controls">
+  <button id="btn-mark-ok">選択セルに○</button>
+  <button id="btn-mark-no">選択セルに×</button>
+  <button id="btn-clear-cell">選択セルを削除</button>
+  <button id="btn-clear-all">退室</button>
+</div>
+
+<div class="controls">
+  <button id="btn-prev-week">前の週</button>
+  <button id="btn-today">今日へ戻る</button>
+  <button id="btn-next-week">次の週</button>
+</div>
+
+<table id="calendar"></table>
+
+<div class="chat">
+  <h2>チャット</h2>
+  <div class="chat-log" id="chatLog"></div>
+ <div class="controls" style="margin-top:0.5em; gap:0.5em;">
+  <input type="text" id="chatInput" placeholder="メッセージを入力" style="flex:1; min-width: 0;" />
+  <button id="btn-send">送信</button>
+</div>
+
+<div class="controls" style="margin-top:0.5em; gap:0.5em; justify-content: center;">
+  <button id="btn-call-start">通話開始</button>
+  <button id="btn-mute" disabled>ミュート</button>
+  <button id="btn-call-end" disabled>通話終了</button>
+  <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
+</div>
+</div>
+<audio id="remote-audio" autoplay></audio><br />
+<label for="volume-control">相手の音量：</label>
+<input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
+<audio id="localAudio" autoplay muted style="display:none;"></audio>
+
+<!-- ====== 将棋 UI の領域 ====== -->
+<div id="shogiContainer">
+  <h1 class="shogi">フルスクラッチ将棋（オンライン対応）</h1>
+
+  <div id="controlsWrapper">
+    <div id="controlsHeader">▼ 詳細表示 / 非表示（クリックで切替）</div>
+    <div id="controlsShogi">
+      <label>自分の役割：
+        <select id="mySide">
+          <option value="S">先手で開始</option>
+          <option value="G">後手で開始</option>
+        </select>
+      </label>
+
+      <label>持ち時間：
+        <input type="number" id="timeMinutes" value="5" min="0">分
+      </label>
+      <label>秒読み：
+        <input type="number" id="timeSeconds" value="30" min="0">秒
+      </label>
+
+      <button id="toggleKanso">感想戦モードへ</button>
+      <button id="copyKif">棋譜コピー</button>
+      <button id="flipBoard" title="盤を180度回転">反転</button>
+      <button id="resign">投了</button>
+    </div>
+  </div>
+
+  <div id="timebar">
+    <span>先手：<span id="timerS">05:00</span></span> ｜ 
+    <span>後手：<span id="timerG">05:00</span></span>
+  </div>
+
+  <div id="board"></div>
+
+  <div id="kansoControls" class="hidden">
+    <button id="prev">一手戻る</button>
+    <button id="next">一手進む</button>
+  </div>
+
+  <div id="hands">
+    <div class="hand-block">
+      <div class="hand-label">自分の持ち駒</div>
+      <div id="handS" class="hand"></div>
+    </div>
+    <div class="hand-block">
+      <div class="hand-label">相手の持ち駒</div>
+      <div id="handG" class="hand"></div>
+    </div>
+  </div>
+
+  <section id="kifuPanel">
+    <h2>棋譜（リストの項目をクリックするとその局面へジャンプ）</h2>
+    <ol id="kifuList"></ol>
+  </section>
+</div>
+
+<script type="module">
+/* ===========================
+   モジュール初期化（Firebase の import & 初期化）
+   =========================== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
+    authDomain: "calendar-chousei.firebaseapp.com",
+    databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "calendar-chousei",
+    storageBucket: "calendar-chousei.firebasedatabase.app",
+    messagingSenderId: "368704703397",
+    appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+/* ===========================
+   ---- ここから元のコード① のスクリプト全文 ----
+   （ユーザーが送ってくれた内容をそのまま入れています）
+   =========================== */
+
+const roomName = location.pathname.split('/').pop().replace('.html', '');
+const callStatusRef = ref(db, `${roomName}/callStatus`);
+const userANameInput = document.getElementById('userAName');
+const userBNameInput = document.getElementById('userBName');
+const userSelect = document.getElementById('userSelect');
+const calendar = document.getElementById('calendar');
+const chatLog = document.getElementById('chatLog');
+const chatInput = document.getElementById('chatInput');
+const btnMarkOk = document.getElementById('btn-mark-ok');
+const btnMarkNo = document.getElementById('btn-mark-no');
+const btnClearCell = document.getElementById('btn-clear-cell');
+const btnClearAll = document.getElementById('btn-clear-all');
+const btnPrevWeek = document.getElementById('btn-prev-week');
+const btnToday = document.getElementById('btn-today');
+const btnNextWeek = document.getElementById('btn-next-week');
+const btnSend = document.getElementById('btn-send');
+const btnCallStart = document.getElementById('btn-call-start');
+const btnCallEnd = document.getElementById('btn-call-end');
+const btnMute = document.getElementById('btn-mute');
+const volumeControl = document.getElementById('volume-control');
+
+volumeControl.addEventListener('input', () => {
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) {
+    remoteAudio.volume = parseFloat(volumeControl.value);
+  }
+});
+
+let isMuted = false;
+let remoteStream = null;
+
+btnMute.addEventListener('click', () => {
+  if (!localStream) return;
+  isMuted = !isMuted;
+  localStream.getAudioTracks().forEach(track => {
+    track.enabled = !isMuted;
+  });
+  btnMute.textContent = isMuted ? 'ミュート解除' : 'ミュート';
+});
+
+const callStatusDisplay = document.getElementById('callStatusDisplay');
+
+let localStream = null;
+let peerConnection = null;
+let callTimeoutId = null;
+let localCallStartPressed = false;
+
+const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const signalingRef = ref(db, `${roomName}/signaling`);
+
+let currentUser = localStorage.getItem(`${roomName}_currentUser`) || '';
+let selectedCells = new Set();
+let currentWeekOffset = 0;
+let holidays = {};
+let lockedUserA = false;
+let lockedUserB = false;
+let callStatus = 'none';
+
+function formatDate(date) {
+  return date.toISOString().split('T')[0];
+}
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+async function fetchHolidays() {
+  try {
+    const res = await fetch('https://holidays-jp.github.io/api/v1/date.json');
+    if (!res.ok) throw new Error('祝日API取得失敗');
+    holidays = await res.json();
+    renderCalendar();
+  } catch (e) {
+    console.error(e);
+    holidays = {};
+    renderCalendar();
+  }
+}
+
+function renderCalendar() {
+  calendar.innerHTML = '';
+  const thead = document.createElement('thead');
+  const trHead = document.createElement('tr');
+  thead.appendChild(trHead);
+  trHead.appendChild(document.createElement('th'));
+
+  const monday = getMonday(new Date());
+  monday.setDate(monday.getDate() + currentWeekOffset * 7);
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const mm = d.getMonth() + 1;
+    const dd = d.getDate();
+    const ymd = formatDate(d);
+
+    const th = document.createElement('th');
+    th.innerHTML = `${mm}/${dd}<br>(${weekdays[d.getDay()]})`;
+
+    if (d.getDay() === 0 || d.getDay() === 6) th.classList.add('weekend');
+    if (holidays[ymd]) {
+      th.classList.add('holiday');
+      th.title = holidays[ymd];
+    }
+
+    trHead.appendChild(th);
+  }
+  calendar.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (let h = 9; h <= 22; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      const tr = document.createElement('tr');
+      const tdTime = document.createElement('td');
+      tdTime.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      tr.appendChild(tdTime);
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        const ymd = formatDate(d);
+        const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        const key = `${ymd}_${timeStr}`;
+        const td = document.createElement('td');
+        td.dataset.key = key;
+
+        if (d.getDay() === 0 || d.getDay() === 6) td.classList.add('weekend');
+        if (holidays[ymd]) td.classList.add('holiday');
+
+        td.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+  if (selectedCells.has(key)) {
+    selectedCells.delete(key);
+    td.classList.remove('selected');
+  } else {
+    selectedCells.add(key);
+    td.classList.add('selected');
+  }
+});
+
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+  }
+  calendar.appendChild(tbody);
+  updateScheduleTable();
+}
+
+async function updateScheduleTable() {
+  const monday = getMonday(new Date());
+  monday.setDate(monday.getDate() + currentWeekOffset * 7);
+  const schedulesRef = ref(db, `${roomName}/schedules`);
+  const snapshot = await get(schedulesRef);
+  const schedules = snapshot.exists() ? snapshot.val() : {};
+
+  const tds = calendar.querySelectorAll('tbody td[data-key]');
+  tds.forEach(td => {
+    const key = td.dataset.key;
+    const data = schedules[key] || {};
+    td.innerHTML = '';
+
+    let hasA = false, hasB = false;
+    if (data.A) {
+      const divA = document.createElement('div');
+      divA.textContent = `A: ${data.A}`;
+      divA.classList.add('userA');
+      td.appendChild(divA);
+      if (data.A === '○') hasA = true;
+    }
+    if (data.B) {
+      const divB = document.createElement('div');
+      divB.textContent = `B: ${data.B}`;
+      divB.classList.add('userB');
+      td.appendChild(divB);
+      if (data.B === '○') hasB = true;
+    }
+    td.classList.toggle('both', hasA && hasB);
+  });
+}
+
+async function applyToSelectedCells(value) {
+  if (selectedCells.size === 0 || !currentUser) return;
+  const updatesObj = {};
+  selectedCells.forEach(key => {
+    updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = value;
+  });
+  await update(ref(db), updatesObj);
+  selectedCells.clear();
+  updateScheduleTable();
+}
+
+async function clearSelectedCells() {
+  if (selectedCells.size === 0 || !currentUser) return;
+  const updatesObj = {};
+  selectedCells.forEach(key => {
+    updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = null;
+  });
+  await update(ref(db), updatesObj);
+  selectedCells.clear();
+  updateScheduleTable();
+}
+
+let isClearingData = false;
+
+async function clearAllData() {
+  if (!confirm('全てのデータを削除して、退室しますか？')) return;
+
+  isClearingData = true; // フラグON
+
+  // Firebase データ削除
+  await remove(ref(db, `${roomName}/userNames`));
+  await remove(ref(db, `${roomName}/schedules`));
+  await remove(ref(db, `${roomName}/chatLog`));
+  await remove(ref(db, `${roomName}/roomUsers`));
+  await remove(ref(db, `${roomName}/callStatus`));
+  await set(ref(db, `${roomName}/callStatus`), {
+    status: 'none',
+    users: { A: false, B: false },
+    statusMessage: '',
+    timestamp: null
+  });
+  await remove(ref(db, `${roomName}/signaling`));
+
+  // ローカルUIリセット
+  userANameInput.value = '';
+  userBNameInput.value = '';
+  selectedCells.clear();
+  localStorage.removeItem(`${roomName}_currentUser`);
+
+  currentUser = ''; // 強制的に未選択にする
+  updateUserSelectDisplay(); // ドロップダウン描画を統一
+
+  updateCallStatusUI('none');
+
+  isClearingData = false;
+
+  // sessionStorage フラグやロック解除
+  sessionStorage.setItem('wasCleared', '1');
+  lockedUserA = false;
+  lockedUserB = false;
+  
+  // ブラウザバックで前のページに戻る
+  history.back();
+}
+
+async function startLocalStream() {
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      video: false
+    });
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;
+      console.log('Audio track enabled:', track);
+    });
+    return localStream;
+  } catch (error) {
+    console.error('startLocalStream error:', error);
+    throw error;
+  }
+}
+
+function createPeerConnection() {
+  if (peerConnection && peerConnection.signalingState !== 'closed') {
+    console.log('createPeerConnection: 既存のpeerConnectionを再利用します');
+
+    try {
+      if (localStream && peerConnection.getSenders) {
+        const senders = peerConnection.getSenders();
+        localStream.getTracks().forEach(track => {
+          const sameSender = senders.find(s => s.track === track);
+          if (sameSender) {
+            return;
+          }
+
+          const sameKindSender = senders.find(s => s.track && s.track.kind === track.kind);
+          if (sameKindSender) {
+            if (typeof sameKindSender.replaceTrack === 'function') {
+              sameKindSender.replaceTrack(track).then(() => {
+                console.log(`createPeerConnection(reuse): replaceTrack で ${track.kind} を差し替えました`);
+              }).catch(err => {
+                console.warn('createPeerConnection(reuse): replaceTrack に失敗しました。remove/add を試みます', err);
+                try {
+                  peerConnection.removeTrack(sameKindSender);
+                } catch (e) {
+                  console.warn('createPeerConnection(reuse): removeTrack でエラー', e);
+                }
+                try {
+                  peerConnection.addTrack(track, localStream);
+                  console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
+                } catch (e) {
+                  console.warn('createPeerConnection(reuse): addTrack に失敗', e);
+                }
+              });
+            } else {
+              try {
+                peerConnection.removeTrack(sameKindSender);
+              } catch (e) {
+                console.warn('createPeerConnection(reuse): removeTrack でエラー', e);
+              }
+              try {
+                peerConnection.addTrack(track, localStream);
+                console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
+              } catch (e) {
+                console.warn('createPeerConnection(reuse): addTrack に失敗', e);
+              }
+            }
+          } else {
+            try {
+              peerConnection.addTrack(track, localStream);
+              console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
+            } catch (e) {
+              console.warn('createPeerConnection(reuse): addTrack に失敗', e);
+            }
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('createPeerConnection(reuse): トラック再設定中にエラー', e);
+    }
+
+    return;
+  }
+
+  peerConnection = new RTCPeerConnection(configuration);
+  console.log('createPeerConnection: 新しいRTCPeerConnectionを作成しました');
+
+  if (remoteStream) {
+    remoteStream.getTracks().forEach(track => {
+      try {
+        track.stop();
+      } catch (e) {
+        console.warn('remoteStream track stop error:', e);
+      }
+    });
+    remoteStream = null;
+  }
+
+  peerConnection.ontrack = event => {
+    if (event.streams && event.streams[0]) {
+      remoteStream = event.streams[0];
+    } else {
+      if (!remoteStream) remoteStream = new MediaStream();
+      remoteStream.addTrack(event.track);
+    }
+
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+      remoteAudio.srcObject = null;
+      remoteAudio.srcObject = remoteStream;
+      remoteAudio.play().catch(err => {
+        console.warn('remoteAudio.play() blocked or failed:', err);
+      });
+    } else {
+      const audio = document.createElement('audio');
+      audio.id = 'remote-audio';
+      audio.autoplay = true;
+      audio.playsInline = true;
+      document.body.appendChild(audio);
+
+      audio.srcObject = null;
+      audio.srcObject = remoteStream;
+      audio.play().catch(err => console.warn("audio.play() error:", err));
+    }
+  };
+
+  if (localStream) {
+    try {
+      localStream.getTracks().forEach(track => {
+        const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
+        if (!alreadyAdded) {
+          peerConnection.addTrack(track, localStream);
+          console.log(`createPeerConnection(new): ローカルトラック(${track.kind})を追加しました`);
+        }
+      });
+    } catch (e) {
+      console.warn('createPeerConnection(new): ローカルトラック追加でエラー', e);
+    }
+  }
+
+  peerConnection.oniceconnectionstatechange = () => {
+    const state = peerConnection.iceConnectionState;
+    console.log('ICE connection state:', state);
+
+    if (state === 'failed' || state === 'closed') {
+      update(ref(db, `${roomName}/callStatus`), {
+        status: 'ended',
+        users: { A: false, B: false },
+        statusMessage: 'ICE: ' + state
+      }).catch(console.error);
+
+      endCallCleanup();
+      resetUI();
+    } else if (state === 'disconnected') {
+      setTimeout(() => {
+        if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
+          update(ref(db, `${roomName}/callStatus`), {
+            status: 'ended',
+            users: { A: false, B: false },
+            statusMessage: 'ICE: disconnected timeout'
+          }).catch(console.error);
+
+          endCallCleanup();
+          resetUI();
+        }
+      }, 5000);
+    }
+  };
+
+  peerConnection.onicecandidate = event => {
+    if (event.candidate) {
+      const candRef = ref(db, `${roomName}/signaling/candidates/${currentUser}`);
+      const newCandRef = push(candRef);
+      set(newCandRef, { candidate: event.candidate.toJSON() });
+    }
+  };
+}
+
+async function endCallCleanup() {
+  console.log("=== 通話終了: ストリームと接続を解放 ===");
+
+  try {
+    await Promise.all([
+      remove(ref(db, `${roomName}/signaling/candidates/A`)),
+      remove(ref(db, `${roomName}/signaling/candidates/B`)),
+      remove(ref(db, `${roomName}/signaling/offer`)),
+      remove(ref(db, `${roomName}/signaling/answer`)),
+    ]);
+    console.log('シグナリングの候補とoffer/answerを削除しました');
+  } catch (e) {
+    console.error('候補削除エラー:', e);
+  }
+
+  if (remoteStream) {
+    remoteStream.getTracks().forEach(track => {
+      try {
+        track.stop();
+      } catch (e) {
+        console.warn('remoteStream track stop error:', e);
+      }
+    });
+    remoteStream = null;
+  }
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      try {
+        track.stop();
+      } catch (e) {
+        console.warn('localStream track stop error:', e);
+      }
+    });
+    localStream = null;
+  }
+
+  if (peerConnection) {
+    peerConnection.ontrack = null;
+    peerConnection.onicecandidate = null;
+    peerConnection.oniceconnectionstatechange = null;
+
+    try {
+      await Promise.all(peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender)));
+    } catch (e) {
+      console.warn('peerConnection removeTrack error:', e);
+    }
+
+    peerConnection.close();
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    peerConnection = null;
+  }
+
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) {
+    remoteAudio.pause();
+    remoteAudio.srcObject = null;
+  }
+
+  console.log("=== endCallCleanup 完了 ===");
+}
+
+async function sendOffer() {
+  createPeerConnection();
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
+      if (!alreadyAdded) {
+        console.log(`sendOffer: ローカルトラック(${track.kind})を追加`);
+        peerConnection.addTrack(track, localStream);
+      }
+    });
+  } else {
+    console.warn("sendOffer: localStream がまだありません");
+  }
+
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+
+  await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: currentUser });
+}
+
+function startCallTimeout() {
+  if (callTimeoutId) clearTimeout(callTimeoutId);
+
+  callTimeoutId = setTimeout(async () => {
+    await update(callStatusRef, {
+      status: 'none',
+      timestamp: null
+    });
+
+    callStatusDisplay.textContent = '通話終了（30秒経過）';
+
+    if (peerConnection) {
+      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+      peerConnection.close();
+      peerConnection = null;
+    }
+
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
+    }
+
+    await remove(ref(db, `${roomName}/signaling`));
+  }, 30000);
+}
+
+async function sendAnswer() {
+  const offerSnapshot = await get(ref(db, `${roomName}/signaling/offer`));
+  if (!offerSnapshot.exists()) return;
+  const offer = offerSnapshot.val();
+
+  createPeerConnection();
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
+      if (!alreadyAdded) {
+        console.log(`sendAnswer: ローカルトラック(${track.kind})を追加`);
+        peerConnection.addTrack(track, localStream);
+      }
+    });
+  } else {
+    console.warn("sendAnswer: localStream がまだありません");
+  }
+
+  const answer = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answer);
+
+  await set(ref(db, `${roomName}/signaling/answer`), { sdp: answer.sdp, type: answer.type, from: currentUser });
+}
+
+function listenSignaling() {
+  onValue(ref(db, `${roomName}/signaling/offer`), snapshot => {
+    const offer = snapshot.val();
+    if (!offer || offer.from === currentUser) return;
+    handleOffer(offer);
+  });
+
+  async function handleOffer(offer) {
+    createPeerConnection();
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    await sendAnswer();
+  }
+
+  onValue(ref(db, `${roomName}/signaling/answer`), async snapshot => {
+    const answer = snapshot.val();
+    if (!answer || answer.from === currentUser) return;
+    if (peerConnection) {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+  });
+
+  onValue(ref(db, `${roomName}/signaling/candidates/A`), snapshot => {
+    if (currentUser === 'B') {
+      const candidates = snapshot.val();
+      if (!candidates) return;
+      Object.values(candidates).forEach(data => {
+        if (data?.candidate && peerConnection) {
+          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      });
+    }
+  });
+
+  onValue(ref(db, `${roomName}/signaling/candidates/B`), snapshot => {
+    if (currentUser === 'A') {
+      const candidates = snapshot.val();
+      if (!candidates) return;
+      Object.values(candidates).forEach(data => {
+        if (data?.candidate && peerConnection) {
+          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      });
+    }
+  });
+
+  onValue(ref(db, `${roomName}/roomUsers`), () => {
+  // セレクトは表示専用。現在の選択状態だけ反映。
+  updateUserSelectDisplay();
+});
+}
+
+async function getUserType(uid) {
+  const snapshot = await get(ref(db, `${roomName}/users/${uid}/type`));
+  return snapshot.exists() ? snapshot.val() : null;
+}
+
+async function updateCallStatus(status) {
+  try {
+    const snap = await get(ref(db, `${roomName}/callStatus`));
+    const prev = snap.exists() ? snap.val() : {};
+    const users = prev && prev.users ? prev.users : { A: false, B: false };
+
+    const statusMessage = status === 'waiting'
+      ? '相手が通話開始ボタンを押すのを待っています'
+      : (status === 'started' ? '通話が開始されました' : (status === 'ended' ? '通話が終了しました' : ''));
+
+    await set(ref(db, `${roomName}/callStatus`), {
+      status,
+      users,
+      statusMessage,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('updateCallStatus error:', e);
+    await set(ref(db, `${roomName}/callStatus`), {
+      status,
+      users: { A: false, B: false },
+      statusMessage: '',
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+// --- ユーザー選択表示更新 ---
+function updateUserSelectDisplay() {
+  userSelect.innerHTML = '';
+
+  // 手動変更可能にするため、常に有効
+  userSelect.disabled = false;
+
+  // 選択肢は固定
+  const options = [
+    { value: '', text: '未選択' },
+    { value: 'A', text: 'A' },
+    { value: 'B', text: 'B' }
+  ];
+
+  options.forEach(optData => {
+    const opt = document.createElement('option');
+    opt.value = optData.value;
+    opt.textContent = optData.text;
+    if (currentUser === optData.value) opt.selected = true;
+    userSelect.appendChild(opt);
+  });
+}
+
+// --- ドロップダウン変更イベント ---
+userSelect.addEventListener('change', e => {
+  const val = e.target.value;
+  currentUser = val;
+
+  if (val) {
+    localStorage.setItem(`${roomName}_currentUser`, val);
+  } else {
+    localStorage.removeItem(`${roomName}_currentUser`);
+  }
+
+  // 手動で変更した場合のみリロード
+  window.location.reload();
+});
+
+function resetUI() {
+  localCallStartPressed = false;
+  updateMyButtonStatusLocal();
+  btnCallStart.disabled = false;
+  btnCallEnd.disabled = true;
+  btnMute.disabled = true;
+  btnMute.textContent = 'ミュート';
+  isMuted = false;
+
+  if (localStream) {
+  try {
+    localStream.getTracks().forEach(track => {
+      if (track.readyState === 'live') track.stop();
+    });
+  } catch (e) {
+    console.warn('localStream stop error:', e);
+  }
+  localStream = null;
+}
+
+if (remoteStream) {
+  try {
+    remoteStream.getTracks().forEach(track => {
+      if (track.readyState === 'live') track.stop();
+    });
+  } catch (e) {
+    console.warn('remoteStream stop error:', e);
+  }
+  remoteStream = null;
+}
+
+  const localAudio = document.getElementById('localAudio');
+  if (localAudio) localAudio.srcObject = null;
+
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) remoteAudio.srcObject = null;
+
+  if (peerConnection) {
+    try {
+      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+      peerConnection.close();
+    } catch (e) {
+      console.error('peerConnection close error:', e);
+    }
+    peerConnection = null;
+  }
+}
+
+renderCalendar();
+async function sendMessage() {
+  if (!currentUser) {
+    callStatusDisplay.textContent = 'ユーザーを選択してください';
+    return;
+  }
+
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  const userName = currentUser;
+  const newMsgRef = ref(db, `${roomName}/chatLog`);
+  const snapshot = await get(newMsgRef);
+  const chatData = snapshot.exists() ? snapshot.val() : [];
+  chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
+  await set(newMsgRef, chatData);
+  chatInput.value = '';
+}
+
+function renderChat(chatData) {
+  chatLog.innerHTML = '';
+  chatData.slice(-100).forEach(entry => {
+    const div = document.createElement('div');
+    div.classList.add('chat-message');
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = `${entry.name}: `;
+    nameSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
+    nameSpan.style.fontWeight = 'bold';
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = entry.text;
+    textSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
+
+    div.appendChild(nameSpan);
+    div.appendChild(textSpan);
+    chatLog.appendChild(div);
+  });
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// --- 初期化処理 ---
+async function initializeUsers() {
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  const roomUsersSnap = await get(roomUsersRef);
+  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
+
+  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
+  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
+
+  if (savedUser) {
+    // 保存済みユーザーを維持
+    currentUser = savedUser;
+  } else {
+    // currentUser 未設定時のみ自動割り当て
+    if (roomUsers.A && !roomUsers.B) {
+      currentUser = 'A';
+    } else if (roomUsers.B && !roomUsers.A) {
+      currentUser = 'B';
+    } else if (roomUsers.A && roomUsers.B) {
+      currentUser = 'B'; // 両方 true の場合は B を優先
+    } else {
+      currentUser = ''; // 未選択
+    }
+
+    if (currentUser) {
+      localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    } else {
+      localStorage.removeItem(`${roomName}_currentUser`);
+    }
+  }
+
+  // --- ドロップダウン選択肢を常に A/B にして更新 ---
+  updateUserSelectDisplay();
+}
+
+// --- DOMContentLoaded で初期化 ---
+document.addEventListener('DOMContentLoaded', async () => {
+  await initializeUsers();
+});
+
+initializeUsers();
+listenSignaling();
+
+// --- userNames 変更監視 ---
+const userNamesRef = ref(db, `${roomName}/userNames`);
+onValue(userNamesRef, (snapshot) => {
+  const data = snapshot.val() || {};
+  userANameInput.value = data.A || '';
+  userBNameInput.value = data.B || '';
+
+  // currentUser が未設定の場合のみ自動割り当て
+  if (!currentUser) {
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    get(roomUsersRef).then((snap) => {
+      const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
+      if (roomUsers.A && !roomUsers.B) {
+        currentUser = 'A';
+      } else if (roomUsers.B && !roomUsers.A) {
+        currentUser = 'B';
+      } else if (roomUsers.A && roomUsers.B) {
+        currentUser = 'B'; // 両方 true の場合は B を優先
+      } else {
+        currentUser = '';
+      }
+      updateUserSelectDisplay();
+    });
+  }
+});
+
+userANameInput.addEventListener('input', async () => {
+  const name = userANameInput.value.trim();
+  if (!name) {
+    await remove(ref(db, `${roomName}/userNames/A`));
+    return;
+  }
+  await set(ref(db, `${roomName}/userNames/A`), name);
+});
+
+userBNameInput.addEventListener('input', async () => {
+  const name = userBNameInput.value.trim();
+  if (!name) {
+    await remove(ref(db, `${roomName}/userNames/B`));
+    return;
+  }
+  await set(ref(db, `${roomName}/userNames/B`), name);
+});
+
+btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
+btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
+btnClearCell.addEventListener('click', clearSelectedCells);
+btnClearAll.addEventListener('click', async () => {
+  await clearAllData();
+  renderCalendar();
+  renderChat([]);
+});
+btnPrevWeek.addEventListener('click', () => {
+  currentWeekOffset--;
+  renderCalendar();
+});
+btnToday.addEventListener('click', () => {
+  currentWeekOffset = 0;
+  renderCalendar();
+});
+btnNextWeek.addEventListener('click', () => {
+  currentWeekOffset++;
+  renderCalendar();
+});
+btnSend.addEventListener('click', sendMessage);
+let isCallStarting = false;
+
+btnCallStart.addEventListener('click', async () => {
+  if (isCallStarting) {
+    return;
+  }
+  isCallStarting = true;
+  btnCallStart.disabled = true;
+
+  if (!currentUser) {
+    callStatusDisplay.textContent = 'ユーザーを選択してください';
+    isCallStarting = false;
+    btnCallStart.disabled = false;
+    return;
+  }
+
+  try {
+    if (peerConnection) {
+      try {
+        peerConnection.getSenders().forEach(sender => {
+          try {
+            peerConnection.removeTrack(sender);
+          } catch (e) {
+            console.warn('removeTrack error:', e);
+          }
+        });
+        peerConnection.close();
+      } catch (e) {
+        console.warn('peerConnection close時のエラー:', e);
+      }
+      peerConnection = null;
+    }
+
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn('localStream track stop error:', e);
+        }
+      });
+      localStream = null;
+    }
+
+    await startLocalStream();
+
+    resetMuteState();
+    createPeerConnection();
+
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
+        if (!senderExists) {
+          peerConnection.addTrack(track, localStream);
+        }
+      });
+    }
+
+const localAudio = document.getElementById('localAudio');
+if (localAudio) {
+  localAudio.srcObject = localStream;
+  localAudio.play().catch(err => {
+    console.warn('localAudio.play() blocked or failed:', err);
+  });
+}
+
+    await remove(ref(db, `${roomName}/signaling`));
+
+    const callStatusSnap = await get(callStatusRef);
+    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
+      status: 'none',
+      users: { A: false, B: false }
+    };
+
+    if (!callData.users) {
+      callData.users = { A: false, B: false };
+    }
+
+    callData.users[currentUser] = true;
+
+    let newStatus = 'waiting';
+    if (callData.users.A && callData.users.B) {
+      newStatus = 'started';
+      await sendOffer();
+    } else if (!callData.users.A && !callData.users.B) {
+      newStatus = 'none';
+    } else {
+      newStatus = 'waiting';
+    }
+
+    await update(callStatusRef, {
+      status: newStatus,
+      users: callData.users,
+      statusMessage: newStatus === 'waiting'
+        ? '相手が通話開始ボタンを押すのを待っています'
+        : (newStatus === 'started' ? '通話が開始されました' : '')
+    });
+
+    localCallStartPressed = true;
+    updateMyButtonStatusLocal();
+
+  } catch (e) {
+    console.error(e);
+    callStatusDisplay.textContent = '通話の準備に失敗しました';
+    localCallStartPressed = false;
+    updateMyButtonStatusLocal();
+  } finally {
+    isCallStarting = false;
+  }
+});
+
+btnCallEnd.addEventListener('click', async () => {
+  if (!currentUser) {
+    alert('ユーザーを選択してください');
+    return;
+  }
+
+  try {
+    const callStatusSnap = await get(callStatusRef);
+    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
+      status: 'none',
+      users: { A: false, B: false }
+    };
+
+    if (callData.users && callData.users[currentUser] !== undefined) {
+      callData.users[currentUser] = false;
+    }
+
+await update(ref(db, `${roomName}/callStatus`), {
+  status: 'ended',
+  users: { A: false, B: false },
+  statusMessage: '通話が切断されました'
+});
+
+    localCallStartPressed = false;
+    updateMyButtonStatusLocal();
+
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+    btnMute.disabled = true;
+    btnMute.textContent = 'ミュート';
+
+    isMuted = false;
+
+    if (localStream) {
+      try {
+        localStream.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
+        localStream.getTracks().forEach(track => {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        });
+      } catch (e) {
+        console.warn('localStream stop error:', e);
+      }
+      localStream = null;
+    }
+
+    if (remoteStream) {
+      try {
+        remoteStream.getTracks().forEach(track => {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        });
+      } catch (e) {
+        console.warn('remoteStream stop error:', e);
+      }
+      remoteStream = null;
+    }
+
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+      remoteAudio.srcObject = null;
+    }
+
+    const localAudio = document.getElementById('localAudio');
+    if (localAudio) {
+      localAudio.srcObject = null;
+    }
+
+    if (peerConnection) {
+  try {
+    await Promise.all(peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender)));
+    peerConnection.close();
+    await new Promise(resolve => setTimeout(resolve, 200));
+  } catch (e) {
+    console.warn('peerConnection close時のエラー:', e);
+  }
+  peerConnection = null;
+}
+
+    try {
+      await remove(ref(db, `${roomName}/signaling`));
+    } catch (e) {
+      console.error('signaling remove error:', e);
+    }
+
+    callStatusDisplay.textContent = '通話は終了しました';
+    
+    window.location.reload();
+
+  } catch (e) {
+    console.error('通話終了処理でエラー:', e);
+    callStatusDisplay.textContent = '通話終了時にエラーが発生しました';
+  }
+});
+
+let hasReloaded = false;
+onValue(callStatusRef, (snapshot) => {
+  const callData = snapshot.val();
+  if (!callData) return;
+  if (callData.status === 'ended' && localCallStartPressed && !hasReloaded) {
+    hasReloaded = true;
+    window.location.reload();
+    return;
+    }
+
+  const iPressed = !!callData.users?.[currentUser];
+  const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A'];
+  const status = callData.status;
+
+  localCallStartPressed = iPressed;
+
+  switch (status) {
+    case 'ended':
+      localCallStartPressed = false;
+      updateMyButtonStatusLocal(); 
+      resetUI();
+      callStatusDisplay.textContent = '通話は終了しました';
+
+      isMuted = false;
+      btnCallStart.disabled = false;
+      btnCallEnd.disabled = true;
+      btnMute.disabled = true;
+      btnMute.textContent = 'ミュート';
+
+      if (localStream) {
+        try {
+          localStream.getTracks().forEach(track => {
+            if (track.readyState === 'live') track.stop();
+          });
+        } catch (e) {
+          console.warn('localStream stop error:', e);
+        }
+        localStream = null;
+      }
+
+      if (remoteStream) {
+        try {
+          remoteStream.getTracks().forEach(track => {
+            if (track.readyState === 'live') track.stop();
+          });
+        } catch (e) {
+          console.warn('remoteStream stop error:', e);
+        }
+        remoteStream = null;
+      }
+
+      const remoteAudio = document.getElementById('remote-audio');
+      if (remoteAudio) remoteAudio.srcObject = null;
+
+      const localAudio = document.getElementById('localAudio');
+      if (localAudio) localAudio.srcObject = null;
+
+      if (peerConnection) {
+        try {
+          peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
+          peerConnection.close();
+        } catch (e) {
+          console.error('peerConnection close error:', e);
+        }
+        peerConnection = null;
+      }
+      break;
+
+    case 'waiting':
+      callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
+
+      if (!iPressed && !otherPressed) {
+        updateMyButtonStatus('none');
+      } else if (!iPressed && otherPressed) {
+        updateMyButtonStatus('none');
+      } else if (iPressed && !otherPressed) {
+        updateMyButtonStatusLocal();
+      } else {
+        updateMyButtonStatus('started');
+      }
+      break;
+
+    case 'started':
+      callStatusDisplay.textContent = '通話中';
+      updateMyButtonStatus('started');
+      break;
+
+    case 'none':
+    default:
+      callStatusDisplay.textContent = '';
+      resetUI();
+      break;
+  }
+});
+
+onValue(ref(db, `${roomName}/schedules`), snapshot => updateScheduleTable());
+onValue(ref(db, `${roomName}/chatLog`), snapshot => {
+  const chatData = snapshot.exists() ? snapshot.val() : [];
+  renderChat(chatData);
+});
+
+fetchHolidays();
+renderCalendar();
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('td')) {
+    selectedCells.forEach(key => {
+      const td = calendar.querySelector(`td[data-key="${key}"]`);
+      if (td) td.classList.remove('selected');
+    });
+    selectedCells.clear();
+  }
+});
+
+function updateCallStatusUI(status) {
+  callStatus = status;
+  callStatusDisplay.textContent = {
+    'started': '通話中',
+    'waiting': '通話ボタンが押されました（相手を待っています）',
+    'ended': '通話が終了しました',
+    'none': ''
+  }[status] || '';
+
+  updateMyButtonStatus(status);
+}
+
+function updateMyButtonStatus(status) {
+  switch (status) {
+    case 'started':
+      btnCallStart.disabled = true;
+      btnCallEnd.disabled = false;
+      btnMute.disabled = false;
+      break;
+    case 'none':
+    default:
+      btnCallStart.disabled = false;
+      btnCallEnd.disabled = true;
+      btnMute.disabled = true;
+      btnMute.textContent = 'ミュート';
+      isMuted = false;
+      break;
+  }
+}
+
+function updateMyButtonStatusLocal() {
+  if (localCallStartPressed) {
+    btnCallStart.disabled = true;
+    btnCallEnd.disabled = false;
+    btnMute.disabled = false;
+  } else {
+    btnCallStart.disabled = false;
+    btnCallEnd.disabled = true;
+    btnMute.disabled = true;
+  }
+}
+
+function resetMuteState() {
+  isMuted = false;
+  btnMute.textContent = 'ミュート';
+
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = true;
+    });
+  }
+}
+
+(async () => {
+  const callStatusSnap = await get(callStatusRef);
+  const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
+
+  if (callData.status === 'waiting') {
+    if (callData.user !== currentUser) {
+      if (localCallStartPressed) {
+        localCallStartPressed = false;
+        updateMyButtonStatusLocal();
+      }
+      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
+    }
+  }
+})();
+
+volumeControl.addEventListener('input', () => {
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) remoteAudio.volume = parseFloat(volumeControl.value);
+});
+
+/* ===========================
+   ---- ここまで元のコード① のスクリプト全文 ----
+   =========================== */
+
+/* ===========================
+   ---- ここから将棋（コード②）の統合コード ----
+   （上で既に Firebase を import/初期化済みなのでそのまま使います）
+   =========================== */
+
+/* 将棋ユーティリティ / 状態 / UI の実装はコード②を忠実に移植しました。 */
+/* 重要: 将棋関連の DB は `${roomName}/shogi` に保存されます。 */
+
+const PIECE_SYMBOLS={FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'成香',NK:'成桂',NG:'成銀',UM:'馬',RY:'龍'};
+const PROMOTABLE=['FU','KY','KE','GI','KA','HI'];
+function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+function unpromote(type){
+  switch(type){case 'TO': return 'FU'; case 'NY': return 'KY'; case 'NK': return 'KE'; case 'NG': return 'GI'; case 'UM': return 'KA'; case 'RY': return 'HI'; default: return type;}
+}
+function inBoard(x,y){ return x>=0 && x<9 && y>=0 && y<9; }
+function inPromotionZone(owner,y){ return owner==='S' ? (y<=2) : (y>=6); }
+function moveCanPromote(owner, fromY, toY, pieceType){ if(!PROMOTABLE.includes(pieceType)) return false; return inPromotionZone(owner, fromY) || inPromotionZone(owner, toY); }
+function mustAutoPromote(type, owner, toY){ if(type==='FU' || type==='KY'){ return owner==='S' ? (toY===0) : (toY===8); } if(type==='KE'){ return owner==='S' ? (toY<=1) : (toY>=7); } return false; }
+
+function createInitialBoard(){
+  const row=(arr,yInit)=>arr.map(x=>x?{type:x.type,owner:x.owner,initSide:yInit>=6?'B':'T'}:null);
+  return [
+    row([{type:'KY',owner:'G'},{type:'KE',owner:'G'},{type:'GI',owner:'G'},{type:'KI',owner:'G'},{type:'OU',owner:'G'},{type:'KI',owner:'G'},{type:'GI',owner:'G'},{type:'KE',owner:'G'},{type:'KY',owner:'G'}],0),
+    row([null,{type:'HI',owner:'G'},null,null,null,null,null,{type:'KA',owner:'G'},null],1),
+    row(Array(9).fill({type:'FU',owner:'G'}),2),
+    row(Array(9).fill(null),3),
+    row(Array(9).fill(null),4),
+    row(Array(9).fill(null),5),
+    row(Array(9).fill({type:'FU',owner:'S'}),6),
+    row([null,{type:'KA',owner:'S'},null,null,null,null,null,{type:'HI',owner:'S'},null],7),
+    row([{type:'KY',owner:'S'},{type:'KE',owner:'S'},{type:'GI',owner:'S'},{type:'KI',owner:'S'},{type:'OU',owner:'S'},{type:'KI',owner:'S'},{type:'GI',owner:'S'},{type:'KE',owner:'S'},{type:'KY',owner:'S'}],8)
+  ];
+}
+
+let initialBoard = createInitialBoard();
+let boardState = clone(initialBoard);
+let selected = null;
+let selectedHand = null;
+let handS = [], handG = [];
+let kifu = [];
+let history = [{board: clone(boardState), handS:[], handG:[], mover: null}];
+let historyIndex = 0;
+
+let mySideLocal = 'S';
+let currentPlayer = 'S';
+let kansoMode = false;
+let gameOver = false;
+
+let boardFlipped = false;
+
+let mainTimeS = 300, mainTimeG = 300;
+let byoBase = 30;
+let byoRemainS = 0, byoRemainG = 0;
+let timerId = null;
+
+function readTimeSettings(){
+  const m = Math.max(0, parseInt(document.getElementById('timeMinutes').value)||0);
+  const s = Math.max(0, parseInt(document.getElementById('timeSeconds').value)||0);
+  mainTimeS = mainTimeG = m*60;
+  byoBase = s;
+  byoRemainS = byoRemainG = 0;
+  updateTimerDisplay();
+}
+function startTick(){ if(timerId) clearInterval(timerId); timerId = setInterval(()=> tickOneSecond(), 1000); }
+function stopTick(){ if(timerId){ clearInterval(timerId); timerId = null; } }
+
+function tickOneSecond(){
+  if(gameOver || kansoMode) return;
+  if(currentPlayer==='S'){
+    if(mainTimeS>0){ mainTimeS--; }
+    else{
+      if(byoBase<=0){ timeOver('S'); return; }
+      if(byoRemainS<=0){ byoRemainS = byoBase; }
+      byoRemainS--;
+      if(byoRemainS<0) byoRemainS = 0;
+      if(byoRemainS===0){ timeOver('S'); return; }
+    }
+  }else{
+    if(mainTimeG>0){ mainTimeG--; }
+    else{
+      if(byoBase<=0){ timeOver('G'); return; }
+      if(byoRemainG<=0){ byoRemainG = byoBase; }
+      byoRemainG--;
+      if(byoRemainG<0) byoRemainG = 0;
+      if(byoRemainG===0){ timeOver('G'); return; }
+    }
+  }
+  updateTimerDisplay();
+}
+function timeOver(side){
+  gameOver = true;
+  stopTick();
+  alert(`${side==='S'?'先手':'後手'}の時間切れで負けです。`);
+  syncShogiState(); // 同期
+}
+function onMoveFinishedSwitchTurn(){
+  if(currentPlayer==='S'){
+    if(mainTimeS<=0) byoRemainS = byoBase;
+  }else{
+    if(mainTimeG<=0) byoRemainG = byoBase;
+  }
+  updateTimerDisplay();
+}
+function updateTimerDisplay(){
+  const timerSEl = document.getElementById('timerS');
+  const timerGEl = document.getElementById('timerG');
+  const fmt = (mt, byorem)=> {
+    if(mt>0){
+      const m = Math.floor(mt/60), s = mt%60;
+      return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }else{
+      const s = Math.max(0, byorem>0? byorem : 0);
+      return `${String(s).padStart(2,'0')}`;
+    }
+  };
+  if(timerSEl) timerSEl.textContent = fmt(mainTimeS, byoRemainS);
+  if(timerGEl) timerGEl.textContent = fmt(mainTimeG, byoRemainG);
+}
+
+const boardEl = document.getElementById('board');
+const handSEl = document.getElementById('handS');
+const handGEl = document.getElementById('handG');
+const kifuPanelEl = document.getElementById('kifuPanel');
+const kifuListEl = document.getElementById('kifuList');
+const kansoControlsEl = document.getElementById('kansoControls');
+const resignBtn = document.getElementById('resign');
+
+function createBoardCells(){
+  boardEl.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for(let y=0;y<9;y++){
+    for(let x=0;x<9;x++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.x = x; cell.dataset.y = y;
+      cell.addEventListener('click', ()=> cellClick(x,y));
+      frag.appendChild(cell);
+    }
+  }
+  boardEl.appendChild(frag);
+}
+
+function renderPieceToCell(cell, p){
+  const el = document.createElement('div');
+  el.className = 'piece';
+  if(['TO','NY','NK','NG','UM','RY'].includes(p.type)){ el.classList.add('promoted'); }
+  el.textContent = PIECE_SYMBOLS[p.type] || p.type;
+  if(p.initSide === 'T'){ el.classList.add('opposite'); }
+  cell.appendChild(el);
+}
+
+function renderBoard(){
+  boardEl.classList.toggle('flipped', boardFlipped);
+  const cells = boardEl.childNodes;
+  for (let i=0;i<cells.length;i++){
+    const cell = cells[i];
+    const x = parseInt(cell.dataset.x), y = parseInt(cell.dataset.y);
+    cell.classList.toggle('selected', selected && selected.x===x && selected.y===y);
+    cell.textContent = '';
+    const p = boardState[y][x];
+    if(p){ renderPieceToCell(cell, p); }
+  }
+  renderHands();
+  if(kansoMode) renderKifuList();
+}
+
+function renderHands(){
+  if(!handSEl || !handGEl) return;
+  handSEl.innerHTML = '';
+  handGEl.innerHTML = '';
+
+  for(let i=0;i<handS.length;i++){
+    const t = handS[i];
+    const s = document.createElement('span');
+    s.textContent = PIECE_SYMBOLS[t] || t;
+    s.className = (selectedHand && selectedHand.type===t && selectedHand.owner==='S' && selectedHand.index===i) ? 'selected' : '';
+    s.onclick = ()=>{
+      if(gameOver) return;
+      if(!canLocalOperate()) return;
+      if(currentPlayer!=='S') return;
+      if(selectedHand && selectedHand.owner==='S' && selectedHand.index===i){
+        selectedHand = null;
+      }else{
+        selectedHand = {type:t, owner:'S', index: i};
+      }
+      selected = null;
+      renderBoard();
+    };
+    handSEl.appendChild(s);
+  }
+
+  for(let i=0;i<handG.length;i++){
+    const t = handG[i];
+    const s = document.createElement('span');
+    s.textContent = PIECE_SYMBOLS[t] || t;
+    s.className = (selectedHand && selectedHand.type===t && selectedHand.owner==='G' && selectedHand.index===i) ? 'selected' : '';
+    s.onclick = ()=>{
+      if(gameOver) return;
+      if(!canLocalOperate()) return;
+      if(currentPlayer!=='G') return;
+      if(selectedHand && selectedHand.owner==='G' && selectedHand.index===i){
+        selectedHand = null;
+      }else{
+        selectedHand = {type:t, owner:'G', index: i};
+      }
+      selected = null;
+      renderBoard();
+    };
+    handGEl.appendChild(s);
+  }
+}
+
+function renderKifuList(){
+  kifuListEl.innerHTML = '';
+  kifu.forEach((m, i)=>{
+    const li = document.createElement('li');
+    li.dataset.index = i;
+    const idx = i+1;
+    const span = document.createElement('span');
+    span.textContent = `${idx}. ${m}`;
+    li.appendChild(span);
+    li.addEventListener('click', ()=>{
+      const prev = kifuListEl.querySelector('li.kifu-selected');
+      if(prev) prev.classList.remove('kifu-selected');
+      li.classList.add('kifu-selected');
+      if(history[i]){ jumpToHistory(i); }
+    });
+    if(i===historyIndex) li.classList.add('kifu-selected');
+    kifuListEl.appendChild(li);
+  });
+}
+
+function getLegalMoves(x,y){
+  const piece = boardState[y][x];
+  if(!piece) return new Set();
+  const o = piece.owner;
+  const dir = (o === 'S') ? -1 : +1;
+  const t = piece.type;
+  const moves = new Set();
+  const addStep = (dx,dy) => {
+    const nx = x+dx, ny = y+dy; if(!inBoard(nx,ny)) return;
+    const target = boardState[ny][nx];
+    if(!target || target.owner !== o) moves.add(`${nx},${ny}`);
+  };
+  const addSlide = (sx,sy) => {
+    let nx=x+sx, ny=y+sy;
+    while(inBoard(nx,ny)){
+      const target = boardState[ny][nx];
+      if(!target){ moves.add(`${nx},${ny}`); }
+      else { if(target.owner !== o) moves.add(`${nx},${ny}`); break; }
+      nx+=sx; ny+=sy;
+    }
+  };
+  switch(t){
+    case 'FU': addStep(0,dir); break;
+    case 'KY': addSlide(0,dir); break;
+    case 'KE': addStep(-1,2*dir); addStep(1,2*dir); break;
+    case 'GI': addStep(-1,dir); addStep(0,dir); addStep(1,dir); addStep(-1,-dir); addStep(1,-dir); break;
+    case 'KI': case 'TO': case 'NY': case 'NK': case 'NG':
+      addStep(-1,dir); addStep(0,dir); addStep(1,dir); addStep(-1,0); addStep(1,0); addStep(0,-dir); break;
+    case 'KA': addSlide(1,1); addSlide(1,-1); addSlide(-1,1); addSlide(-1,-1); break;
+    case 'HI': addSlide(1,0); addSlide(-1,0); addSlide(0,1); addSlide(0,-1); break;
+    case 'OU': addStep(1,0); addStep(-1,0); addStep(0,1); addStep(0,-1); addStep(1,1); addStep(1,-1); addStep(-1,1); addStep(-1,-1); break;
+    case 'UM': addSlide(1,1); addSlide(1,-1); addSlide(-1,1); addSlide(-1,-1); addStep(1,0); addStep(-1,0); addStep(0,1); addStep(0,-1); break;
+    case 'RY': addSlide(1,0); addSlide(-1,0); addSlide(0,1); addSlide(0,-1); addStep(1,1); addStep(1,-1); addStep(-1,1); addStep(-1,-1); break;
+  }
+  return moves;
+}
+function isKingInCheck(owner){
+  let kingPos = null;
+  for(let y=0;y<9;y++){
+    for(let x=0;x<9;x++){
+      const p=boardState[y][x];
+      if(p && p.type==='OU' && p.owner===owner){ kingPos={x,y}; break; }
+    }
+    if(kingPos) break;
+  }
+  if(!kingPos) return false;
+  for(let y=0;y<9;y++){
+    for(let x=0;x<9;x++){
+      const p=boardState[y][x];
+      if(p && p.owner !== owner){
+        const moves = getLegalMoves(x,y);
+        if(moves.has(`${kingPos.x},${kingPos.y}`)) return true;
+      }
+    }
+  }
+  return false;
+}
+function hasAnyLegalResponse(owner){
+  for(let y=0;y<9;y++){
+    for(let x=0;x<9;x++){
+      const p = boardState[y][x];
+      if(!p || p.owner !== owner) continue;
+      const moves = getLegalMoves(x,y);
+      for(const key of moves){
+        const [nx,ny] = key.split(',').map(Number);
+        const savedFrom = boardState[y][x];
+        const savedTo   = boardState[ny][nx];
+        boardState[ny][nx] = savedFrom; boardState[y][x] = null;
+        const stillInCheck = isKingInCheck(owner);
+        boardState[y][x] = savedFrom; boardState[ny][nx] = savedTo;
+        if(!stillInCheck) return true;
+      }
+    }
+  }
+  return false;
+}
+function checkDoublePawn(type,x,owner){
+  if(type !== 'FU') return false;
+  for(let y=0;y<9;y++){
+    const p = boardState[y][x];
+    if(p && p.type === 'FU' && p.owner === owner) return true;
+  }
+  return false;
+}
+function isUchifuzume(dropX,dropY,type){
+  if(type !== 'FU') return false;
+  const opponent = (currentPlayer === 'S') ? 'G' : 'S';
+  const prev = boardState[dropY][dropX];
+  boardState[dropY][dropX] = { type: type, owner: currentPlayer, initSide: (currentPlayer==='S' ? 'B' : 'T') };
+  const oppInCheck = isKingInCheck(opponent);
+  let mate = false;
+  if(oppInCheck){
+    const hasResponse = hasAnyLegalResponse(opponent);
+    if(!hasResponse) mate = true;
+  }
+  boardState[dropY][dropX] = prev;
+  return mate;
+}
+
+function attemptMove(from, to){
+  if(gameOver || kansoMode) return;
+  const piece = boardState[from.y][from.x]; if(!piece) return;
+  if(!canLocalOperate()) return;
+  const userSide = getMySideFromCurrentUser();
+  if(!userSide || userSide !== currentPlayer) return;
+
+  const legal = getLegalMoves(from.x, from.y); if(!legal.has(`${to.x},${to.y}`)) return;
+
+  const canPromote = moveCanPromote(piece.owner, from.y, to.y, piece.type);
+  const mustProm = mustAutoPromote(piece.type, piece.owner, to.y);
+
+  let finalType = piece.type;
+  if(mustProm){
+    if(piece.type==='FU') finalType='TO';
+    else if(piece.type==='KY') finalType='NY';
+    else if(piece.type==='KE') finalType='NK';
+  }else if(canPromote){
+    const yes = window.confirm('成りますか？');
+    if(yes){
+      if(piece.type==='FU') finalType='TO';
+      else if(piece.type==='KY') finalType='NY';
+      else if(piece.type==='KE') finalType='NK';
+      else if(piece.type==='GI') finalType='NG';
+      else if(piece.type==='KA') finalType='UM';
+      else if(piece.type==='HI') finalType='RY';
+    }
+  }
+  performMove(from, to, finalType);
+}
+
+function performMove(from, to, finalPieceType){
+  const piece = boardState[from.y][from.x];
+  const dest  = boardState[to.y][to.x];
+
+  if(dest){
+    if(dest.type==='OU'){
+      boardState[to.y][to.x] = null;
+      boardState[from.y][from.x] = null;
+      kifu.push(`${currentPlayer==='S'?'▲':'△'}${9-to.x}${to.y+1}${PIECE_SYMBOLS[piece.type]||piece.type}`);
+      renderBoard();
+      alert((currentPlayer==='S'?'先手':'後手')+'が玉を取りました。勝ち。');
+      gameOver = true; stopTick();
+      syncShogiState();
+      return;
+    }else{
+      const base = unpromote(dest.type);
+      if(currentPlayer==='S') handS.push(base); else handG.push(base);
+    }
+  }
+
+  const movedPiece = { type: finalPieceType || piece.type, owner: piece.owner, initSide: piece.initSide };
+  boardState[to.y][to.x] = movedPiece;
+  boardState[from.y][from.x] = null;
+
+  if(!kansoMode){ kifu.push(`${currentPlayer==='S'?'▲':'△'}${9-to.x}${to.y+1}${PIECE_SYMBOLS[movedPiece.type]||movedPiece.type}`); }
+
+  history.push({board: clone(boardState), handS: clone(handS), handG: clone(handG), mover: currentPlayer});
+  historyIndex = history.length - 1;
+
+  selected = null;
+  selectedHand = null;
+
+  currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
+  onMoveFinishedSwitchTurn();
+
+  renderBoard();
+  updateTimerDisplay();
+
+  syncShogiState();
+}
+
+function attemptKansoMove(from, to){
+  if(gameOver || !kansoMode) return;
+  const piece = boardState[from.y][from.x]; if(!piece) return;
+  if(piece.owner !== currentPlayer) return;
+  const legal = getLegalMoves(from.x, from.y); if(!legal.has(`${to.x},${to.y}`)) return;
+
+  const canPromote = moveCanPromote(piece.owner, from.y, to.y, piece.type);
+  const mustProm = mustAutoPromote(piece.type, piece.owner, to.y);
+
+  let finalType = piece.type;
+  if(mustProm){
+    if(piece.type==='FU') finalType='TO';
+    else if(piece.type==='KY') finalType='NY';
+    else if(piece.type==='KE') finalType='NK';
+  }else if(canPromote){
+    const yes = window.confirm('成りますか？');
+    if(yes){
+      if(piece.type==='FU') finalType='TO';
+      else if(piece.type==='KY') finalType='NY';
+      else if(piece.type==='KE') finalType='NK';
+      else if(piece.type==='GI') finalType='NG';
+      else if(piece.type==='KA') finalType='UM';
+      else if(piece.type==='HI') finalType='RY';
+    }
+  }
+  performKansoMove(from, to, finalType);
+}
+
+function performKansoMove(from, to, finalPieceType){
+  const piece = boardState[from.y][from.x];
+  if(!piece) return;
+  const dest = boardState[to.y][to.x];
+  if(dest){
+    if(dest.type==='OU'){
+      boardState[to.y][to.x] = null;
+      boardState[from.y][from.x] = null;
+      selected = null; selectedHand = null;
+      renderBoard();
+      syncShogiState();
+      return;
+    }else{
+      const base = unpromote(dest.type);
+      if(piece.owner==='S') handS.push(base); else handG.push(base);
+    }
+  }
+
+  boardState[to.y][to.x] = { type: finalPieceType || piece.type, owner: piece.owner, initSide: piece.initSide };
+  boardState[from.y][from.x] = null;
+  selected = null; selectedHand = null;
+
+  currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
+  onMoveFinishedSwitchTurn();
+
+  renderBoard();
+
+  syncShogiState();
+}
+
+function dropFromHand(x,y, record=true){
+  if(gameOver) return;
+  if(!selectedHand) return;
+  if(boardState[y][x]) return;
+  if(!canLocalOperate()) return;
+
+  if(selectedHand.owner !== currentPlayer){
+    alert('その駒は現在の手番では使えません');
+    selectedHand = null; renderBoard(); return;
+  }
+
+  const type = selectedHand.type;
+  if(type==='FU'){
+    if((currentPlayer==='S' && y===0) || (currentPlayer==='G' && y===8)){
+      alert('行き所のない場所には歩は打てません'); selectedHand=null; renderBoard(); return;
+    }
+    if(checkDoublePawn(type, x, currentPlayer) && record){ alert('二歩は禁止です'); return; }
+  }
+  if(isUchifuzume(x,y,type) && record){ alert('打ち歩詰めは禁止です'); return; }
+
+  boardState[y][x] = { type: type, owner: currentPlayer, initSide: (currentPlayer==='S' ? 'B' : 'T') };
+
+  if(selectedHand.owner==='S'){
+    if(typeof selectedHand.index==='number') handS.splice(selectedHand.index,1);
+    else { const idx = handS.indexOf(type); if(idx>=0) handS.splice(idx,1); }
+  }else{
+    if(typeof selectedHand.index==='number') handG.splice(selectedHand.index,1);
+    else { const idx = handG.indexOf(type); if(idx>=0) handG.splice(idx,1); }
+  }
+
+  if(record){
+    kifu.push(`${currentPlayer==='S'?'▲':'△'}打${9-x}${y+1}${PIECE_SYMBOLS[type]||type}`);
+    history.push({board: clone(boardState), handS: clone(handS), handG: clone(handG), mover: currentPlayer});
+    historyIndex = history.length - 1;
+    currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
+    onMoveFinishedSwitchTurn();
+  }else{
+    currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
+    onMoveFinishedSwitchTurn();
+  }
+
+  selectedHand = null;
+  renderBoard();
+  updateTimerDisplay();
+
+  syncShogiState();
+}
+
+function cellClick(x,y){
+  if(gameOver) return;
+  const p = boardState[y][x];
+
+  if(kansoMode){
+    if(selectedHand && !p){ dropFromHand(x,y, false); return; }
+    if(p){
+      if(p.owner !== currentPlayer) return;
+      if(selected && selected.x===x && selected.y===y){ selected=null; renderBoard(); return; }
+      selected = {x,y}; selectedHand=null; renderBoard(); return;
+    }
+    if(selected){
+      const from = selected;
+      selected = null;
+      attemptKansoMove(from, {x,y});
+      return;
+    }
+    return;
+  }
+
+  if(selectedHand && !p){ dropFromHand(x,y, true); return; }
+
+  if(p && p.owner === currentPlayer){
+    if(!canLocalOperate()) return;
+    if(selected && selected.x===x && selected.y===y){ selected=null; renderBoard(); return; }
+    selected = {x,y}; selectedHand=null; renderBoard(); return;
+  }
+
+  if(selected){
+    const from = selected;
+    selected = null;
+    attemptMove(from, {x,y});
+    renderBoard();
+    return;
+  }
+}
+
+function jumpToHistory(idx){
+  historyIndex = Math.max(0, Math.min(idx, history.length-1));
+  const snap = history[historyIndex];
+  boardState = clone(snap.board);
+  handS = clone(snap.handS);
+  handG = clone(snap.handG);
+  if(snap.mover === null){
+    currentPlayer = mySideLocal;
+  }else{
+    currentPlayer = (snap.mover === 'S') ? 'G' : 'S';
+  }
+  selected = null; selectedHand = null;
+  renderBoard();
+  updateTimerDisplay();
+}
+
+function resetGameCore(){
+  initialBoard = createInitialBoard();
+  boardState = clone(initialBoard);
+  selected = null; selectedHand = null;
+  handS = []; handG = [];
+  kifu = []; history = [{board: clone(boardState), handS:[], handG:[], mover: null}]; 
+  historyIndex = 0;
+  currentPlayer = mySideLocal;
+  kansoMode = false; gameOver = false;
+
+  readTimeSettings();
+  stopTick();
+  startTick();
+
+  document.getElementById('kansoControls').classList.add('hidden');
+  kifuPanelEl.style.display = 'none';
+  document.getElementById('toggleKanso').textContent = '感想戦モードへ';
+
+  resignBtn.classList.remove('hidden');
+
+  boardEl.classList.toggle('flipped', boardFlipped);
+
+  renderBoard();
+  updateTimerDisplay();
+
+  // 初期状態を DB に同期
+  syncShogiState();
+}
+
+function resetGame(){
+  mySideLocal = document.getElementById('mySide').value;
+  resetGameCore();
+}
+
+document.getElementById('mySide').addEventListener('change', e => { mySideLocal = e.target.value; resetGame(); });
+
+document.getElementById('toggleKanso').addEventListener('click', ()=>{
+  kansoMode = !kansoMode;
+  document.getElementById('toggleKanso').textContent = kansoMode ? '対局モードへ' : '感想戦モードへ';
+  document.getElementById('prev').classList.toggle('hidden', !kansoMode);
+  document.getElementById('next').classList.toggle('hidden', !kansoMode);
+  kansoControlsEl.classList.toggle('hidden', !kansoMode);
+  kifuPanelEl.style.display = kansoMode ? 'block' : 'none';
+  if(kansoMode) renderKifuList();
+  if(kansoMode){ 
+    stopTick(); 
+    resignBtn.classList.add('hidden');
+  }
+  else { 
+    if(!gameOver) startTick(); 
+    resignBtn.classList.remove('hidden');
+  }
+});
+
+document.getElementById('prev').addEventListener('click', ()=>{
+  if(!kansoMode) return;
+  if(historyIndex>0){ historyIndex--; jumpToHistory(historyIndex); }
+});
+document.getElementById('next').addEventListener('click', ()=>{
+  if(!kansoMode) return;
+  if(historyIndex < history.length-1){ historyIndex++; jumpToHistory(historyIndex); }
+});
+
+document.getElementById('copyKif').addEventListener('click', ()=>{
+  const head = `先手：先手\n後手：後手\n手合割：平手\n開始日時：${new Date().toLocaleString()}\n\n`;
+  const body = kifu.map((m,i)=>`${i+1} ${m}`).join('\n');
+  const tail = `\nまで${kifu.length}手`;
+  navigator.clipboard.writeText(head+body+tail).then(()=>alert('日本語棋譜をコピーしました'));
+});
+
+document.getElementById('flipBoard').addEventListener('click', ()=>{
+  boardFlipped = !boardFlipped;
+  localStorage.setItem('boardFlipped', boardFlipped ? '1' : '0');
+  boardEl.classList.toggle('flipped', boardFlipped);
+  renderBoard();
+});
+
+resignBtn.addEventListener('click', ()=>{
+  if(kansoMode || gameOver) return;
+  const sideLabel = currentPlayer==='S' ? '先手' : '後手';
+  const ok = confirm(`${sideLabel}（現在の手番）が投了すると、${sideLabel}の負けになります。\n本当に投了しますか？`);
+  if(!ok) return;
+  gameOver = true;
+  stopTick();
+  alert(`${sideLabel}の投了により${sideLabel}の負けです。`);
+  syncShogiState();
+});
+
+const controlsHeader = document.getElementById('controlsHeader');
+const controlsDiv = document.getElementById('controlsShogi');
+controlsHeader.addEventListener('click', ()=>{
+  controlsDiv.classList.toggle('hidden');
+  controlsHeader.textContent = controlsDiv.classList.contains('hidden') ? '▶ 詳細表示' : '▼ 詳細表示';
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  boardFlipped = localStorage.getItem('boardFlipped') === '1';
+  createBoardCells();
+  readTimeSettings();
+  resetGameCore();
+});
+
+/* ====== 将棋の Firebase 統合部 ====== */
+
+const userToSide = { A: 'S', B: 'G' };
+
+function getMySideFromCurrentUser(){
+  if(!currentUser) return null;
+  return userToSide[currentUser] || null;
+}
+
+function canLocalOperate(){
+  const mySide = getMySideFromCurrentUser();
+  if(!mySide) return false;
+  if(mySideLocal !== mySide){
+    mySideLocal = mySide;
+    const mySideSelect = document.getElementById('mySide');
+    if(mySideSelect) mySideSelect.value = mySideLocal;
+  }
+  return mySide === currentPlayer;
+}
+
+const shogiRef = ref(db, `${roomName}/shogi`);
+
+async function syncShogiState(){
+  try{
+    const payload = {
+      board: boardState,
+      handS: handS,
+      handG: handG,
+      currentPlayer: currentPlayer,
+      kifu: kifu,
+      gameOver: !!gameOver,
+      timestamp: new Date().toISOString(),
+      lastUpdatedBy: currentUser || ''
+    };
+    await set(shogiRef, payload);
+  }catch(e){
+    console.error('syncShogiState error', e);
+  }
+}
+
+onValue(shogiRef, (snap) => {
+  const data = snap.exists() ? snap.val() : null;
+  if(!data) return;
+  if(data.lastUpdatedBy && currentUser && data.lastUpdatedBy === currentUser){
+    return;
+  }
+  if(data.board) boardState = data.board;
+  if(Array.isArray(data.handS)) handS = data.handS;
+  if(Array.isArray(data.handG)) handG = data.handG;
+  if(data.currentPlayer) currentPlayer = data.currentPlayer;
+  if(Array.isArray(data.kifu)) kifu = data.kifu;
+  gameOver = !!data.gameOver;
+  renderBoard();
+  updateTimerDisplay();
+});
+
+(async ()=> {
+  try{
+    const snap = await get(shogiRef);
+    if(!snap.exists()){
+      await set(shogiRef, {
+        board: boardState,
+        handS: handS,
+        handG: handG,
+        currentPlayer: currentPlayer,
+        kifu: kifu,
+        gameOver: false,
+        timestamp: new Date().toISOString(),
+        lastUpdatedBy: ''
+      });
+    }else{
+      const data = snap.val();
+      if(data.board) boardState = data.board;
+      if(Array.isArray(data.handS)) handS = data.handS;
+      if(Array.isArray(data.handG)) handG = data.handG;
+      if(data.currentPlayer) currentPlayer = data.currentPlayer;
+      if(Array.isArray(data.kifu)) kifu = data.kifu;
+      gameOver = !!data.gameOver;
+      renderBoard();
+      updateTimerDisplay();
+    }
+  }catch(e){
+    console.error('init shogi error', e);
+  }
+})();
+
+function enforceMySideIfAssigned(){
+  const mySideSelect = document.getElementById('mySide');
+  const assigned = getMySideFromCurrentUser();
+  if(assigned && mySideSelect){
+    mySideLocal = assigned;
+    mySideSelect.value = assigned;
+    mySideSelect.title = '注意: ユーザーA/B の割当がある場合はその割当が優先されます';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  enforceMySideIfAssigned();
+});
+
+/* ===========================
+   ---- 将棋統合コード 終わり ----
+   =========================== */
+
+</script>
+</body>
+</html>
