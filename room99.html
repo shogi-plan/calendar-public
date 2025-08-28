@@ -1,1485 +1,841 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>2人予定調整カレンダー</title>
+<meta charset="utf-8" />
+<title>フルスクラッチ将棋 — 投了 & 持ち駒領域修正版</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  body {
-    font-family: sans-serif;
-    margin: 0; padding: 1em;
-    font-size: 16px;
-  }
-  .title-container {
-    text-align: center;
-    margin-bottom: 1em;
-  }
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5em;
-    margin-bottom: 1em;
-    justify-content: center;
-    align-items: center;
-  }
-  label {
-    display: flex;
-    align-items: center;
-    gap: 0.2em;
-  }
-  input, select, button {
-    font-size: 1em;
-    padding: 0.4em 0.7em;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-  }
-  th, td {
-    border: 1px solid #ccc;
-    text-align: center;
-    padding: 0.3em;
-    vertical-align: top;
-    user-select: none;
-    word-break: break-word;
-  }
-  th {
-    position: sticky;
-    top: 0;
-    background: #f0f0f0;
-    z-index: 10;
-  }
-  th.weekend, td.weekend {
-    color: red;
-  }
-  th.holiday, td.holiday {
-    color: red;
-  }
-  td.selected {
-    border: 3px solid orange !important;
-    background-color: inherit !important;
-  }
-  td.both {
-    background-color: #ccffcc !important;
-  }
-  .userA {
-    color: blue;
-    font-weight: bold;
-  }
-  .userB {
-    color: green;
-    font-weight: bold;
-  }
-  .chat {
-    margin-top: 2em;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  .chat-log {
-    border: 1px solid #ccc;
-    height: 200px;
-    overflow-y: auto;
-    padding: 0.5em;
-    background: #fafafa;
-  }
-  .chat-message {
-    margin-bottom: 0.5em;
-    white-space: pre-wrap;
-  }
-  @media screen and (max-width: 600px) {
-    table, thead, tbody, th, td, tr {
-      font-size: 12px;
-    }
-  }
+:root{
+  --ui-font: 14px;
+  --ui-font-lg: 16px;
+  --btn-pad-y: 8px;
+  --btn-pad-x: 12px;
+}
+body{
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  display:flex; flex-direction:column; align-items:center;
+  padding:10px; box-sizing:border-box;
+}
+h1{ font-size: clamp(16px, 2.4vw, 20px); margin: 6px 0 10px; }
+
+#controls{
+  margin-top:8px; display:flex; flex-wrap:wrap; gap:10px;
+  justify-content:center; align-items:center;
+  font-size: var(--ui-font);
+}
+#controls label{ display:flex; align-items:center; gap:6px; }
+#controls input[type="number"], #controls select{
+  font-size: var(--ui-font);
+  padding: 4px 6px;
+}
+#controls button{
+  font-size: var(--ui-font-lg);
+  padding: var(--btn-pad-y) var(--btn-pad-x);
+  border-radius:8px; border:1px solid #666; background:#f7f7f7; cursor:pointer;
+}
+#controls button:hover{ background:#efefef; }
+#timebar{ margin:8px 0 6px; font-size: var(--ui-font-lg); }
+
+/* board */
+#board{
+  display:grid; grid-template-columns:repeat(9,1fr); grid-template-rows:repeat(9,1fr);
+  gap:0; border:3px solid #333; width:92vmin; height:92vmin; max-width:none; position:relative;
+  transition: transform 0.18s ease;
+  transform-origin: center center;
+}
+/* board rotate 180deg on flipped */
+#board.flipped{ transform: rotate(180deg); }
+
+.cell{
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  background:#f5deb3; border:1px solid #999; font-weight:bold;
+  font-size: clamp(14px, 3.8vmin, 28px);
+  user-select:none; transition:background-color .08s;
+  position:relative; overflow:hidden;
+}
+.selected{ outline:3px solid #ffcd00; background:#fff5a6; }
+
+.piece{ display:flex; align-items:center; justify-content:center; width:100%; height:100%; line-height:1; box-sizing:border-box; }
+.piece.promoted{ color:#b30000; font-weight:700; }
+/* initial-opponent pieces appear rotated (based on initSide property) */
+.piece.opposite{ transform: rotate(180deg); }
+
+/* hands: fixed block under each label so they don't push each other */
+#hands{ margin-top:10px; display:flex; gap:18px; justify-content:center; font-size: var(--ui-font-lg); align-items:flex-start; width:100%; box-sizing:border-box; padding:0 10px;}
+.hand-block{ display:flex; flex-direction:column; align-items:center; gap:6px; width:220px; box-sizing:border-box; }
+.hand-label{ display:block; text-align:center; min-height:1.2em; }
+.hand{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; width:100%; min-height:44px; border:1px solid #ddd; padding:6px; box-sizing:border-box; background:#fff; border-radius:6px; overflow:auto; max-height:120px; }
+.hand span{ display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border-radius:8px; background:#fff; border:1px solid #aaa; cursor:pointer; font-size:1.0em; }
+.hand span.selected{ outline:3px solid #ffcd00; background:#fff5a6; }
+/* visually rotate opponent's hand piece glyphs so they look correct */
+#handG span{ display:inline-flex; transform: rotate(180deg); }
+
+/* kifu list */
+#kifuPanel{ display:none; width:95vw; max-width:640px; margin-top:12px; }
+#kifuPanel h2{ font-size: var(--ui-font-lg); margin: 8px 0; }
+#kifuList{ border:1px solid #999; padding:8px; border-radius:8px; max-height:220px; overflow:auto; background:#fff; list-style: none; margin:0; padding-left:0; }
+#kifuList li{ padding:6px 8px; border-bottom:1px solid #eee; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+#kifuList li.kifu-selected{ background:#eaf6ff; outline:2px solid #9cd2ff; }
+
+#kansoControls{ width:95vw; max-width:640px; margin-top:8px; display:flex; justify-content:center; gap:12px; }
+#kansoControls button{ font-size:14px; padding:8px 12px; border-radius:8px; }
+
+.hidden{ display:none !important; }
 </style>
 </head>
 <body>
+<h1>遠タメ将棋</h1>
 
-<div class="title-container">
-  <h1>2人予定調整カレンダー</h1>
+<div id="controls">
+  <label>自分の役割：
+    <select id="mySide">
+      <option value="S">先手で開始</option>
+      <option value="G">後手で開始</option>
+    </select>
+  </label>
+
+  <label>持ち時間：
+    <input type="number" id="timeMinutes" value="5" min="0" style="width:64px;">分
+  </label>
+  <label>秒読み：
+    <input type="number" id="timeSeconds" value="30" min="0" style="width:64px;">秒
+  </label>
+
+  <button id="toggleKanso">感想戦へ</button>
+  <button id="copyKif">KIFcopy</button>
+  <button id="flipBoard" title="盤を180度回転">反転</button>
+  <!-- 投了ボタン: 対局モードのみ表示 -->
+  <button id="resign">投了</button>
 </div>
 
-<div class="controls">
-  <label>A：<input type="text" id="userAName" placeholder="名前" value="ユーザーA" /></label>
-  <label>B：<input type="text" id="userBName" placeholder="名前" value="ユーザーB" /></label>
-  <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span><select id="userSelect">
-    <option value="" selected>選択して下さい</option>
-    <option value="A">A</option>
-    <option value="B">B</option>
-  </select></label>
+<div id="timebar">
+  <span>先手：<span id="timerS">05:00</span></span> ｜ 
+  <span>後手：<span id="timerG">05:00</span></span>
 </div>
 
-<div class="controls">
-  <button id="btn-mark-ok">選択セルに○</button>
-  <button id="btn-mark-no">選択セルに×</button>
-  <button id="btn-clear-cell">選択セルを削除</button>
-  <button id="btn-clear-all">全データ削除</button>
+<div id="board"></div>
+
+<div id="kansoControls" class="hidden">
+  <button id="prev">一手戻る</button>
+  <button id="next">一手進む</button>
 </div>
 
-<div class="controls">
-  <button id="btn-prev-week">前の週</button>
-  <button id="btn-today">今日へ戻る</button>
-  <button id="btn-next-week">次の週</button>
+<!-- 持ち駒をラベル下に固定する構造 -->
+<div id="hands">
+  <div class="hand-block">
+    <div class="hand-label">自分の持ち駒</div>
+    <div id="handS" class="hand"></div>
+  </div>
+  <div class="hand-block">
+    <div class="hand-label">相手の持ち駒</div>
+    <div id="handG" class="hand"></div>
+  </div>
 </div>
 
-<table id="calendar"></table>
+<section id="kifuPanel">
+  <h2>棋譜（リストの項目をクリックするとその局面へジャンプ）</h2>
+  <ol id="kifuList"></ol>
+</section>
 
-<div class="chat">
-  <h2>チャット</h2>
-  <div class="chat-log" id="chatLog"></div>
- <div class="controls" style="margin-top:0.5em; gap:0.5em;">
-  <input type="text" id="chatInput" placeholder="メッセージを入力" style="flex:1; min-width: 0;" />
-  <button id="btn-send">送信</button>
-</div>
-
-<div class="controls" style="margin-top:0.5em; gap:0.5em; justify-content: center;">
-  <button id="btn-call-start">通話開始</button>
-  <button id="btn-mute" disabled>ミュート</button>
-  <button id="btn-call-end" disabled>通話終了</button>
-  <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
-</div>
-</div>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
-
-  const firebaseConfig = {
-      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
-      authDomain: "calendar-chousei.firebaseapp.com",
-      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "calendar-chousei",
-      storageBucket: "calendar-chousei.firebasestorage.app",
-      messagingSenderId: "368704703397",
-      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const callStatusRef = ref(db, 'callStatus');
-  const userANameInput = document.getElementById('userAName');
-  const userBNameInput = document.getElementById('userBName');
-  const userSelect = document.getElementById('userSelect');
-  const calendar = document.getElementById('calendar');
-  const chatLog = document.getElementById('chatLog');
-  const chatInput = document.getElementById('chatInput');
-
-  const btnMarkOk = document.getElementById('btn-mark-ok');
-  const btnMarkNo = document.getElementById('btn-mark-no');
-  const btnClearCell = document.getElementById('btn-clear-cell');
-  const btnClearAll = document.getElementById('btn-clear-all');
-  const btnPrevWeek = document.getElementById('btn-prev-week');
-  const btnToday = document.getElementById('btn-today');
-  const btnNextWeek = document.getElementById('btn-next-week');
-  const btnSend = document.getElementById('btn-send');
-  const btnCallStart = document.getElementById('btn-call-start');
-  const btnCallEnd = document.getElementById('btn-call-end');
-  const btnMute = document.getElementById('btn-mute');
-
-  let isMuted = false;
-  let remoteStream = null;
-
-btnMute.addEventListener('click', () => {
-  if (!localStream) return;
-  isMuted = !isMuted;
-  localStream.getAudioTracks().forEach(track => {
-    track.enabled = !isMuted;
-  });
-  btnMute.textContent = isMuted ? 'ミュート解除' : 'ミュート';
-});
-  
-  const callStatusDisplay = document.getElementById('callStatusDisplay');
-
-let localStream = null;
-let peerConnection = null;
-let callTimeoutId = null;
-let localCallStartPressed = false;
-
-const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-const signalingRef = ref(db, 'signaling');
-
-let currentUser = localStorage.getItem('currentUser') || '';
-let selectedCells = new Set();
-let currentWeekOffset = 0;
-let holidays = {};
-let lockedUserA = false;
-let lockedUserB = false;
-let callStatus = 'none';
-
-  function formatDate(date) {
-    return date.toISOString().split('T')[0];
-  }
-  function getMonday(date) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = (day === 0 ? -6 : 1) - day;
-    d.setDate(d.getDate() + diff);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
-  async function fetchHolidays() {
-    try {
-      const res = await fetch('https://holidays-jp.github.io/api/v1/date.json');
-      if (!res.ok) throw new Error('祝日API取得失敗');
-      holidays = await res.json();
-      renderCalendar();
-    } catch (e) {
-      console.error(e);
-      holidays = {};
-      renderCalendar();
-    }
-  }
-
-  function renderCalendar() {
-    calendar.innerHTML = '';
-    const thead = document.createElement('thead');
-    const trHead = document.createElement('tr');
-    thead.appendChild(trHead);
-    trHead.appendChild(document.createElement('th'));
-
-    const monday = getMonday(new Date());
-    monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const mm = d.getMonth() + 1;
-      const dd = d.getDate();
-      const ymd = formatDate(d);
-
-      const th = document.createElement('th');
-      th.innerHTML = `${mm}/${dd}<br>(${weekdays[d.getDay()]})`;
-
-      if (d.getDay() === 0 || d.getDay() === 6) th.classList.add('weekend');
-      if (holidays[ymd]) {
-        th.classList.add('holiday');
-        th.title = holidays[ymd];
-      }
-
-      trHead.appendChild(th);
-    }
-    calendar.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    for (let h = 9; h <= 22; h++) {
-      for (let m = 0; m < 60; m += 30) {
-        const tr = document.createElement('tr');
-        const tdTime = document.createElement('td');
-        tdTime.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        tr.appendChild(tdTime);
-
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(monday);
-          d.setDate(monday.getDate() + i);
-          const ymd = formatDate(d);
-          const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-          const key = `${ymd}_${timeStr}`;
-          const td = document.createElement('td');
-          td.dataset.key = key;
-
-          if (d.getDay() === 0 || d.getDay() === 6) td.classList.add('weekend');
-          if (holidays[ymd]) td.classList.add('holiday');
-
-          td.addEventListener('click', (e) => {
-  e.stopPropagation();
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
-  if (selectedCells.has(key)) {
-    selectedCells.delete(key);
-    td.classList.remove('selected');
-  } else {
-    selectedCells.add(key);
-    td.classList.add('selected');
-  }
-});
-
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
-      }
-    }
-    calendar.appendChild(tbody);
-    updateScheduleTable();
-  }
-
-  async function updateScheduleTable() {
-    const monday = getMonday(new Date());
-    monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const schedulesRef = ref(db, 'schedules');
-    const snapshot = await get(schedulesRef);
-    const schedules = snapshot.exists() ? snapshot.val() : {};
-
-    const tds = calendar.querySelectorAll('tbody td[data-key]');
-    tds.forEach(td => {
-      const key = td.dataset.key;
-      const data = schedules[key] || {};
-      td.innerHTML = '';
-
-      let hasA = false, hasB = false;
-      if (data.A) {
-        const divA = document.createElement('div');
-        divA.textContent = `A: ${data.A}`;
-        divA.classList.add('userA');
-        td.appendChild(divA);
-        if (data.A === '○') hasA = true;
-      }
-      if (data.B) {
-        const divB = document.createElement('div');
-        divB.textContent = `B: ${data.B}`;
-        divB.classList.add('userB');
-        td.appendChild(divB);
-        if (data.B === '○') hasB = true;
-      }
-      td.classList.toggle('both', hasA && hasB);
-    });
-  }
-
-  async function applyToSelectedCells(value) {
-    if (selectedCells.size === 0) return;
-    const updates = {};
-    selectedCells.forEach(key => {
-      updates[`schedules/${key}/${currentUser}`] = value;
-    });
-    await update(ref(db), updates);
-    selectedCells.clear();
-  }
-
-  async function clearSelectedCells() {
-    if (selectedCells.size === 0) return;
-    const updates = {};
-    selectedCells.forEach(key => {
-      updates[`schedules/${key}/${currentUser}`] = null;
-    });
-    await update(ref(db), updates);
-    selectedCells.clear();
-  }
-
-  async function clearAllData() {
-  if (!confirm('本当に全てのデータを削除しますか？')) return;
-  await remove(ref(db, 'userNames'));
-  userANameInput.value = 'ユーザーA';
-  userBNameInput.value = 'ユーザーB';
-  await remove(ref(db, 'schedules'));
-  await remove(ref(db, 'chatLog'));
-  await remove(ref(db, 'roomUsers'));
-  await remove(ref(db, 'callStatus'));
-await set(ref(db, 'callStatus'), {
-  status: 'none',
-  users: { A: false, B: false },
-  statusMessage: '',
-  timestamp: null
-});
-  await remove(ref(db, 'signaling'));
-  selectedCells.clear();
-  localStorage.removeItem('currentUser');  
-sessionStorage.setItem('wasCleared', '1');
-
-lockedUserA = false;
-lockedUserB = false;
-
-  currentUser = '';
-  
-  userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
-  userSelect.disabled = false;
-  
-  updateCallStatusUI('none');
-  }
-  async function startLocalStream() {
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
-  }
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-      video: false
-    });
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-      console.log('Audio track enabled:', track);
-    });
-    return localStream;
-  } catch (error) {
-    console.error('startLocalStream error:', error);
-    throw error;
-  }
+<script>
+// ========== 定数・ユーティリティ ==========
+const PIECE_SYMBOLS={FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'成香',NK:'成桂',NG:'成銀',UM:'馬',RY:'龍'};
+const PROMOTABLE=['FU','KY','KE','GI','KA','HI'];
+function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+function unpromote(type){
+  switch(type){case 'TO': return 'FU'; case 'NY': return 'KY'; case 'NK': return 'KE'; case 'NG': return 'GI'; case 'UM': return 'KA'; case 'RY': return 'HI'; default: return type;}
+}
+function inBoard(x,y){ return x>=0 && x<9 && y>=0 && y<9; }
+function inPromotionZone(owner,y){ return owner==='S' ? (y<=2) : (y>=6); }
+function moveCanPromote(owner, fromY, toY, pieceType){
+  if(!PROMOTABLE.includes(pieceType)) return false;
+  return inPromotionZone(owner, fromY) || inPromotionZone(owner, toY);
+}
+function mustAutoPromote(type, owner, toY){
+  if(type==='FU' || type==='KY'){ return owner==='S' ? (toY===0) : (toY===8); }
+  if(type==='KE'){ return owner==='S' ? (toY<=1) : (toY>=7); }
+  return false;
 }
 
-function createPeerConnection() {
-  if (peerConnection && peerConnection.signalingState !== 'closed') {
-    console.log('createPeerConnection: 既存のpeerConnectionを再利用します');
+// ========== 初期盤面 ==========
+function createInitialBoard(){
+  const row=(arr,yInit)=>arr.map(x=>x?{type:x.type,owner:x.owner,initSide:yInit>=6?'B':'T'}:null);
+  return [
+    row([{type:'KY',owner:'G'},{type:'KE',owner:'G'},{type:'GI',owner:'G'},{type:'KI',owner:'G'},{type:'OU',owner:'G'},{type:'KI',owner:'G'},{type:'GI',owner:'G'},{type:'KE',owner:'G'},{type:'KY',owner:'G'}],0),
+    row([null,{type:'HI',owner:'G'},null,null,null,null,null,{type:'KA',owner:'G'},null],1),
+    row(Array(9).fill({type:'FU',owner:'G'}),2),
+    row(Array(9).fill(null),3),
+    row(Array(9).fill(null),4),
+    row(Array(9).fill(null),5),
+    row(Array(9).fill({type:'FU',owner:'S'}),6),
+    row([null,{type:'KA',owner:'S'},null,null,null,null,null,{type:'HI',owner:'S'},null],7),
+    row([{type:'KY',owner:'S'},{type:'KE',owner:'S'},{type:'GI',owner:'S'},{type:'KI',owner:'S'},{type:'OU',owner:'S'},{type:'KI',owner:'S'},{type:'GI',owner:'S'},{type:'KE',owner:'S'},{type:'KY',owner:'S'}],8)
+  ];
+}
 
-    try {
-      if (localStream && peerConnection.getSenders) {
-        const senders = peerConnection.getSenders();
-        localStream.getTracks().forEach(track => {
-          const sameSender = senders.find(s => s.track === track);
-          if (sameSender) {
-            return;
-          }
+// ========== 状態 ==========
+let initialBoard = createInitialBoard();
+let boardState = clone(initialBoard);
+let selected = null;                // {x,y}
+let selectedHand = null;            // {type, owner, index}
+let handS = [], handG = [];
+let kifu = [];
+// history の各要素は {board, handS, handG, mover}
+// mover: そのスナップに到達させた「最後に指したプレイヤー」（'S' / 'G' / null）
+let history = [{board: clone(boardState), handS:[], handG:[], mover: null}];
+let historyIndex = 0;
 
-          const sameKindSender = senders.find(s => s.track && s.track.kind === track.kind);
-          if (sameKindSender) {
-            if (typeof sameKindSender.replaceTrack === 'function') {
-              sameKindSender.replaceTrack(track).then(() => {
-                console.log(`createPeerConnection(reuse): replaceTrack で ${track.kind} を差し替えました`);
-              }).catch(err => {
-                console.warn('createPeerConnection(reuse): replaceTrack に失敗しました。remove/add を試みます', err);
-                try {
-                  peerConnection.removeTrack(sameKindSender);
-                } catch (e) {
-                  console.warn('createPeerConnection(reuse): removeTrack でエラー', e);
-                }
-                try {
-                  peerConnection.addTrack(track, localStream);
-                  console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
-                } catch (e) {
-                  console.warn('createPeerConnection(reuse): addTrack に失敗', e);
-                }
-              });
-            } else {
-              try {
-                peerConnection.removeTrack(sameKindSender);
-              } catch (e) {
-                console.warn('createPeerConnection(reuse): removeTrack でエラー', e);
-              }
-              try {
-                peerConnection.addTrack(track, localStream);
-                console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
-              } catch (e) {
-                console.warn('createPeerConnection(reuse): addTrack に失敗', e);
-              }
-            }
-          } else {
-            try {
-              peerConnection.addTrack(track, localStream);
-              console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
-            } catch (e) {
-              console.warn('createPeerConnection(reuse): addTrack に失敗', e);
-            }
-          }
-        });
+let mySide = 'S';
+let currentPlayer = 'S';
+let kansoMode = false;
+let gameOver = false;
+
+let boardFlipped = false; // 盤回転状態（ローカルのみ保持）
+
+// ========== タイマー ==========
+let mainTimeS = 300, mainTimeG = 300;   // 秒
+let byoBase = 30;
+let byoRemainS = 0, byoRemainG = 0;
+let timerId = null;
+
+function readTimeSettings(){
+  const m = Math.max(0, parseInt(document.getElementById('timeMinutes').value)||0);
+  const s = Math.max(0, parseInt(document.getElementById('timeSeconds').value)||0);
+  mainTimeS = mainTimeG = m*60;
+  byoBase = s;
+  byoRemainS = byoRemainG = 0;
+  updateTimerDisplay();
+}
+function startTick(){
+  if(timerId) clearInterval(timerId);
+  timerId = setInterval(()=> tickOneSecond(), 1000);
+}
+function stopTick(){ if(timerId){ clearInterval(timerId); timerId = null; } }
+
+function tickOneSecond(){
+  if(gameOver || kansoMode) return;
+
+  let over = false;
+
+  if(currentPlayer==='S'){
+    if(mainTimeS>0){
+      mainTimeS = Math.max(0, mainTimeS-1);
+    }else{
+      if(byoBase<=0){
+        over = true;
+      }else{
+        if(byoRemainS<=0) byoRemainS = byoBase;
+        byoRemainS = Math.max(0, byoRemainS-1);
+        if(byoRemainS===0) over = true;
       }
-    } catch (e) {
-      console.warn('createPeerConnection(reuse): トラック再設定中にエラー', e);
     }
-
-    return;
+  }else{
+    if(mainTimeG>0){
+      mainTimeG = Math.max(0, mainTimeG-1);
+    }else{
+      if(byoBase<=0){
+        over = true;
+      }else{
+        if(byoRemainG<=0) byoRemainG = byoBase;
+        byoRemainG = Math.max(0, byoRemainG-1);
+        if(byoRemainG===0) over = true;
+      }
+    }
   }
 
-  peerConnection = new RTCPeerConnection(configuration);
-  console.log('createPeerConnection: 新しいRTCPeerConnectionを作成しました');
-
-  if (remoteStream) {
-    remoteStream.getTracks().forEach(track => {
-      try {
-        track.stop();
-      } catch (e) {
-        console.warn('remoteStream track stop error:', e);
-      }
-    });
-    remoteStream = null;
+  updateTimerDisplay();
+  if(over){
+    timeOver(currentPlayer);
   }
-
-  peerConnection.ontrack = event => {
-    if (event.streams && event.streams[0]) {
-      remoteStream = event.streams[0];
-    } else {
-      if (!remoteStream) remoteStream = new MediaStream();
-      remoteStream.addTrack(event.track);
-    }
-
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio) {
-      remoteAudio.srcObject = null;
-      remoteAudio.srcObject = remoteStream;
-      remoteAudio.play().catch(err => {
-        console.warn('remoteAudio.play() blocked or failed:', err);
-      });
-    } else {
-      const audio = document.createElement('audio');
-      audio.id = 'remote-audio';
-      audio.autoplay = true;
-      audio.playsInline = true;
-      document.body.appendChild(audio);
-
-      audio.srcObject = null;
-      audio.srcObject = remoteStream;
-      audio.play().catch(err => console.warn("audio.play() error:", err));
+}
+function timeOver(side){
+  gameOver = true;
+  stopTick();
+  alert(`${side==='S'?'先手':'後手'}の時間切れで負けです。`);
+}
+function onMoveFinishedSwitchTurn(){
+  if(currentPlayer==='S'){
+    if(mainTimeS<=0) byoRemainS = byoBase;
+  }else{
+    if(mainTimeG<=0) byoRemainG = byoBase;
+  }
+  updateTimerDisplay();
+}
+function updateTimerDisplay(){
+  const timerSEl = document.getElementById('timerS');
+  const timerGEl = document.getElementById('timerG');
+  const fmt = (mt, byorem)=> {
+    if(mt>0){
+      const m = Math.floor(mt/60), s = mt%60;
+      return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }else{
+      const s = Math.max(0, byorem>0? byorem : 0);
+      return `${String(s).padStart(2,'0')}`;
     }
   };
-
-  if (localStream) {
-    try {
-      localStream.getTracks().forEach(track => {
-        const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
-        if (!alreadyAdded) {
-          peerConnection.addTrack(track, localStream);
-          console.log(`createPeerConnection(new): ローカルトラック(${track.kind})を追加しました`);
-        }
-      });
-    } catch (e) {
-      console.warn('createPeerConnection(new): ローカルトラック追加でエラー', e);
-    }
-  }
-
-  peerConnection.oniceconnectionstatechange = () => {
-    const state = peerConnection.iceConnectionState;
-    console.log('ICE connection state:', state);
-
-    if (state === 'failed' || state === 'closed') {
-      update(ref(db, 'callStatus'), {
-        status: 'ended',
-        users: { A: false, B: false },
-        statusMessage: 'ICE: ' + state
-      }).catch(console.error);
-
-      endCallCleanup();
-      resetUI();
-    } else if (state === 'disconnected') {
-      setTimeout(() => {
-        if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
-          update(ref(db, 'callStatus'), {
-            status: 'ended',
-            users: { A: false, B: false },
-            statusMessage: 'ICE: disconnected timeout'
-          }).catch(console.error);
-
-          endCallCleanup();
-          resetUI();
-        }
-      }, 5000);
-    }
-  };
-
-  peerConnection.onicecandidate = event => {
-    if (event.candidate) {
-      const candRef = ref(db, `signaling/candidates/${currentUser}`);
-      const newCandRef = push(candRef);
-      set(newCandRef, { candidate: event.candidate.toJSON() });
-    }
-  };
+  if(timerSEl) timerSEl.textContent = fmt(mainTimeS, byoRemainS);
+  if(timerGEl) timerGEl.textContent = fmt(mainTimeG, byoRemainG);
 }
 
-async function endCallCleanup() {
-  console.log("=== 通話終了: ストリームと接続を解放 ===");
+// ========== DOM ==========
+const boardEl = document.getElementById('board');
+const handSEl = document.getElementById('handS');
+const handGEl = document.getElementById('handG');
+const kifuPanelEl = document.getElementById('kifuPanel');
+const kifuListEl = document.getElementById('kifuList');
+const kansoControlsEl = document.getElementById('kansoControls');
+const resignBtn = document.getElementById('resign');
 
-  // --- シグナリングのデータ削除 ---
-  try {
-    await Promise.all([
-      remove(ref(db, 'signaling/candidates/A')),
-      remove(ref(db, 'signaling/candidates/B')),
-      remove(ref(db, 'signaling/offer')),
-      remove(ref(db, 'signaling/answer')),
-    ]);
-    console.log('シグナリングの候補とoffer/answerを削除しました');
-  } catch (e) {
-    console.error('候補削除エラー:', e);
-  }
-
-  // --- ストリーム停止 ---
-  if (remoteStream) {
-    remoteStream.getTracks().forEach(track => {
-      try { track.stop(); } catch (e) { console.warn('remoteStream track stop error:', e); }
-    });
-    remoteStream = null;
-  }
-
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      try { track.stop(); } catch (e) { console.warn('localStream track stop error:', e); }
-    });
-    localStream = null;
-  }
-
-  // --- PeerConnection停止 ---
-  if (peerConnection) {
-    peerConnection.ontrack = null;
-    peerConnection.onicecandidate = null;
-    peerConnection.oniceconnectionstatechange = null;
-
-    try {
-      await Promise.all(peerConnection.getSenders().map(sender => {
-        try { return peerConnection.removeTrack(sender); }
-        catch (err) { console.warn('removeTrack error:', err); }
-      }));
-    } catch (e) {
-      console.warn('peerConnection removeTrack error:', e);
+// ========== 盤生成 ==========
+function createBoardCells(){
+  boardEl.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for(let y=0;y<9;y++){
+    for(let x=0;x<9;x++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.x = x; cell.dataset.y = y;
+      cell.addEventListener('click', ()=> cellClick(x,y));
+      frag.appendChild(cell);
     }
-
-    peerConnection.close();
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    peerConnection = null;
   }
-
-  // --- 音声要素のリセット ---
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) {
-    remoteAudio.pause();
-    remoteAudio.srcObject = null;
-  }
-
-  // --- WebSocketやシグナリング接続解除（必要な場合） ---
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.close();
-    socket = null;
-  }
-
-  // --- タイマーやイベントリスナー解除（必要な場合） ---
-  if (window.callTimerId) {
-    clearInterval(window.callTimerId);
-    window.callTimerId = null;
-  }
-  document.removeEventListener('keydown', onSomeKeyDownHandler);
-  document.removeEventListener('click', onSomeClickHandler);
-
-  // --- UI初期化 ---
-  const callButton = document.getElementById('call-button');
-  const hangupButton = document.getElementById('hangup-button');
-  if (callButton) callButton.disabled = false;
-  if (hangupButton) hangupButton.disabled = true;
-
-  // --- グローバル変数リセット ---
-  localDescription = null;
-  remoteDescription = null;
-
-  // 追加: ここで currentUser などもリセットしてユーザー状態を初期化
-  currentUser = '';
-  lockedUserA = false;
-  lockedUserB = false;
-
-  // UI初期化（ユーザー選択リセットなどもここで）
-  userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
-  userSelect.disabled = false;
-
-  // remoteAudioリセット（念のため再度）
-  if (remoteAudio) {
-    remoteAudio.pause();
-    remoteAudio.srcObject = null;
-  }
-
-  console.log("=== endCallCleanup 完了 ===");
-
-  // initializeUsers() を呼んで状態同期＆UI更新
-  await initializeUsers();
+  boardEl.appendChild(frag);
 }
 
-async function sendOffer() {
-  createPeerConnection();
+function renderPieceToCell(cell, p){
+  const el = document.createElement('div');
+  el.className = 'piece';
+  if(['TO','NY','NK','NG','UM','RY'].includes(p.type)){ el.classList.add('promoted'); }
+  el.textContent = PIECE_SYMBOLS[p.type] || p.type;
+  // initSide によって初期側の駒（相手側駒）を回転
+  if(p.initSide === 'T'){ el.classList.add('opposite'); }
+  cell.appendChild(el);
+}
 
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
-      if (!alreadyAdded) {
-        console.log(`sendOffer: ローカルトラック(${track.kind})を追加`);
-        peerConnection.addTrack(track, localStream);
+function renderBoard(){
+  // 盤だけ回転（UI文字は回転させない）
+  boardEl.classList.toggle('flipped', boardFlipped);
+
+  const cells = boardEl.childNodes;
+  for (let i=0;i<cells.length;i++){
+    const cell = cells[i];
+    const x = parseInt(cell.dataset.x), y = parseInt(cell.dataset.y);
+    cell.classList.toggle('selected', selected && selected.x===x && selected.y===y);
+    cell.textContent = '';
+    const p = boardState[y][x];
+    if(p){ renderPieceToCell(cell, p); }
+  }
+  renderHands();
+  if(kansoMode) renderKifuList();
+}
+
+function renderHands(){
+  if(!handSEl || !handGEl) return;
+  handSEl.innerHTML = '';
+  handGEl.innerHTML = '';
+
+  // 先手の持ち駒
+  for(let i=0;i<handS.length;i++){
+    const t = handS[i];
+    const s = document.createElement('span');
+    s.textContent = PIECE_SYMBOLS[t] || t;
+    s.className = (selectedHand && selectedHand.type===t && selectedHand.owner==='S' && selectedHand.index===i) ? 'selected' : '';
+    s.onclick = ()=>{
+      if(gameOver) return;
+      // 選択可能は「現在の手番」だけ
+      if(currentPlayer!=='S') return;
+      if(selectedHand && selectedHand.owner==='S' && selectedHand.index===i){
+        selectedHand = null;
+      }else{
+        selectedHand = {type:t, owner:'S', index: i};
       }
-    });
-  } else {
-    console.warn("sendOffer: localStream がまだありません");
-  }
-
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-
-  await set(ref(db, 'signaling/offer'), { sdp: offer.sdp, type: offer.type, from: currentUser });
-}
-
-function startCallTimeout() {
-  if (callTimeoutId) clearTimeout(callTimeoutId);
-
-  callTimeoutId = setTimeout(async () => {
-    await update(callStatusRef, {
-      status: 'none',
-      timestamp: null
-    });
-
-    callStatusDisplay.textContent = '通話終了（30秒経過）';
-
-    if (peerConnection) {
-      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-      peerConnection.close();
-      peerConnection = null;
-    }
-
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-      localStream = null;
-    }
-
-    await remove(ref(db, 'signaling'));
-  }, 30000);
-}
-
-async function sendAnswer() {
-  const offerSnapshot = await get(ref(db, 'signaling/offer'));
-  if (!offerSnapshot.exists()) return;
-  const offer = offerSnapshot.val();
-
-  createPeerConnection();
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
-      if (!alreadyAdded) {
-        console.log(`sendAnswer: ローカルトラック(${track.kind})を追加`);
-        peerConnection.addTrack(track, localStream);
-      }
-    });
-  } else {
-    console.warn("sendAnswer: localStream がまだありません");
-  }
-
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-
-  await set(ref(db, 'signaling/answer'), { sdp: answer.sdp, type: answer.type, from: currentUser });
-}
-
-function listenSignaling() {
-  onValue(ref(db, 'signaling/offer'), snapshot => {
-    const offer = snapshot.val();
-    if (!offer || offer.from === currentUser) return;
-    handleOffer(offer);
-  });
-
-  async function handleOffer(offer) {
-    createPeerConnection();
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    await sendAnswer();
-  }
-
-  onValue(ref(db, 'signaling/answer'), async snapshot => {
-    const answer = snapshot.val();
-    if (!answer || answer.from === currentUser) return;
-    if (peerConnection) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    }
-  });
-
-  onValue(ref(db, 'signaling/candidates/A'), snapshot => {
-    if (currentUser === 'B') {
-      const candidates = snapshot.val();
-      if (!candidates) return;
-      Object.values(candidates).forEach(data => {
-        if (data?.candidate && peerConnection) {
-          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
-      });
-    }
-  });
-
-  onValue(ref(db, 'signaling/candidates/B'), snapshot => {
-    if (currentUser === 'A') {
-      const candidates = snapshot.val();
-      if (!candidates) return;
-      Object.values(candidates).forEach(data => {
-        if (data?.candidate && peerConnection) {
-          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
-      });
-    }
-  });
-
-  onValue(ref(db, 'roomUsers'), snapshot => {
-  const roomUsers = snapshot.val() || {};
-
-  userSelect.innerHTML = '';
-
-  const options = [{ value: '', text: '選択して下さい' }];
-
-  if (!roomUsers.A || currentUser === 'A') {
-    options.push({ value: 'A', text: 'A' });
-  }
-  if (!roomUsers.B || currentUser === 'B') {
-    options.push({ value: 'B', text: 'B' });
-  }
-
-  options.forEach(opt => {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.text;
-    if (opt.value === currentUser) {
-      option.selected = true;
-    }
-    userSelect.appendChild(option);
-  });
-
-  userSelect.value = currentUser || '';
-});
-}
-
-async function getUserType(uid) {
-  const snapshot = await get(ref(db, `users/${uid}/type`));
-  return snapshot.exists() ? snapshot.val() : null;
-}
-
-async function updateCallStatus(status) {
-  try {
-    const snap = await get(ref(db, 'callStatus'));
-    const prev = snap.exists() ? snap.val() : {};
-    const users = prev && prev.users ? prev.users : { A: false, B: false };
-
-    const statusMessage = status === 'waiting'
-      ? '相手が通話開始ボタンを押すのを待っています'
-      : (status === 'started' ? '通話が開始されました' : (status === 'ended' ? '通話が終了しました' : ''));
-
-    await set(ref(db, 'callStatus'), {
-      status,
-      users,
-      statusMessage,
-      timestamp: new Date().toISOString()
-    });
-  } catch (e) {
-    console.error('updateCallStatus error:', e);
-    await set(ref(db, 'callStatus'), {
-      status,
-      users: { A: false, B: false },
-      statusMessage: '',
-      timestamp: new Date().toISOString()
-    });
-  }
-}
-
-function resetUI() {
-  localCallStartPressed = false;
-  updateMyButtonStatusLocal();
-  btnCallStart.disabled = false;
-  btnCallEnd.disabled = true;
-  btnMute.disabled = true;
-  btnMute.textContent = 'ミュート';
-  isMuted = false;
-
-  if (localStream) {
-  try {
-    localStream.getTracks().forEach(track => {
-      if (track.readyState === 'live') track.stop();
-    });
-  } catch (e) {
-    console.warn('localStream stop error:', e);
-  }
-  localStream = null;
-}
-
-if (remoteStream) {
-  try {
-    remoteStream.getTracks().forEach(track => {
-      if (track.readyState === 'live') track.stop();
-    });
-  } catch (e) {
-    console.warn('remoteStream stop error:', e);
-  }
-  remoteStream = null;
-}
-
-  const localAudio = document.getElementById('localAudio');
-  if (localAudio) localAudio.srcObject = null;
-
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) remoteAudio.srcObject = null;
-
-  if (peerConnection) {
-    try {
-      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-      peerConnection.close();
-    } catch (e) {
-      console.error('peerConnection close error:', e);
-    }
-    peerConnection = null;
-  }
-}
-
-  renderCalendar();
-  async function sendMessage() {
-  if (!currentUser) {
-    callStatusDisplay.textContent = 'ユーザーを選択してください';
-    return;
-  }
-
-  const text = chatInput.value.trim();
-  if (!text) return;
-
-  const userName = currentUser;
-  const newMsgRef = ref(db, 'chatLog');
-  const snapshot = await get(newMsgRef);
-  const chatData = snapshot.exists() ? snapshot.val() : [];
-  chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
-  await set(newMsgRef, chatData);
-  chatInput.value = '';
-}
-
-  function renderChat(chatData) {
-    chatLog.innerHTML = '';
-    chatData.slice(-100).forEach(entry => {
-      const div = document.createElement('div');
-      div.classList.add('chat-message');
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = `${entry.name}: `;
-      nameSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
-      nameSpan.style.fontWeight = 'bold';
-
-      const textSpan = document.createElement('span');
-      textSpan.textContent = entry.text;
-      textSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
-
-      div.appendChild(nameSpan);
-      div.appendChild(textSpan);
-      chatLog.appendChild(div);
-    });
-    chatLog.scrollTop = chatLog.scrollHeight;
-  }
-
-async function initializeUsers() {
-  if (sessionStorage.getItem('wasCleared') === '1') {
-    currentUser = '';
-    lockedUserA = false;
-    lockedUserB = false;
-    userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
-    userSelect.disabled = false;
-    return;
-  }
-
-  if (currentUser) {
-  const roomUsersRef = ref(db, 'roomUsers');
-  const snapshot = await get(roomUsersRef);
-  const roomUsers = snapshot.exists() ? snapshot.val() : {};
-
-  if (!roomUsers[currentUser]) {
-    await update(roomUsersRef, { [currentUser]: true });
-  }
-
-  if (currentUser === 'A') {
-    lockedUserA = true;
-    userSelect.innerHTML = '<option value="A" selected>A</option>';
-    userSelect.disabled = true;
-  } else if (currentUser === 'B') {
-    lockedUserB = true;
-    userSelect.innerHTML = '<option value="B" selected>B</option>';
-    userSelect.disabled = true;
-  }
-  renderCalendar();
-  return;
-}
-
-  const roomUsersRef = ref(db, 'roomUsers');
-  const snapshot = await get(roomUsersRef);
-  const roomUsers = snapshot.exists() ? snapshot.val() : {};
-
-  if (!roomUsers.A) {
-    currentUser = 'A';
-    lockedUserA = true;
-    await update(roomUsersRef, { A: true });
-    userSelect.innerHTML = '<option value="A" selected>A</option>';
-    userSelect.disabled = true;
-  } else if (!roomUsers.B) {
-  currentUser = '';
-  lockedUserB = false;
-  if (!lockedUserA) lockedUserA = !!roomUsers.A;
-  userSelect.innerHTML = `<option value="" selected>選択して下さい</option>`;
-
-if (!roomUsers.A) {
-  userSelect.innerHTML += `<option value="A">A</option>`;
-}
-if (!roomUsers.B) {
-  userSelect.innerHTML += `<option value="B">B</option>`;
-}
-
-userSelect.disabled = false;
-currentUser = ''; 
-  } else {
-    currentUser = '';
-    userSelect.innerHTML = '<option value="" selected>満室です</option>';
-    userSelect.disabled = true;
-  }
-  renderCalendar();
-}
-
-userSelect.addEventListener('change', async e => {
-  const val = e.target.value;
-
-  if (val === '') {
-    currentUser = '';
-    return;
-  }
-
-  if (sessionStorage.getItem('wasCleared') === '1') {
-    sessionStorage.removeItem('wasCleared');
-  }
-
-  const roomUsersSnapshot = await get(ref(db, 'roomUsers'));
-  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
-
-  if (val === 'A') {
-    if (!roomUsers.A) {
-      currentUser = 'A';
-      await update(ref(db, 'roomUsers'), { A: true });
-      userSelect.disabled = true;
-      localStorage.setItem('currentUser', 'A');
-    } else {
-      alert('ユーザーAは既に確定しています');
-      e.target.value = '';
-    }
-  } else if (val === 'B') {
-    if (!roomUsers.B) {
-      currentUser = 'B';
-      await update(ref(db, 'roomUsers'), { B: true });
-      userSelect.disabled = true;
-      localStorage.setItem('currentUser', 'B');
-    } else {
-      alert('ユーザーBは既に確定しています');
-      e.target.value = '';
-    }
-  }
-});
-
-initializeUsers();
-listenSignaling();
-
-  userANameInput.addEventListener('input', () => {
-  set(ref(db, 'userNames/A'), userANameInput.value);
-  renderCalendar();
-});
-
-userBNameInput.addEventListener('input', () => {
-  set(ref(db, 'userNames/B'), userBNameInput.value);
-  renderCalendar();
-});
-
-const userNamesRef = ref(db, 'userNames');
-
-onValue(userNamesRef, (snapshot) => {
-  const data = snapshot.val() || {};
-  if (data.A !== undefined) {
-    userANameInput.value = data.A;
-  }
-  if (data.B !== undefined) {
-    userBNameInput.value = data.B;
-  }
-  renderCalendar();
-});
-
-  btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
-  btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
-  btnClearCell.addEventListener('click', clearSelectedCells);
-  btnClearAll.addEventListener('click', async () => {
-    await clearAllData();
-    renderCalendar();
-    renderChat([]);
-  });
-  btnPrevWeek.addEventListener('click', () => {
-    currentWeekOffset--;
-    renderCalendar();
-  });
-  btnToday.addEventListener('click', () => {
-    currentWeekOffset = 0;
-    renderCalendar();
-  });
-  btnNextWeek.addEventListener('click', () => {
-    currentWeekOffset++;
-    renderCalendar();
-  });
-  btnSend.addEventListener('click', sendMessage);
-  let isCallStarting = false;
-
-btnCallStart.addEventListener('click', async () => {
-  if (isCallStarting) {
-    return;
-  }
-  isCallStarting = true;
-  btnCallStart.disabled = true;
-
-  if (!currentUser) {
-    callStatusDisplay.textContent = 'ユーザーを選択してください';
-    isCallStarting = false;
-    btnCallStart.disabled = false;
-    return;
-  }
-
-  try {
-    if (peerConnection) {
-      try {
-        peerConnection.getSenders().forEach(sender => {
-          try {
-            peerConnection.removeTrack(sender);
-          } catch (e) {
-            console.warn('removeTrack error:', e);
-          }
-        });
-        peerConnection.close();
-      } catch (e) {
-        console.warn('peerConnection close時のエラー:', e);
-      }
-      peerConnection = null;
-    }
-
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        try {
-          track.stop();
-        } catch (e) {
-          console.warn('localStream track stop error:', e);
-        }
-      });
-      localStream = null;
-    }
-
-    await startLocalStream();
-
-    resetMuteState();
-    createPeerConnection();
-
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
-        if (!senderExists) {
-          peerConnection.addTrack(track, localStream);
-        }
-      });
-    }
-
-const localAudio = document.getElementById('localAudio');
-if (localAudio) {
-  localAudio.srcObject = localStream;
-  localAudio.play().catch(err => {
-    console.warn('localAudio.play() blocked or failed:', err);
-  });
-}
-
-    await remove(ref(db, 'signaling'));
-
-    const callStatusSnap = await get(callStatusRef);
-    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
-      status: 'none',
-      users: { A: false, B: false }
+      selected = null;
+      renderBoard();
     };
-
-    if (!callData.users) {
-      callData.users = { A: false, B: false };
-    }
-
-    callData.users[currentUser] = true;
-
-    let newStatus = 'waiting';
-    if (callData.users.A && callData.users.B) {
-      newStatus = 'started';
-      await sendOffer();
-    } else if (!callData.users.A && !callData.users.B) {
-      newStatus = 'none';
-    } else {
-      newStatus = 'waiting';
-    }
-
-    await update(callStatusRef, {
-      status: newStatus,
-      users: callData.users,
-      statusMessage: newStatus === 'waiting'
-        ? '相手が通話開始ボタンを押すのを待っています'
-        : (newStatus === 'started' ? '通話が開始されました' : '')
-    });
-
-    localCallStartPressed = true;
-    updateMyButtonStatusLocal();
-
-  } catch (e) {
-    console.error(e);
-    callStatusDisplay.textContent = '通話の準備に失敗しました';
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal();
-  } finally {
-    isCallStarting = false;
+    handSEl.appendChild(s);
   }
-});
 
-btnCallEnd.addEventListener('click', async () => {
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
+  // 後手の持ち駒
+  for(let i=0;i<handG.length;i++){
+    const t = handG[i];
+    const s = document.createElement('span');
+    s.textContent = PIECE_SYMBOLS[t] || t;
+    s.className = (selectedHand && selectedHand.type===t && selectedHand.owner==='G' && selectedHand.index===i) ? 'selected' : '';
+    s.onclick = ()=>{
+      if(gameOver) return;
+      if(currentPlayer!=='G') return;
+      if(selectedHand && selectedHand.owner==='G' && selectedHand.index===i){
+        selectedHand = null;
+      }else{
+        selectedHand = {type:t, owner:'G', index: i};
+      }
+      selected = null;
+      renderBoard();
+    };
+    handGEl.appendChild(s);
+  }
+}
+
+function renderKifuList(){
+  kifuListEl.innerHTML = '';
+  kifu.forEach((m, i)=>{
+    const li = document.createElement('li');
+    li.dataset.index = i;
+    const idx = i+1;
+    const span = document.createElement('span');
+    span.textContent = `${idx}. ${m}`;
+    li.appendChild(span);
+    li.addEventListener('click', ()=>{
+      const prev = kifuListEl.querySelector('li.kifu-selected');
+      if(prev) prev.classList.remove('kifu-selected');
+      li.classList.add('kifu-selected');
+      if(history[i]){ jumpToHistory(i); }
+    });
+    if(i===historyIndex) li.classList.add('kifu-selected');
+    kifuListEl.appendChild(li);
+  });
+}
+
+// ========== 着手可能性（簡易） ==========
+function getLegalMoves(x,y){
+  const piece = boardState[y][x];
+  if(!piece) return new Set();
+  const o = piece.owner;
+  const dir = (o === 'S') ? -1 : +1;
+  const t = piece.type;
+  const moves = new Set();
+  const addStep = (dx,dy) => {
+    const nx = x+dx, ny = y+dy; if(!inBoard(nx,ny)) return;
+    const target = boardState[ny][nx];
+    if(!target || target.owner !== o) moves.add(`${nx},${ny}`);
+  };
+  const addSlide = (sx,sy) => {
+    let nx=x+sx, ny=y+sy;
+    while(inBoard(nx,ny)){
+      const target = boardState[ny][nx];
+      if(!target){ moves.add(`${nx},${ny}`); }
+      else { if(target.owner !== o) moves.add(`${nx},${ny}`); break; }
+      nx+=sx; ny+=sy;
+    }
+  };
+  switch(t){
+    case 'FU': addStep(0,dir); break;
+    case 'KY': addSlide(0,dir); break;
+    case 'KE': addStep(-1,2*dir); addStep(1,2*dir); break;
+    case 'GI': addStep(-1,dir); addStep(0,dir); addStep(1,dir); addStep(-1,-dir); addStep(1,-dir); break;
+    case 'KI': case 'TO': case 'NY': case 'NK': case 'NG':
+      addStep(-1,dir); addStep(0,dir); addStep(1,dir); addStep(-1,0); addStep(1,0); addStep(0,-dir); break;
+    case 'KA': addSlide(1,1); addSlide(1,-1); addSlide(-1,1); addSlide(-1,-1); break;
+    case 'HI': addSlide(1,0); addSlide(-1,0); addSlide(0,1); addSlide(0,-1); break;
+    case 'OU': addStep(1,0); addStep(-1,0); addStep(0,1); addStep(0,-1); addStep(1,1); addStep(1,-1); addStep(-1,1); addStep(-1,-1); break;
+    case 'UM': addSlide(1,1); addSlide(1,-1); addSlide(-1,1); addSlide(-1,-1); addStep(1,0); addStep(-1,0); addStep(0,1); addStep(0,-1); break;
+    case 'RY': addSlide(1,0); addSlide(-1,0); addSlide(0,1); addSlide(0,-1); addStep(1,1); addStep(1,-1); addStep(-1,1); addStep(-1,-1); break;
+  }
+  return moves;
+}
+function isKingInCheck(owner){
+  let kingPos = null;
+  for(let y=0;y<9;y++){
+    for(let x=0;x<9;x++){
+      const p=boardState[y][x];
+      if(p && p.type==='OU' && p.owner===owner){ kingPos={x,y}; break; }
+    }
+    if(kingPos) break;
+  }
+  if(!kingPos) return false;
+  for(let y=0;y<9;y++){
+    for(let x=0;x<9;x++){
+      const p=boardState[y][x];
+      if(p && p.owner !== owner){
+        const moves = getLegalMoves(x,y);
+        if(moves.has(`${kingPos.x},${kingPos.y}`)) return true;
+      }
+    }
+  }
+  return false;
+}
+function hasAnyLegalResponse(owner){
+  for(let y=0;y<9;y++){
+    for(let x=0;x<9;x++){
+      const p = boardState[y][x];
+      if(!p || p.owner !== owner) continue;
+      const moves = getLegalMoves(x,y);
+      for(const key of moves){
+        const [nx,ny] = key.split(',').map(Number);
+        const savedFrom = boardState[y][x];
+        const savedTo   = boardState[ny][nx];
+        boardState[ny][nx] = savedFrom; boardState[y][x] = null;
+        const stillInCheck = isKingInCheck(owner);
+        boardState[y][x] = savedFrom; boardState[ny][nx] = savedTo;
+        if(!stillInCheck) return true;
+      }
+    }
+  }
+  return false;
+}
+function checkDoublePawn(type,x,owner){
+  if(type !== 'FU') return false;
+  for(let y=0;y<9;y++){
+    const p = boardState[y][x];
+    if(p && p.type === 'FU' && p.owner === owner) return true;
+  }
+  return false;
+}
+function isUchifuzume(dropX,dropY,type){
+  if(type !== 'FU') return false;
+  const opponent = (currentPlayer === 'S') ? 'G' : 'S';
+  const prev = boardState[dropY][dropX];
+  boardState[dropY][dropX] = { type: type, owner: currentPlayer, initSide: (currentPlayer==='S' ? 'B' : 'T') };
+  const oppInCheck = isKingInCheck(opponent);
+  let mate = false;
+  if(oppInCheck){
+    const hasResponse = hasAnyLegalResponse(opponent);
+    if(!hasResponse) mate = true;
+  }
+  boardState[dropY][dropX] = prev;
+  return mate;
+}
+
+// ========== 移動・打ち ==========
+function attemptMove(from, to){
+  if(gameOver || kansoMode) return;
+  const piece = boardState[from.y][from.x]; if(!piece) return;
+  const legal = getLegalMoves(from.x, from.y); if(!legal.has(`${to.x},${to.y}`)) return;
+
+  const canPromote = moveCanPromote(piece.owner, from.y, to.y, piece.type);
+  const mustProm = mustAutoPromote(piece.type, piece.owner, to.y);
+
+  let finalType = piece.type;
+  if(mustProm){
+    if(piece.type==='FU') finalType='TO';
+    else if(piece.type==='KY') finalType='NY';
+    else if(piece.type==='KE') finalType='NK';
+  }else if(canPromote){
+    const yes = window.confirm('成りますか？');
+    if(yes){
+      if(piece.type==='FU') finalType='TO';
+      else if(piece.type==='KY') finalType='NY';
+      else if(piece.type==='KE') finalType='NK';
+      else if(piece.type==='GI') finalType='NG';
+      else if(piece.type==='KA') finalType='UM';
+      else if(piece.type==='HI') finalType='RY';
+    }
+  }
+  performMove(from, to, finalType);
+}
+
+function performMove(from, to, finalPieceType){
+  const piece = boardState[from.y][from.x];
+  const dest  = boardState[to.y][to.x];
+
+  if(dest){
+    if(dest.type==='OU'){
+      boardState[to.y][to.x] = null;
+      boardState[from.y][from.x] = null;
+      kifu.push(`${currentPlayer==='S'?'▲':'△'}${9-to.x}${to.y+1}${PIECE_SYMBOLS[piece.type]||piece.type}`);
+      renderBoard();
+      alert((currentPlayer==='S'?'先手':'後手')+'が玉を取りました。勝ち。');
+      gameOver = true; stopTick();
+      return;
+    }else{
+      const base = unpromote(dest.type);
+      if(currentPlayer==='S') handS.push(base); else handG.push(base);
+    }
+  }
+
+  const movedPiece = { type: finalPieceType || piece.type, owner: piece.owner, initSide: piece.initSide };
+  boardState[to.y][to.x] = movedPiece;
+  boardState[from.y][from.x] = null;
+
+  if(!kansoMode){ kifu.push(`${currentPlayer==='S'?'▲':'△'}${9-to.x}${to.y+1}${PIECE_SYMBOLS[movedPiece.type]||movedPiece.type}`); }
+
+  // 履歴には「この局面に到達させた最後に指した人」を保存（mover）
+  history.push({board: clone(boardState), handS: clone(handS), handG: clone(handG), mover: currentPlayer});
+  historyIndex = history.length - 1;
+
+  selected = null;
+  selectedHand = null;
+
+  // 次は相手の手
+  currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
+  onMoveFinishedSwitchTurn();
+
+  renderBoard();
+  updateTimerDisplay();
+}
+
+// 感想戦用の移動（履歴・棋譜は残さないが、感想戦でも交互に指せるようにする）
+function attemptKansoMove(from, to){
+  if(gameOver || !kansoMode) return;
+  const piece = boardState[from.y][from.x]; if(!piece) return;
+  // 感想戦でもその局面で指す側（currentPlayer）に合わせて操作を許可
+  if(piece.owner !== currentPlayer) return;
+  const legal = getLegalMoves(from.x, from.y); if(!legal.has(`${to.x},${to.y}`)) return;
+
+  const canPromote = moveCanPromote(piece.owner, from.y, to.y, piece.type);
+  const mustProm = mustAutoPromote(piece.type, piece.owner, to.y);
+
+  let finalType = piece.type;
+  if(mustProm){
+    if(piece.type==='FU') finalType='TO';
+    else if(piece.type==='KY') finalType='NY';
+    else if(piece.type==='KE') finalType='NK';
+  }else if(canPromote){
+    const yes = window.confirm('成りますか？');
+    if(yes){
+      if(piece.type==='FU') finalType='TO';
+      else if(piece.type==='KY') finalType='NY';
+      else if(piece.type==='KE') finalType='NK';
+      else if(piece.type==='GI') finalType='NG';
+      else if(piece.type==='KA') finalType='UM';
+      else if(piece.type==='HI') finalType='RY';
+    }
+  }
+  performKansoMove(from, to, finalType);
+}
+
+function performKansoMove(from, to, finalPieceType){
+  const piece = boardState[from.y][from.x];
+  if(!piece) return;
+  const dest = boardState[to.y][to.x];
+  if(dest){
+    if(dest.type==='OU'){
+      // 玉取りでも感想戦では履歴は増やさず、駒を消す／移動するのみ
+      boardState[to.y][to.x] = null;
+      boardState[from.y][from.x] = null;
+      selected = null; selectedHand = null;
+      renderBoard();
+      return;
+    }else{
+      const base = unpromote(dest.type);
+      if(piece.owner==='S') handS.push(base); else handG.push(base);
+    }
+  }
+
+  boardState[to.y][to.x] = { type: finalPieceType || piece.type, owner: piece.owner, initSide: piece.initSide };
+  boardState[from.y][from.x] = null;
+  selected = null; selectedHand = null;
+
+  // 感想戦中でも交互に手番を変更する（期待値1）
+  currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
+  onMoveFinishedSwitchTurn();
+
+  renderBoard();
+}
+
+// 打ち（record=trueなら棋譜/履歴に記録、falseなら感想戦打ち：履歴は増やさない）
+function dropFromHand(x,y, record=true){
+  if(gameOver) return;
+  if(!selectedHand) return;
+  if(boardState[y][x]) return;
+
+  // 所有者確認（選択された持ち駒の owner が currentPlayer と一致するか）
+  if(selectedHand.owner !== currentPlayer){
+    alert('その駒は現在の手番では使えません');
+    selectedHand = null; renderBoard(); return;
+  }
+
+  const type = selectedHand.type;
+  if(type==='FU'){
+    if((currentPlayer==='S' && y===0) || (currentPlayer==='G' && y===8)){
+      alert('行き所のない場所には歩は打てません'); selectedHand=null; renderBoard(); return;
+    }
+    if(checkDoublePawn(type, x, currentPlayer) && record){ alert('二歩は禁止です'); return; }
+  }
+  if(isUchifuzume(x,y,type) && record){ alert('打ち歩詰めは禁止です'); return; }
+
+  // initSide は駒の所有者で決定
+  boardState[y][x] = { type: type, owner: currentPlayer, initSide: (currentPlayer==='S' ? 'B' : 'T') };
+
+  // 手駒から削除
+  if(selectedHand.owner==='S'){
+    if(typeof selectedHand.index==='number') handS.splice(selectedHand.index,1);
+    else { const idx = handS.indexOf(type); if(idx>=0) handS.splice(idx,1); }
+  }else{
+    if(typeof selectedHand.index==='number') handG.splice(selectedHand.index,1);
+    else { const idx = handG.indexOf(type); if(idx>=0) handG.splice(idx,1); }
+  }
+
+  if(record){
+    kifu.push(`${currentPlayer==='S'?'▲':'△'}打${9-x}${y+1}${PIECE_SYMBOLS[type]||type}`);
+    history.push({board: clone(boardState), handS: clone(handS), handG: clone(handG), mover: currentPlayer});
+    historyIndex = history.length - 1;
+    currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
+    onMoveFinishedSwitchTurn();
+  }else{
+    // 感想戦打ち：履歴追加しないが手番交代は行う（期待値1）
+    currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
+    onMoveFinishedSwitchTurn();
+  }
+
+  selectedHand = null;
+  renderBoard();
+  updateTimerDisplay();
+}
+
+// ========== クリック処理 ==========
+function cellClick(x,y){
+  if(gameOver) return;
+  const p = boardState[y][x];
+
+  // 感想戦モード
+  if(kansoMode){
+    if(selectedHand && !p){ dropFromHand(x,y, false); return; }
+
+    if(p){
+      // その局面で指す側の手番（currentPlayer）に合わせて操作を許可
+      if(p.owner !== currentPlayer) return;
+      if(selected && selected.x===x && selected.y===y){ selected=null; renderBoard(); return; }
+      selected = {x,y}; selectedHand=null; renderBoard(); return;
+    }
+
+    if(selected){
+      const from = selected;
+      selected = null;
+      attemptKansoMove(from, {x,y});
+      return;
+    }
     return;
   }
 
-  try {
-    const callStatusSnap = await get(callStatusRef);
-    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
-      status: 'none',
-      users: { A: false, B: false }
-    };
+  // 通常対局
+  if(selectedHand && !p){ dropFromHand(x,y, true); return; }
 
-    if (callData.users && callData.users[currentUser] !== undefined) {
-      callData.users[currentUser] = false;
-    }
-
-await update(ref(db, 'callStatus'), {
-  status: 'ended',
-  users: { A: false, B: false },
-  statusMessage: '通話が切断されました'
-});
-
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal();
-
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;
-    btnMute.textContent = 'ミュート';
-
-    isMuted = false;
-
-    if (localStream) {
-      try {
-        localStream.getAudioTracks().forEach(track => {
-          track.enabled = true;
-        });
-        localStream.getTracks().forEach(track => {
-          if (track.readyState === 'live') {
-            track.stop();
-          }
-        });
-      } catch (e) {
-        console.warn('localStream stop error:', e);
-      }
-      localStream = null;
-    }
-
-    if (remoteStream) {
-      try {
-        remoteStream.getTracks().forEach(track => {
-          if (track.readyState === 'live') {
-            track.stop();
-          }
-        });
-      } catch (e) {
-        console.warn('remoteStream stop error:', e);
-      }
-      remoteStream = null;
-    }
-
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio) {
-      remoteAudio.srcObject = null;
-    }
-
-    const localAudio = document.getElementById('localAudio');
-    if (localAudio) {
-      localAudio.srcObject = null;
-    }
-
-    if (peerConnection) {
-  try {
-    await Promise.all(peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender)));
-    peerConnection.close();
-    await new Promise(resolve => setTimeout(resolve, 200));
-  } catch (e) {
-    console.warn('peerConnection close時のエラー:', e);
+  if(p && p.owner === currentPlayer){
+    if(selected && selected.x===x && selected.y===y){ selected=null; renderBoard(); return; }
+    selected = {x,y}; selectedHand=null; renderBoard(); return;
   }
-  peerConnection = null;
-}
 
-    try {
-      await remove(ref(db, 'signaling'));
-    } catch (e) {
-      console.error('signaling remove error:', e);
-    }
-
-    callStatusDisplay.textContent = '通話は終了しました';
-
-  } catch (e) {
-    console.error('通話終了処理でエラー:', e);
-    callStatusDisplay.textContent = '通話終了時にエラーが発生しました';
-  }
-});
-
-onValue(callStatusRef, (snapshot) => {
-  const callData = snapshot.val();
-  if (!callData) return;
-
-  const iPressed = !!callData.users?.[currentUser];
-  const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A'];
-  const status = callData.status;
-
-  localCallStartPressed = iPressed;
-
-  switch (status) {
-    case 'ended':
-      localCallStartPressed = false;
-      updateMyButtonStatusLocal(); 
-      resetUI();
-      callStatusDisplay.textContent = '通話は終了しました';
-
-      isMuted = false;
-      btnCallStart.disabled = false;
-      btnCallEnd.disabled = true;
-      btnMute.disabled = true;
-      btnMute.textContent = 'ミュート';
-
-      if (localStream) {
-        try {
-          localStream.getTracks().forEach(track => {
-            if (track.readyState === 'live') track.stop();
-          });
-        } catch (e) {
-          console.warn('localStream stop error:', e);
-        }
-        localStream = null;
-      }
-
-      if (remoteStream) {
-        try {
-          remoteStream.getTracks().forEach(track => {
-            if (track.readyState === 'live') track.stop();
-          });
-        } catch (e) {
-          console.warn('remoteStream stop error:', e);
-        }
-        remoteStream = null;
-      }
-
-      const remoteAudio = document.getElementById('remote-audio');
-      if (remoteAudio) remoteAudio.srcObject = null;
-
-      const localAudio = document.getElementById('localAudio');
-      if (localAudio) localAudio.srcObject = null;
-
-      if (peerConnection) {
-        try {
-          peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-          peerConnection.close();
-        } catch (e) {
-          console.error('peerConnection close error:', e);
-        }
-        peerConnection = null;
-      }
-      break;
-
-    case 'waiting':
-      callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
-
-      if (!iPressed && !otherPressed) {
-        updateMyButtonStatus('none');
-      } else if (!iPressed && otherPressed) {
-        updateMyButtonStatus('none');
-      } else if (iPressed && !otherPressed) {
-        updateMyButtonStatusLocal();
-      } else {
-        updateMyButtonStatus('started');
-      }
-      break;
-
-    case 'started':
-      callStatusDisplay.textContent = '通話中';
-      updateMyButtonStatus('started');
-      break;
-
-    case 'none':
-    default:
-      callStatusDisplay.textContent = '';
-      resetUI();
-      break;
-  }
-});
-
-onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
-onValue(ref(db, 'chatLog'), snapshot => {
-  const chatData = snapshot.exists() ? snapshot.val() : [];
-  renderChat(chatData);
-});
-
-fetchHolidays();
-renderCalendar();
-
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('td')) {
-    selectedCells.forEach(key => {
-      const td = calendar.querySelector(`td[data-key="${key}"]`);
-      if (td) td.classList.remove('selected');
-    });
-    selectedCells.clear();
-  }
-});
-
-function updateCallStatusUI(status) {
-  callStatus = status;
-  callStatusDisplay.textContent = {
-    'started': '通話中',
-    'waiting': '通話ボタンが押されました（相手を待っています）',
-    'ended': '通話が終了しました',
-    'none': ''
-  }[status] || '';
-
-  updateMyButtonStatus(status);
-}
-
-function updateMyButtonStatus(status) {
-  switch (status) {
-    case 'started':
-      btnCallStart.disabled = true;
-      btnCallEnd.disabled = false;
-      btnMute.disabled = false;
-      break;
-    case 'none':
-    default:
-      btnCallStart.disabled = false;
-      btnCallEnd.disabled = true;
-      btnMute.disabled = true;
-      btnMute.textContent = 'ミュート';
-      isMuted = false;
-      break;
+  if(selected){
+    const from = selected;
+    selected = null;
+    attemptMove(from, {x,y});
+    renderBoard();
+    return;
   }
 }
 
-function updateMyButtonStatusLocal() {
-  if (localCallStartPressed) {
-    btnCallStart.disabled = true;
-    btnCallEnd.disabled = false;
-    btnMute.disabled = false;
-  } else {
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;
+// ========== 局面ジャンプ ==========
+function jumpToHistory(idx){
+  historyIndex = Math.max(0, Math.min(idx, history.length-1));
+  const snap = history[historyIndex];
+  boardState = clone(snap.board);
+  handS = clone(snap.handS);
+  handG = clone(snap.handG);
+  // snap.mover が null の場合は初期局面（次に指すのは mySide）
+  if(snap.mover === null){
+    currentPlayer = mySide;
+  }else{
+    // snap.mover は最後に指したプレイヤーなので、次に指すのはその逆
+    currentPlayer = (snap.mover === 'S') ? 'G' : 'S';
   }
+  selected = null; selectedHand = null;
+  renderBoard();
+  updateTimerDisplay();
 }
 
-function resetMuteState() {
-  isMuted = false;
-  btnMute.textContent = 'ミュート';
+// ========== リセット / イベント ==========
+function resetGameCore(){
+  initialBoard = createInitialBoard();
+  boardState = clone(initialBoard);
+  selected = null; selectedHand = null;
+  handS = []; handG = [];
+  kifu = []; history = [{board: clone(boardState), handS:[], handG:[], mover: null}]; 
+  historyIndex = 0;
+  currentPlayer = mySide;
+  kansoMode = false; gameOver = false;
 
-  if (localStream) {
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-    });
-  }
+  readTimeSettings();
+  stopTick();
+  startTick();
+
+  document.getElementById('kansoControls').classList.add('hidden');
+  kifuPanelEl.style.display = 'none';
+  document.getElementById('toggleKanso').textContent = '感想戦へ';
+
+  // 投了ボタンは対局モードのみ表示
+  resignBtn.classList.remove('hidden');
+
+  // 盤反転はローカル設定を尊重
+  boardEl.classList.toggle('flipped', boardFlipped);
+
+  renderBoard();
+  updateTimerDisplay();
 }
 
-(async () => {
-  const callStatusSnap = await get(callStatusRef);
-  const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
+function resetGame(){
+  mySide = document.getElementById('mySide').value;
+  resetGameCore();
+}
 
-  if (callData.status === 'waiting') {
-    if (callData.user !== currentUser) {
-      if (localCallStartPressed) {
-        localCallStartPressed = false;
-        updateMyButtonStatusLocal();
-      }
-      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
-    }
+document.getElementById('mySide').addEventListener('change', e => { mySide = e.target.value; resetGame(); });
+
+document.getElementById('toggleKanso').addEventListener('click', ()=>{
+  kansoMode = !kansoMode;
+  document.getElementById('toggleKanso').textContent = kansoMode ? '対局へ' : '感想戦へ';
+  document.getElementById('prev').classList.toggle('hidden', !kansoMode);
+  document.getElementById('next').classList.toggle('hidden', !kansoMode);
+  kansoControlsEl.classList.toggle('hidden', !kansoMode);
+  kifuPanelEl.style.display = kansoMode ? 'block' : 'none';
+  if(kansoMode) renderKifuList();
+  if(kansoMode){ 
+    stopTick(); 
+    // 感想戦中は投了ボタンを隠す（投了は対局中のみ）
+    resignBtn.classList.add('hidden');
   }
-})();
+  else { 
+    if(!gameOver) startTick(); 
+    resignBtn.classList.remove('hidden');
+  }
+});
 
+document.getElementById('prev').addEventListener('click', ()=>{
+  if(!kansoMode) return;
+  if(historyIndex>0){ historyIndex--; jumpToHistory(historyIndex); }
+});
+document.getElementById('next').addEventListener('click', ()=>{
+  if(!kansoMode) return;
+  if(historyIndex < history.length-1){ historyIndex++; jumpToHistory(historyIndex); }
+});
+
+document.getElementById('copyKif').addEventListener('click', ()=>{
+  const head = `先手：先手\n後手：後手\n手合割：平手\n開始日時：${new Date().toLocaleString()}\n\n`;
+  const body = kifu.map((m,i)=>`${i+1} ${m}`).join('\n');
+  const tail = `\nまで${kifu.length}手`;
+  navigator.clipboard.writeText(head+body+tail).then(()=>alert('日本語棋譜をコピーしました'));
+});
+
+// 盤反転（盤のみ rotate(180deg)）— ローカルのみ保持
+document.getElementById('flipBoard').addEventListener('click', ()=>{
+  boardFlipped = !boardFlipped;
+  localStorage.setItem('boardFlipped', boardFlipped ? '1' : '0');
+  boardEl.classList.toggle('flipped', boardFlipped);
+  renderBoard();
+});
+
+// 投了ボタン（対局モードのみ有効）
+// 押下時に Confirm を表示し、「どちらが負けになるか」を明示する
+resignBtn.addEventListener('click', ()=>{
+  if(kansoMode || gameOver) return;
+  const sideLabel = currentPlayer==='S' ? '先手' : '後手';
+  const ok = confirm(`${sideLabel}（現在の手番）が投了すると、${sideLabel}の負けになります。\n本当に投了しますか？`);
+  if(!ok) return;
+  // 投了確定
+  gameOver = true;
+  stopTick();
+  alert(`${sideLabel}の投了により${sideLabel}の負けです。`);
+  // 必要ならここで履歴やUIロックを追加できます
+});
+
+// ========== 起動 ==========
+document.addEventListener('DOMContentLoaded', () => {
+  // ローカル保存された反転状態を復元
+  boardFlipped = localStorage.getItem('boardFlipped') === '1';
+
+  createBoardCells();
+  readTimeSettings();
+  resetGameCore(); // reset 内で boardFlipped を尊重して反映
+});
 </script>
-<audio id="remote-audio" autoplay></audio><br />
-<label for="volume-control">相手の音量：</label>
-<input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
-<audio id="localAudio" autoplay muted style="display:none;"></audio>
-
 </body>
 </html>
