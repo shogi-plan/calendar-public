@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>フルスクラッチ将棋 — 投了 & 持ち駒領域修正版</title>
+<title>フルスクラッチ将棋 — 修正版（持ち駒向き / 選択トグル / 盤180回転）</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 :root{
@@ -18,6 +18,9 @@ body{
 }
 h1{ font-size: clamp(16px, 2.4vw, 20px); margin: 6px 0 10px; }
 
+#controlsWrapper{ display:flex; flex-direction:column; align-items:center; width:100%; }
+#controlsHeader{ cursor:pointer; user-select:none; margin-bottom:6px; }
+
 #controls{
   margin-top:8px; display:flex; flex-wrap:wrap; gap:10px;
   justify-content:center; align-items:center;
@@ -28,6 +31,8 @@ h1{ font-size: clamp(16px, 2.4vw, 20px); margin: 6px 0 10px; }
   font-size: var(--ui-font);
   padding: 4px 6px;
 }
+/* 小さくして半角2桁で十分に入力できる幅に調整 */
+#timeMinutes, #timeSeconds{ width:40px; }
 #controls button{
   font-size: var(--ui-font-lg);
   padding: var(--btn-pad-y) var(--btn-pad-x);
@@ -60,11 +65,11 @@ h1{ font-size: clamp(16px, 2.4vw, 20px); margin: 6px 0 10px; }
 /* initial-opponent pieces appear rotated (based on initSide property) */
 .piece.opposite{ transform: rotate(180deg); }
 
-/* hands: fixed block under each label so they don't push each other */
-#hands{ margin-top:10px; display:flex; gap:18px; justify-content:center; font-size: var(--ui-font-lg); align-items:flex-start; width:100%; box-sizing:border-box; padding:0 10px;}
+/* hands: fixed block under each label so they don't push each other; align vertical positions */
+#hands{ margin-top:10px; display:flex; flex-wrap:nowrap; gap:18px; justify-content:center; font-size: var(--ui-font-lg); align-items:flex-start; width:100%; box-sizing:border-box; padding:0 10px; }
 .hand-block{ display:flex; flex-direction:column; align-items:center; gap:6px; width:220px; box-sizing:border-box; }
 .hand-label{ display:block; text-align:center; min-height:1.2em; }
-.hand{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; width:100%; min-height:44px; border:1px solid #ddd; padding:6px; box-sizing:border-box; background:#fff; border-radius:6px; overflow:auto; max-height:120px; }
+.hand{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; width:100%; min-height:44px; border:1px solid #ddd; padding:6px; box-sizing:border-box; background:#fff; border-radius:6px; overflow:auto; max-height:120px; align-items:center; }
 .hand span{ display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border-radius:8px; background:#fff; border:1px solid #aaa; cursor:pointer; font-size:1.0em; }
 .hand span.selected{ outline:3px solid #ffcd00; background:#fff5a6; }
 /* visually rotate opponent's hand piece glyphs so they look correct */
@@ -84,28 +89,30 @@ h1{ font-size: clamp(16px, 2.4vw, 20px); margin: 6px 0 10px; }
 </style>
 </head>
 <body>
-<h1>遠タメ将棋</h1>
+<h1>フルスクラッチ将棋</h1>
 
-<div id="controls">
-  <label>自分の役割：
-    <select id="mySide">
-      <option value="S">先手で開始</option>
-      <option value="G">後手で開始</option>
-    </select>
-  </label>
+<div id="controlsWrapper">
+  <div id="controlsHeader">▼ 詳細表示 / 非表示（クリックで切替）</div>
+  <div id="controls">
+    <label>自分の役割：
+      <select id="mySide">
+        <option value="S">先手で開始</option>
+        <option value="G">後手で開始</option>
+      </select>
+    </label>
 
-  <label>持ち時間：
-    <input type="number" id="timeMinutes" value="5" min="0" style="width:64px;">分
-  </label>
-  <label>秒読み：
-    <input type="number" id="timeSeconds" value="30" min="0" style="width:64px;">秒
-  </label>
+    <label>持ち時間：
+      <input type="number" id="timeMinutes" value="5" min="0">分
+    </label>
+    <label>秒読み：
+      <input type="number" id="timeSeconds" value="30" min="0">秒
+    </label>
 
-  <button id="toggleKanso">感想戦へ</button>
-  <button id="copyKif">KIFcopy</button>
-  <button id="flipBoard" title="盤を180度回転">反転</button>
-  <!-- 投了ボタン: 対局モードのみ表示 -->
-  <button id="resign">投了</button>
+    <button id="toggleKanso">感想戦モードへ</button>
+    <button id="copyKif">棋譜コピー</button>
+    <button id="flipBoard" title="盤を180度回転">反転</button>
+    <button id="resign">投了</button>
+  </div>
 </div>
 
 <div id="timebar">
@@ -120,7 +127,6 @@ h1{ font-size: clamp(16px, 2.4vw, 20px); margin: 6px 0 10px; }
   <button id="next">一手進む</button>
 </div>
 
-<!-- 持ち駒をラベル下に固定する構造 -->
 <div id="hands">
   <div class="hand-block">
     <div class="hand-label">自分の持ち駒</div>
@@ -147,15 +153,8 @@ function unpromote(type){
 }
 function inBoard(x,y){ return x>=0 && x<9 && y>=0 && y<9; }
 function inPromotionZone(owner,y){ return owner==='S' ? (y<=2) : (y>=6); }
-function moveCanPromote(owner, fromY, toY, pieceType){
-  if(!PROMOTABLE.includes(pieceType)) return false;
-  return inPromotionZone(owner, fromY) || inPromotionZone(owner, toY);
-}
-function mustAutoPromote(type, owner, toY){
-  if(type==='FU' || type==='KY'){ return owner==='S' ? (toY===0) : (toY===8); }
-  if(type==='KE'){ return owner==='S' ? (toY<=1) : (toY>=7); }
-  return false;
-}
+function moveCanPromote(owner, fromY, toY, pieceType){ if(!PROMOTABLE.includes(pieceType)) return false; return inPromotionZone(owner, fromY) || inPromotionZone(owner, toY); }
+function mustAutoPromote(type, owner, toY){ if(type==='FU' || type==='KY'){ return owner==='S' ? (toY===0) : (toY===8); } if(type==='KE'){ return owner==='S' ? (toY<=1) : (toY>=7); } return false; }
 
 // ========== 初期盤面 ==========
 function createInitialBoard(){
@@ -181,7 +180,6 @@ let selectedHand = null;            // {type, owner, index}
 let handS = [], handG = [];
 let kifu = [];
 // history の各要素は {board, handS, handG, mover}
-// mover: そのスナップに到達させた「最後に指したプレイヤー」（'S' / 'G' / null）
 let history = [{board: clone(boardState), handS:[], handG:[], mover: null}];
 let historyIndex = 0;
 
@@ -206,47 +204,32 @@ function readTimeSettings(){
   byoRemainS = byoRemainG = 0;
   updateTimerDisplay();
 }
-function startTick(){
-  if(timerId) clearInterval(timerId);
-  timerId = setInterval(()=> tickOneSecond(), 1000);
-}
+function startTick(){ if(timerId) clearInterval(timerId); timerId = setInterval(()=> tickOneSecond(), 1000); }
 function stopTick(){ if(timerId){ clearInterval(timerId); timerId = null; } }
 
 function tickOneSecond(){
   if(gameOver || kansoMode) return;
-
-  let over = false;
-
   if(currentPlayer==='S'){
-    if(mainTimeS>0){
-      mainTimeS = Math.max(0, mainTimeS-1);
-    }else{
-      if(byoBase<=0){
-        over = true;
-      }else{
-        if(byoRemainS<=0) byoRemainS = byoBase;
-        byoRemainS = Math.max(0, byoRemainS-1);
-        if(byoRemainS===0) over = true;
-      }
+    if(mainTimeS>0){ mainTimeS--; }
+    else{
+      if(byoBase<=0){ timeOver('S'); return; }
+      if(byoRemainS<=0){ byoRemainS = byoBase; }
+      // デクリメントして 0 になったら画面を 00 にして時間切れ扱い
+      byoRemainS--;
+      if(byoRemainS<0) byoRemainS = 0;
+      if(byoRemainS===0){ timeOver('S'); return; }
     }
   }else{
-    if(mainTimeG>0){
-      mainTimeG = Math.max(0, mainTimeG-1);
-    }else{
-      if(byoBase<=0){
-        over = true;
-      }else{
-        if(byoRemainG<=0) byoRemainG = byoBase;
-        byoRemainG = Math.max(0, byoRemainG-1);
-        if(byoRemainG===0) over = true;
-      }
+    if(mainTimeG>0){ mainTimeG--; }
+    else{
+      if(byoBase<=0){ timeOver('G'); return; }
+      if(byoRemainG<=0){ byoRemainG = byoBase; }
+      byoRemainG--;
+      if(byoRemainG<0) byoRemainG = 0;
+      if(byoRemainG===0){ timeOver('G'); return; }
     }
   }
-
   updateTimerDisplay();
-  if(over){
-    timeOver(currentPlayer);
-  }
 }
 function timeOver(side){
   gameOver = true;
@@ -342,8 +325,9 @@ function renderHands(){
     s.className = (selectedHand && selectedHand.type===t && selectedHand.owner==='S' && selectedHand.index===i) ? 'selected' : '';
     s.onclick = ()=>{
       if(gameOver) return;
-      // 選択可能は「現在の手番」だけ
+      // 感想戦でも対局でも、手番順を守る（現在の手番でなければ選べない）
       if(currentPlayer!=='S') return;
+      // トグル：同じ駒を選んだら解除
       if(selectedHand && selectedHand.owner==='S' && selectedHand.index===i){
         selectedHand = null;
       }else{
@@ -644,10 +628,10 @@ function dropFromHand(x,y, record=true){
   }
   if(isUchifuzume(x,y,type) && record){ alert('打ち歩詰めは禁止です'); return; }
 
-  // initSide は駒の所有者で決定
+  // ここが重要：initSide は駒の所有者に応じて決める（S -> 'B', G -> 'T'）
   boardState[y][x] = { type: type, owner: currentPlayer, initSide: (currentPlayer==='S' ? 'B' : 'T') };
 
-  // 手駒から削除
+  // 手駒から削除（選択時に index を保持しているため index を使って削除）
   if(selectedHand.owner==='S'){
     if(typeof selectedHand.index==='number') handS.splice(selectedHand.index,1);
     else { const idx = handS.indexOf(type); if(idx>=0) handS.splice(idx,1); }
@@ -663,7 +647,7 @@ function dropFromHand(x,y, record=true){
     currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
     onMoveFinishedSwitchTurn();
   }else{
-    // 感想戦打ち：履歴追加しないが手番交代は行う（期待値1）
+    // 感想戦打ち：履歴追加しないが手番交代は行う（仕様）
     currentPlayer = (currentPlayer==='S') ? 'G' : 'S';
     onMoveFinishedSwitchTurn();
   }
@@ -751,7 +735,7 @@ function resetGameCore(){
 
   document.getElementById('kansoControls').classList.add('hidden');
   kifuPanelEl.style.display = 'none';
-  document.getElementById('toggleKanso').textContent = '感想戦へ';
+  document.getElementById('toggleKanso').textContent = '感想戦モードへ';
 
   // 投了ボタンは対局モードのみ表示
   resignBtn.classList.remove('hidden');
@@ -772,7 +756,7 @@ document.getElementById('mySide').addEventListener('change', e => { mySide = e.t
 
 document.getElementById('toggleKanso').addEventListener('click', ()=>{
   kansoMode = !kansoMode;
-  document.getElementById('toggleKanso').textContent = kansoMode ? '対局へ' : '感想戦へ';
+  document.getElementById('toggleKanso').textContent = kansoMode ? '対局モードへ' : '感想戦モードへ';
   document.getElementById('prev').classList.toggle('hidden', !kansoMode);
   document.getElementById('next').classList.toggle('hidden', !kansoMode);
   kansoControlsEl.classList.toggle('hidden', !kansoMode);
@@ -825,6 +809,14 @@ resignBtn.addEventListener('click', ()=>{
   stopTick();
   alert(`${sideLabel}の投了により${sideLabel}の負けです。`);
   // 必要ならここで履歴やUIロックを追加できます
+});
+
+// 折りたたみトグル（コントロールの表示/非表示）
+const controlsHeader = document.getElementById('controlsHeader');
+const controlsDiv = document.getElementById('controls');
+controlsHeader.addEventListener('click', ()=>{
+  controlsDiv.classList.toggle('hidden');
+  controlsHeader.textContent = controlsDiv.classList.contains('hidden') ? '▶ 詳細表示' : '▼ 詳細表示';
 });
 
 // ========== 起動 ==========
