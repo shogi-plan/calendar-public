@@ -102,20 +102,22 @@
 </div>
 
 <div class="controls">
-  <label>A：<input type="text" id="userAName" placeholder="名前" value="ユーザーA" /></label>
-  <label>B：<input type="text" id="userBName" placeholder="名前" value="ユーザーB" /></label>
-  <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span><select id="userSelect">
-    <option value="" selected>選択して下さい</option>
-    <option value="A">A</option>
-    <option value="B">B</option>
-  </select></label>
+  <label>ユーザーA：<input type="text" id="userAName" autocomplete="off" /></label>
+  <label>ユーザーB：<input type="text" id="userBName" autocomplete="off" /></label>
+  <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span>
+  <select id="userSelect">
+  <option value="">未選択</option>
+  <option value="A">ユーザーA</option>
+  <option value="B">ユーザーB</option>
+  </select>
+  </label>
 </div>
 
 <div class="controls">
   <button id="btn-mark-ok">選択セルに○</button>
   <button id="btn-mark-no">選択セルに×</button>
   <button id="btn-clear-cell">選択セルを削除</button>
-  <button id="btn-clear-all">全データ削除</button>
+  <button id="btn-clear-all">退室</button>
 </div>
 
 <div class="controls">
@@ -141,7 +143,10 @@
   <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
 </div>
 </div>
-
+<audio id="remote-audio" autoplay></audio><br />
+<label for="volume-control">相手の音量：</label>
+<input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
+<audio id="localAudio" autoplay muted style="display:none;"></audio>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
   import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
@@ -158,14 +163,14 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
-  const callStatusRef = ref(db, 'callStatus');
+  const roomName = location.pathname.split('/').pop().replace('.html', '');
+  const callStatusRef = ref(db, `${roomName}/callStatus`);
   const userANameInput = document.getElementById('userAName');
   const userBNameInput = document.getElementById('userBName');
   const userSelect = document.getElementById('userSelect');
   const calendar = document.getElementById('calendar');
   const chatLog = document.getElementById('chatLog');
   const chatInput = document.getElementById('chatInput');
-
   const btnMarkOk = document.getElementById('btn-mark-ok');
   const btnMarkNo = document.getElementById('btn-mark-no');
   const btnClearCell = document.getElementById('btn-clear-cell');
@@ -177,6 +182,14 @@
   const btnCallStart = document.getElementById('btn-call-start');
   const btnCallEnd = document.getElementById('btn-call-end');
   const btnMute = document.getElementById('btn-mute');
+  const volumeControl = document.getElementById('volume-control');
+  
+  volumeControl.addEventListener('input', () => {
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) {
+    remoteAudio.volume = parseFloat(volumeControl.value);
+  }
+});
 
   let isMuted = false;
   let remoteStream = null;
@@ -198,9 +211,9 @@ let callTimeoutId = null;
 let localCallStartPressed = false;
 
 const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-const signalingRef = ref(db, 'signaling');
+const signalingRef = ref(db, `${roomName}/signaling`);
 
-let currentUser = localStorage.getItem('currentUser') || '';
+let currentUser = localStorage.getItem(`${roomName}_currentUser`) || '';
 let selectedCells = new Set();
 let currentWeekOffset = 0;
 let holidays = {};
@@ -311,7 +324,7 @@ let callStatus = 'none';
   async function updateScheduleTable() {
     const monday = getMonday(new Date());
     monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const schedulesRef = ref(db, 'schedules');
+    const schedulesRef = ref(db, `${roomName}/schedules`);
     const snapshot = await get(schedulesRef);
     const schedules = snapshot.exists() ? snapshot.val() : {};
 
@@ -341,55 +354,70 @@ let callStatus = 'none';
   }
 
   async function applyToSelectedCells(value) {
-    if (selectedCells.size === 0) return;
-    const updates = {};
-    selectedCells.forEach(key => {
-      updates[`schedules/${key}/${currentUser}`] = value;
-    });
-    await update(ref(db), updates);
-    selectedCells.clear();
-  }
-
-  async function clearSelectedCells() {
-    if (selectedCells.size === 0) return;
-    const updates = {};
-    selectedCells.forEach(key => {
-      updates[`schedules/${key}/${currentUser}`] = null;
-    });
-    await update(ref(db), updates);
-    selectedCells.clear();
-  }
-
-  async function clearAllData() {
-  if (!confirm('本当に全てのデータを削除しますか？')) return;
-  await remove(ref(db, 'userNames'));
-  userANameInput.value = 'ユーザーA';
-  userBNameInput.value = 'ユーザーB';
-  await remove(ref(db, 'schedules'));
-  await remove(ref(db, 'chatLog'));
-  await remove(ref(db, 'roomUsers'));
-  await remove(ref(db, 'callStatus'));
-await set(ref(db, 'callStatus'), {
-  status: 'none',
-  users: { A: false, B: false },
-  statusMessage: '',
-  timestamp: null
-});
-  await remove(ref(db, 'signaling'));
+  if (selectedCells.size === 0 || !currentUser) return;
+  const updatesObj = {};
+  selectedCells.forEach(key => {
+    updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = value;
+  });
+  await update(ref(db), updatesObj);
   selectedCells.clear();
-  localStorage.removeItem('currentUser');  
-sessionStorage.setItem('wasCleared', '1');
+  updateScheduleTable();
+}
 
-lockedUserA = false;
-lockedUserB = false;
+async function clearSelectedCells() {
+  if (selectedCells.size === 0 || !currentUser) return;
+  const updatesObj = {};
+  selectedCells.forEach(key => {
+    updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = null;
+  });
+  await update(ref(db), updatesObj);
+  selectedCells.clear();
+  updateScheduleTable();
+}
 
-  currentUser = '';
-  
-  userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
-  userSelect.disabled = false;
-  
+  let isClearingData = false;
+
+async function clearAllData() {
+  if (!confirm('全てのデータを削除して、退室しますか？')) return;
+
+  isClearingData = true; // フラグON
+
+  // Firebase データ削除
+  await remove(ref(db, `${roomName}/userNames`));
+  await remove(ref(db, `${roomName}/schedules`));
+  await remove(ref(db, `${roomName}/chatLog`));
+  await remove(ref(db, `${roomName}/roomUsers`));
+  await remove(ref(db, `${roomName}/callStatus`));
+  await set(ref(db, `${roomName}/callStatus`), {
+    status: 'none',
+    users: { A: false, B: false },
+    statusMessage: '',
+    timestamp: null
+  });
+  await remove(ref(db, `${roomName}/signaling`));
+
+  // ローカルUIリセット
+  userANameInput.value = '';
+  userBNameInput.value = '';
+  selectedCells.clear();
+  localStorage.removeItem(`${roomName}_currentUser`);
+
+  currentUser = ''; // 強制的に未選択にする
+  updateUserSelectDisplay(); // ドロップダウン描画を統一
+
   updateCallStatusUI('none');
-  }
+
+  isClearingData = false;
+
+  // sessionStorage フラグやロック解除
+  sessionStorage.setItem('wasCleared', '1');
+  lockedUserA = false;
+  lockedUserB = false;
+  
+  // ブラウザバックで前のページに戻る
+  history.back();
+}
+
   async function startLocalStream() {
   if (localStream) {
     localStream.getTracks().forEach(track => track.stop());
@@ -538,7 +566,7 @@ function createPeerConnection() {
     console.log('ICE connection state:', state);
 
     if (state === 'failed' || state === 'closed') {
-      update(ref(db, 'callStatus'), {
+      update(ref(db, `${roomName}/callStatus`), {
         status: 'ended',
         users: { A: false, B: false },
         statusMessage: 'ICE: ' + state
@@ -549,7 +577,7 @@ function createPeerConnection() {
     } else if (state === 'disconnected') {
       setTimeout(() => {
         if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
-          update(ref(db, 'callStatus'), {
+          update(ref(db, `${roomName}/callStatus`), {
             status: 'ended',
             users: { A: false, B: false },
             statusMessage: 'ICE: disconnected timeout'
@@ -564,7 +592,7 @@ function createPeerConnection() {
 
   peerConnection.onicecandidate = event => {
     if (event.candidate) {
-      const candRef = ref(db, `signaling/candidates/${currentUser}`);
+      const candRef = ref(db, `${roomName}/signaling/candidates/${currentUser}`);
       const newCandRef = push(candRef);
       set(newCandRef, { candidate: event.candidate.toJSON() });
     }
@@ -576,10 +604,10 @@ async function endCallCleanup() {
 
   try {
     await Promise.all([
-      remove(ref(db, 'signaling/candidates/A')),
-      remove(ref(db, 'signaling/candidates/B')),
-      remove(ref(db, 'signaling/offer')),
-      remove(ref(db, 'signaling/answer')),
+      remove(ref(db, `${roomName}/signaling/candidates/A`)),
+      remove(ref(db, `${roomName}/signaling/candidates/B`)),
+      remove(ref(db, `${roomName}/signaling/offer`)),
+      remove(ref(db, `${roomName}/signaling/answer`)),
     ]);
     console.log('シグナリングの候補とoffer/answerを削除しました');
   } catch (e) {
@@ -652,7 +680,7 @@ async function sendOffer() {
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
 
-  await set(ref(db, 'signaling/offer'), { sdp: offer.sdp, type: offer.type, from: currentUser });
+  await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: currentUser });
 }
 
 function startCallTimeout() {
@@ -677,12 +705,12 @@ function startCallTimeout() {
       localStream = null;
     }
 
-    await remove(ref(db, 'signaling'));
+    await remove(ref(db, `${roomName}/signaling`));
   }, 30000);
 }
 
 async function sendAnswer() {
-  const offerSnapshot = await get(ref(db, 'signaling/offer'));
+  const offerSnapshot = await get(ref(db, `${roomName}/signaling/offer`));
   if (!offerSnapshot.exists()) return;
   const offer = offerSnapshot.val();
 
@@ -704,11 +732,11 @@ async function sendAnswer() {
   const answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
 
-  await set(ref(db, 'signaling/answer'), { sdp: answer.sdp, type: answer.type, from: currentUser });
+  await set(ref(db, `${roomName}/signaling/answer`), { sdp: answer.sdp, type: answer.type, from: currentUser });
 }
 
 function listenSignaling() {
-  onValue(ref(db, 'signaling/offer'), snapshot => {
+  onValue(ref(db, `${roomName}/signaling/offer`), snapshot => {
     const offer = snapshot.val();
     if (!offer || offer.from === currentUser) return;
     handleOffer(offer);
@@ -720,7 +748,7 @@ function listenSignaling() {
     await sendAnswer();
   }
 
-  onValue(ref(db, 'signaling/answer'), async snapshot => {
+  onValue(ref(db, `${roomName}/signaling/answer`), async snapshot => {
     const answer = snapshot.val();
     if (!answer || answer.from === currentUser) return;
     if (peerConnection) {
@@ -728,7 +756,7 @@ function listenSignaling() {
     }
   });
 
-  onValue(ref(db, 'signaling/candidates/A'), snapshot => {
+  onValue(ref(db, `${roomName}/signaling/candidates/A`), snapshot => {
     if (currentUser === 'B') {
       const candidates = snapshot.val();
       if (!candidates) return;
@@ -740,7 +768,7 @@ function listenSignaling() {
     }
   });
 
-  onValue(ref(db, 'signaling/candidates/B'), snapshot => {
+  onValue(ref(db, `${roomName}/signaling/candidates/B`), snapshot => {
     if (currentUser === 'A') {
       const candidates = snapshot.val();
       if (!candidates) return;
@@ -752,42 +780,20 @@ function listenSignaling() {
     }
   });
 
-  onValue(ref(db, 'roomUsers'), snapshot => {
-  const roomUsers = snapshot.val() || {};
-
-  userSelect.innerHTML = '';
-
-  const options = [{ value: '', text: '選択して下さい' }];
-
-  if (!roomUsers.A || currentUser === 'A') {
-    options.push({ value: 'A', text: 'A' });
-  }
-  if (!roomUsers.B || currentUser === 'B') {
-    options.push({ value: 'B', text: 'B' });
-  }
-
-  options.forEach(opt => {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.text;
-    if (opt.value === currentUser) {
-      option.selected = true;
-    }
-    userSelect.appendChild(option);
-  });
-
-  userSelect.value = currentUser || '';
+  onValue(ref(db, `${roomName}/roomUsers`), () => {
+  // セレクトは表示専用。現在の選択状態だけ反映。
+  updateUserSelectDisplay();
 });
 }
 
 async function getUserType(uid) {
-  const snapshot = await get(ref(db, `users/${uid}/type`));
+  const snapshot = await get(ref(db, `${roomName}/users/${uid}/type`));
   return snapshot.exists() ? snapshot.val() : null;
 }
 
 async function updateCallStatus(status) {
   try {
-    const snap = await get(ref(db, 'callStatus'));
+    const snap = await get(ref(db, `${roomName}/callStatus`));
     const prev = snap.exists() ? snap.val() : {};
     const users = prev && prev.users ? prev.users : { A: false, B: false };
 
@@ -795,7 +801,7 @@ async function updateCallStatus(status) {
       ? '相手が通話開始ボタンを押すのを待っています'
       : (status === 'started' ? '通話が開始されました' : (status === 'ended' ? '通話が終了しました' : ''));
 
-    await set(ref(db, 'callStatus'), {
+    await set(ref(db, `${roomName}/callStatus`), {
       status,
       users,
       statusMessage,
@@ -803,7 +809,7 @@ async function updateCallStatus(status) {
     });
   } catch (e) {
     console.error('updateCallStatus error:', e);
-    await set(ref(db, 'callStatus'), {
+    await set(ref(db, `${roomName}/callStatus`), {
       status,
       users: { A: false, B: false },
       statusMessage: '',
@@ -811,6 +817,44 @@ async function updateCallStatus(status) {
     });
   }
 }
+
+// --- ユーザー選択表示更新 ---
+function updateUserSelectDisplay() {
+  userSelect.innerHTML = '';
+
+  // 手動変更可能にするため、常に有効
+  userSelect.disabled = false;
+
+  // 選択肢は固定
+  const options = [
+    { value: '', text: '未選択' },
+    { value: 'A', text: 'A' },
+    { value: 'B', text: 'B' }
+  ];
+
+  options.forEach(optData => {
+    const opt = document.createElement('option');
+    opt.value = optData.value;
+    opt.textContent = optData.text;
+    if (currentUser === optData.value) opt.selected = true;
+    userSelect.appendChild(opt);
+  });
+}
+
+// --- ドロップダウン変更イベント ---
+userSelect.addEventListener('change', e => {
+  const val = e.target.value;
+  currentUser = val;
+
+  if (val) {
+    localStorage.setItem(`${roomName}_currentUser`, val);
+  } else {
+    localStorage.removeItem(`${roomName}_currentUser`);
+  }
+
+  // 手動で変更した場合のみリロード
+  window.location.reload();
+});
 
 function resetUI() {
   localCallStartPressed = false;
@@ -871,7 +915,7 @@ if (remoteStream) {
   if (!text) return;
 
   const userName = currentUser;
-  const newMsgRef = ref(db, 'chatLog');
+  const newMsgRef = ref(db, `${roomName}/chatLog`);
   const snapshot = await get(newMsgRef);
   const chatData = snapshot.exists() ? snapshot.val() : [];
   chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
@@ -900,133 +944,108 @@ if (remoteStream) {
     chatLog.scrollTop = chatLog.scrollHeight;
   }
 
+// --- 初期化処理 ---
 async function initializeUsers() {
-  if (sessionStorage.getItem('wasCleared') === '1') {
-    currentUser = '';
-    lockedUserA = false;
-    lockedUserB = false;
-    userSelect.innerHTML = '<option value="" selected>選択して下さい</option><option value="A">A</option><option value="B">B</option>';
-    userSelect.disabled = false;
-    return;
-  }
+  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+  const roomUsersSnap = await get(roomUsersRef);
+  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
 
-  if (currentUser) {
-  const roomUsersRef = ref(db, 'roomUsers');
-  const snapshot = await get(roomUsersRef);
-  const roomUsers = snapshot.exists() ? snapshot.val() : {};
+  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
+  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
 
-  if (!roomUsers[currentUser]) {
-    await update(roomUsersRef, { [currentUser]: true });
-  }
-
-  if (currentUser === 'A') {
-    lockedUserA = true;
-    userSelect.innerHTML = '<option value="A" selected>A</option>';
-    userSelect.disabled = true;
-  } else if (currentUser === 'B') {
-    lockedUserB = true;
-    userSelect.innerHTML = '<option value="B" selected>B</option>';
-    userSelect.disabled = true;
-  }
-  renderCalendar();
-  return;
-}
-
-  const roomUsersRef = ref(db, 'roomUsers');
-  const snapshot = await get(roomUsersRef);
-  const roomUsers = snapshot.exists() ? snapshot.val() : {};
-
-  if (!roomUsers.A) {
-    currentUser = 'A';
-    lockedUserA = true;
-    await update(roomUsersRef, { A: true });
-    userSelect.innerHTML = '<option value="A" selected>A</option>';
-    userSelect.disabled = true;
-  } else if (!roomUsers.B) {
-  currentUser = '';
-  lockedUserB = false;
-  if (!lockedUserA) lockedUserA = !!roomUsers.A;
-  userSelect.innerHTML = `<option value="" selected>選択して下さい</option>`;
-
-if (!roomUsers.A) {
-  userSelect.innerHTML += `<option value="A">A</option>`;
-}
-if (!roomUsers.B) {
-  userSelect.innerHTML += `<option value="B">B</option>`;
-}
-
-userSelect.disabled = false;
-currentUser = ''; 
+  if (savedUser) {
+    // 保存済みユーザーを維持
+    currentUser = savedUser;
   } else {
-    currentUser = '';
-    userSelect.innerHTML = '<option value="" selected>満室です</option>';
-    userSelect.disabled = true;
+    // currentUser 未設定時のみ自動割り当て
+    if (roomUsers.A && !roomUsers.B) {
+      currentUser = 'A';
+    } else if (roomUsers.B && !roomUsers.A) {
+      currentUser = 'B';
+    } else if (roomUsers.A && roomUsers.B) {
+      currentUser = 'B'; // 両方 true の場合は B を優先
+    } else {
+      currentUser = ''; // 未選択
+    }
+
+    if (currentUser) {
+      localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    } else {
+      localStorage.removeItem(`${roomName}_currentUser`);
+    }
   }
-  renderCalendar();
+
+  // --- ドロップダウン選択肢を常に A/B にして更新 ---
+  updateUserSelectDisplay();
 }
 
-userSelect.addEventListener('change', async e => {
-  const val = e.target.value;
+// --- DOMContentLoaded で初期化 ---
+document.addEventListener('DOMContentLoaded', async () => {
+  await initializeUsers();
 
-  if (val === '') {
-    currentUser = '';
-    return;
-  }
+  const chatInput = document.getElementById("chatInput");
+  const btnSend = document.getElementById("btn-send");
 
-  if (sessionStorage.getItem('wasCleared') === '1') {
-    sessionStorage.removeItem('wasCleared');
-  }
-
-  const roomUsersSnapshot = await get(ref(db, 'roomUsers'));
-  const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : {};
-
-  if (val === 'A') {
-    if (!roomUsers.A) {
-      currentUser = 'A';
-      await update(ref(db, 'roomUsers'), { A: true });
-      userSelect.disabled = true;
-      localStorage.setItem('currentUser', 'A');
-    } else {
-      alert('ユーザーAは既に確定しています');
-      e.target.value = '';
+  chatInput.addEventListener("keydown", (e) => {
+    // --- Shift + Enter は改行 ---
+    if (e.key === "Enter" && e.shiftKey) {
+      return; // 普通に改行させるので何もしない
     }
-  } else if (val === 'B') {
-    if (!roomUsers.B) {
-      currentUser = 'B';
-      await update(ref(db, 'roomUsers'), { B: true });
-      userSelect.disabled = true;
-      localStorage.setItem('currentUser', 'B');
-    } else {
-      alert('ユーザーBは既に確定しています');
-      e.target.value = '';
+
+    // --- Enter（単体）で送信 ---
+    if (e.key === "Enter") {
+      e.preventDefault();   // 改行を抑制
+      btnSend.click();      // ボタンクリックと同じ動作
     }
-  }
+  });
 });
 
 initializeUsers();
 listenSignaling();
 
-  userANameInput.addEventListener('input', () => {
-  set(ref(db, 'userNames/A'), userANameInput.value);
-  renderCalendar();
-});
-
-userBNameInput.addEventListener('input', () => {
-  set(ref(db, 'userNames/B'), userBNameInput.value);
-  renderCalendar();
-});
-
-const userNamesRef = ref(db, 'userNames');
-
+// --- userNames 変更監視 ---
+const userNamesRef = ref(db, `${roomName}/userNames`);
 onValue(userNamesRef, (snapshot) => {
   const data = snapshot.val() || {};
-  if (data.A !== undefined) {
-    userANameInput.value = data.A;
+  userANameInput.value = data.A || '';
+  userBNameInput.value = data.B || '';
+
+  // currentUser が未設定の場合のみ自動割り当て
+  if (!currentUser) {
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    get(roomUsersRef).then((snap) => {
+      const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
+      if (roomUsers.A && !roomUsers.B) {
+        currentUser = 'A';
+      } else if (roomUsers.B && !roomUsers.A) {
+        currentUser = 'B';
+      } else if (roomUsers.A && roomUsers.B) {
+        currentUser = 'B'; // 両方 true の場合は B を優先
+      } else {
+        currentUser = '';
+      }
+      updateUserSelectDisplay();
+    });
   }
-  if (data.B !== undefined) {
-    userBNameInput.value = data.B;
+});
+
+userANameInput.addEventListener('input', async () => {
+  const name = userANameInput.value.trim();
+  if (!name) {
+    await remove(ref(db, `${roomName}/userNames/A`));
+    return;
   }
-  renderCalendar();
+  await set(ref(db, `${roomName}/userNames/A`), name);
+});
+
+userBNameInput.addEventListener('input', async () => {
+  const name = userBNameInput.value.trim();
+  if (!name) {
+    await remove(ref(db, `${roomName}/userNames/B`));
+    return;
+  }
+  await set(ref(db, `${roomName}/userNames/B`), name);
 });
 
   btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
@@ -1116,7 +1135,7 @@ if (localAudio) {
   });
 }
 
-    await remove(ref(db, 'signaling'));
+    await remove(ref(db, `${roomName}/signaling`));
 
     const callStatusSnap = await get(callStatusRef);
     const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
@@ -1178,7 +1197,7 @@ btnCallEnd.addEventListener('click', async () => {
       callData.users[currentUser] = false;
     }
 
-await update(ref(db, 'callStatus'), {
+await update(ref(db, `${roomName}/callStatus`), {
   status: 'ended',
   users: { A: false, B: false },
   statusMessage: '通話が切断されました'
@@ -1245,7 +1264,7 @@ await update(ref(db, 'callStatus'), {
 }
 
     try {
-      await remove(ref(db, 'signaling'));
+      await remove(ref(db, `${roomName}/signaling`));
     } catch (e) {
       console.error('signaling remove error:', e);
     }
@@ -1355,8 +1374,8 @@ onValue(callStatusRef, (snapshot) => {
   }
 });
 
-onValue(ref(db, 'schedules'), snapshot => updateScheduleTable());
-onValue(ref(db, 'chatLog'), snapshot => {
+onValue(ref(db, `${roomName}/schedules`), snapshot => updateScheduleTable());
+onValue(ref(db, `${roomName}/chatLog`), snapshot => {
   const chatData = snapshot.exists() ? snapshot.val() : [];
   renderChat(chatData);
 });
@@ -1442,11 +1461,11 @@ function resetMuteState() {
   }
 })();
 
-</script>
-<audio id="remote-audio" autoplay></audio><br />
-<label for="volume-control">相手の音量：</label>
-<input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
-<audio id="localAudio" autoplay muted style="display:none;"></audio>
+volumeControl.addEventListener('input', () => {
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) remoteAudio.volume = parseFloat(volumeControl.value);
+});
 
+</script>
 </body>
 </html>
