@@ -193,7 +193,7 @@
       e.preventDefault();
       sendBtn.click();
     }
-  });
+  });  
 
       async function updateRoomStatus() {
         const callId = ++latestRoomStatusCallId;
@@ -341,6 +341,7 @@
         nameInput.value = "";
         chatMessages.innerHTML = "";
         updateRoomStatus();
+        location.reload();
       });
 
       updateRoomStatus();
