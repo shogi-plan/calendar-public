@@ -983,6 +983,22 @@ async function initializeUsers() {
 // --- DOMContentLoaded で初期化 ---
 document.addEventListener('DOMContentLoaded', async () => {
   await initializeUsers();
+
+  const chatInput = document.getElementById("chatInput");
+  const btnSend = document.getElementById("btn-send");
+
+  chatInput.addEventListener("keydown", (e) => {
+    // --- Shift + Enter は改行 ---
+    if (e.key === "Enter" && e.shiftKey) {
+      return; // 普通に改行させるので何もしない
+    }
+
+    // --- Enter（単体）で送信 ---
+    if (e.key === "Enter") {
+      e.preventDefault();   // 改行を抑制
+      btnSend.click();      // ボタンクリックと同じ動作
+    }
+  });
 });
 
 initializeUsers();
