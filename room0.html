@@ -108,9 +108,14 @@
   color: white;
 }
 
-    #sendBtn:hover {
-      background-color: #1976D2;
-    }
+    #sendBtn {
+  background-color: #2196F3; /* ← 青い通常色を追加 */
+}
+
+#sendBtn:hover {
+  background-color: #1976D2;
+}
+
     #clearBtn {
       background-color: #f44336;
     }
@@ -181,19 +186,20 @@
   });
 
   // -------- ここから Enter送信処理 --------
-  chatInput.addEventListener("keydown", (e) => {
-    // Shift + Enter → 何もしない（input は改行不可）
-    if (e.key === "Enter" && e.shiftKey) {
-      e.preventDefault();
-      return;
-    }
+  chatInput.addEventListener("keydown", async (e) => {
+  // Shift + Enter → 改行を許可
+  if (e.key === "Enter" && e.shiftKey) {
+    e.preventDefault();
+    chatInput.value += "\n";
+    return;
+  }
 
-    // Enter → 送信ボタンと同じ動作
-    if (e.key === "Enter") {
-      e.preventDefault();
-      sendBtn.click();
-    }
-  });  
+  // Enter → 送信
+  if (e.key === "Enter") {
+    e.preventDefault();
+    await sendMessage();  // sendBtn.click()の代わりに直接関数を呼ぶ
+  }
+});
 
       async function updateRoomStatus() {
         const callId = ++latestRoomStatusCallId;
@@ -294,12 +300,20 @@
   }
 }
 
-      document.getElementById("sendBtn").addEventListener("click", async () => {
-        if (!myUserName || !chatInput.value.trim()) return;
-        const msgRef = push(ref(db, `${roomName}/chat`));
-        await update(msgRef, { name: myUserName, text: chatInput.value.trim(), time: Date.now() });
-        chatInput.value = "";
-      });
+      // -------- 送信処理を関数化 --------
+async function sendMessage() {
+  const text = chatInput.value.trim();
+  if (!myUserName || !text) return;
+
+  const msgRef = push(ref(db, `${roomName}/chat`));
+  await update(msgRef, { name: myUserName, text, time: Date.now() });
+
+  chatInput.value = "";
+  chatInput.focus();
+}
+
+// クリック時も同じ sendMessage() を呼ぶ
+sendBtn.addEventListener("click", sendMessage);
 
       onValue(ref(db, `${roomName}/chat`), (snapshot) => {
         chatMessages.innerHTML = "";
