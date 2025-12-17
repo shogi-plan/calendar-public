@@ -98,7 +98,7 @@
 <body>
 
 <div class="title-container">
-  <h1>感想戦ルーム</h1>
+  <h1>2人予定調整カレンダー</h1>
 </div>
 
 <div class="controls">
@@ -111,8 +111,22 @@
   <option value="B">ユーザーB</option>
   </select>
   </label>
+</div>
+
+<div class="controls">
+  <button id="btn-mark-ok" style="display: none;">選択セルに○</button>
+  <button id="btn-mark-no" style="display: none;">選択セルに×</button>
+  <button id="btn-clear-cell" style="display: none;">選択セルを削除</button>
   <button id="btn-clear-all">退室</button>
 </div>
+
+<div class="controls">
+  <button id="btn-prev-week" style="display: none;">前の週</button>
+  <button id="btn-today" style="display: none;">今日へ戻る</button>
+  <button id="btn-next-week" style="display: none;">次の週</button>
+</div>
+
+<table id="calendar" style="display: none;"></table>
 
 <div class="chat">
   <h2>チャット</h2>
