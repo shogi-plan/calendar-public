@@ -117,7 +117,7 @@
   <button id="btn-mark-ok" style="display: none;">選択セルに○</button>
   <button id="btn-mark-no" style="display: none;">選択セルに×</button>
   <button id="btn-clear-cell" style="display: none;">選択セルを削除</button>
-  <button id="btn-clear-all">退室</button>
+  <button id="btn-clear-all">データ削除</button>
 </div>
 
 <div class="controls">
@@ -413,9 +413,6 @@ async function clearAllData() {
   sessionStorage.setItem('wasCleared', '1');
   lockedUserA = false;
   lockedUserB = false;
-  
-  // ブラウザバックで前のページに戻る
-  history.back();
 }
 
   async function startLocalStream() {
