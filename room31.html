@@ -5,61 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>遠タメ大会</title>
   <style>
-    body {
-      font-family: "Yu Gothic", "Meiryo", sans-serif;
-      margin: 10px; padding: 0;
-      background: #f0f0f0; color: #333; line-height: 1.5;
-    }
-    h1, h2 { text-align: center; margin-bottom: 15px; color: #5d4037; }
-    .container {
-      max-width: 850px; margin: 0 auto 20px;
-      background: #fff; padding: 15px;
-      border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    input[type="text"], select {
-      width: 100%; font-size: 1rem; padding: 6px;
-      border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
-    }
-
-    /* チャットエリア */
-    #chatMessages {
-      height: 150px; margin-bottom: 10px; padding: 10px;
-      background: #fafafa; border: 1px solid #eee; border-radius: 4px;
-      overflow-y: auto; font-size: 0.95rem;
-    }
-    .chat-input-area { display: flex; gap: 5px; }
-    .chat-input-area input { flex: 1; }
-
-    button {
-      padding: 8px 12px; border: none; border-radius: 4px;
-      cursor: pointer; color: white; font-weight: bold;
-    }
-    #sendBtn { background-color: #795548; }
-    #chatClearBtn { background-color: #9e9e9e; font-size: 0.85rem; }
+    body { font-family: "Yu Gothic", sans-serif; margin: 10px; background: #f0f0f0; }
+    h1, h2 { text-align: center; color: #5d4037; }
+    .container { max-width: 850px; margin: 0 auto 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    input[type="text"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     
-    .add-row-btn { background-color: #5d4037; width: 100%; margin-top: 15px; }
-    .list-del-btn { background-color: #f44336; width: 100%; margin-top: 10px; font-size: 0.85rem; }
-
-    /* マトリクス表 */
+    /* チャット */
+    #chatMessages { height: 150px; margin-bottom: 10px; padding: 10px; background: #fafafa; border: 1px solid #eee; overflow-y: auto; }
+    .chat-input-area { display: flex; gap: 5px; }
+    button { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+    #sendBtn { background-color: #795548; }
+    #chatClearBtn { background-color: #9e9e9e; }
+    
+    /* マトリクス */
     .matrix-wrapper { overflow-x: auto; margin-bottom: 30px; border: 1px solid #d7ccc8; }
-    .matrix-table { width: auto; border-collapse: collapse; font-size: 0.85rem; background: #fff; min-width: 100%; }
-    .matrix-table th, .matrix-table td {
-      border: 1px solid #d7ccc8; padding: 10px; text-align: center; white-space: nowrap;
-    }
-    #matrixHeader th { background-color: #8d6e63; color: white; }
+    .matrix-table { border-collapse: collapse; font-size: 0.85rem; background: #fff; min-width: 100%; }
+    .matrix-table th, .matrix-table td { border: 1px solid #d7ccc8; padding: 10px; text-align: center; white-space: nowrap; }
+    .matrix-table th { background-color: #8d6e63; color: white; }
     .row-label { background-color: #8d6e63 !important; color: white !important; font-weight: bold; }
     .matrix-diagonal { background-color: #e0e0e0; }
     .win-text { color: #d32f2f; font-weight: bold; }
     .lose-text { color: #1976d2; font-weight: bold; }
 
-    /* 各種テーブル共通 */
+    /* テーブル共通 */
     .shogi-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    .shogi-table th { background-color: #a1887f; color: white; padding: 8px; font-size: 0.8rem; }
+    .shogi-table th { background-color: #a1887f; color: white; padding: 8px; }
     .shogi-table td { border: 1px solid #d7ccc8; padding: 5px; text-align: center; }
-    .player-select { border: none; background: #fff9f0; cursor: pointer; }
-    .name-list-input { border: none; border-bottom: 1px dashed #ccc; text-align: center; }
-
-    /* マスター削除 */
+    .add-row-btn { background-color: #5d4037; width: 100%; margin-top: 10px; }
+    .list-del-btn { background-color: #f44336; width: 100%; margin-top: 10px; }
     .master-delete-area { max-width: 850px; margin: 40px auto; text-align: center; }
     #masterDeleteBtn { background-color: #d32f2f; width: 100%; padding: 15px; font-size: 1rem; }
   </style>
@@ -77,12 +50,10 @@
       messagingSenderId: "368704703397",
       appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
-
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const roomName = location.pathname.split('/').pop().replace('.html', '');
     let myUserName = "";
-    let globalPlayers = []; // 参加者リストのキャッシュ
 
     function escapeHtml(str) {
       const div = document.createElement('div');
@@ -91,220 +62,151 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      // ローカルストレージ復元
-      const savedName = localStorage.getItem(`${roomName}UserName`);
-      if (savedName) { 
-        document.getElementById("nameInput").value = savedName;
-        myUserName = savedName;
-      }
-      document.getElementById("nameInput").addEventListener("input", (e) => {
-        myUserName = e.target.value.trim();
-        localStorage.setItem(`${roomName}UserName`, myUserName);
-      });
+      // ユーザー名保存
+      const nameInput = document.getElementById("nameInput");
+      nameInput.value = localStorage.getItem(`${roomName}UserName`) || "";
+      myUserName = nameInput.value;
+      nameInput.oninput = () => { myUserName = nameInput.value; localStorage.setItem(`${roomName}UserName`, myUserName); };
 
-      // チャット同期
-      onValue(ref(db, `${roomName}/chat`), (snap) => {
-        const chatMessages = document.getElementById("chatMessages");
-        chatMessages.innerHTML = "";
-        snap.forEach(c => {
-          const m = c.val();
-          chatMessages.innerHTML += `<p><strong>${escapeHtml(m.name)}</strong>: ${escapeHtml(m.text)}</p>`;
-        });
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-      });
-
-      document.getElementById("sendBtn").addEventListener("click", () => {
+      // チャット送信
+      document.getElementById("sendBtn").onclick = () => {
         const text = document.getElementById("chatInput").value.trim();
-        if (!myUserName || !text) return;
-        push(ref(db, `${roomName}/chat`), { name: myUserName, text, time: Date.now() });
+        if (myUserName && text) push(ref(db, `${roomName}/chat`), { name: myUserName, text, time: Date.now() });
         document.getElementById("chatInput").value = "";
+      };
+      onValue(ref(db, `${roomName}/chat`), (s) => {
+        const div = document.getElementById("chatMessages");
+        div.innerHTML = "";
+        s.forEach(c => { const m = c.val(); div.innerHTML += `<p><strong>${escapeHtml(m.name)}</strong>: ${escapeHtml(m.text)}</p>`; });
+        div.scrollTop = div.scrollHeight;
       });
+      document.getElementById("chatClearBtn").onclick = () => confirm("クリアしますか？") && remove(ref(db, `${roomName}/chat`));
 
-      document.getElementById("chatClearBtn").addEventListener("click", () => {
-        if (confirm("チャット履歴を全削除しますか？")) remove(ref(db, `${roomName}/chat`));
-      });
+      // --- ★重要：データの統合同期 ---
+      // 名簿または対局データが更新されたら、一括して画面を更新する
+      onValue(ref(db, roomName), (snapshot) => {
+        const data = snapshot.val() || {};
+        const playerMaster = data.playerMaster || {};
+        const shogiGames = data.shogiGames || {};
 
-      // --- 参加者名簿の同期 ---
-      onValue(ref(db, `${roomName}/playerMaster`), (snapshot) => {
+        // 1. 名簿の描画 & キャッシュ作成
         const playerListBody = document.getElementById("playerListBody");
         playerListBody.innerHTML = "";
-        globalPlayers = [];
-        let index = 1;
-
-        snapshot.forEach((child) => {
-          const p = { id: child.key, name: child.val().name || "" };
-          globalPlayers.push(p);
-
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td><input type="checkbox" class="master-del-check" value="${p.id}"></td>
-            <td>${index++}</td>
-            <td><input type="text" class="name-list-input" value="${escapeHtml(p.name)}" 
-                onchange="updateMasterName('${p.id}', this.value)"></td>
-          `;
-          playerListBody.appendChild(tr);
+        const currentPlayers = [];
+        let pIdx = 1;
+        Object.keys(playerMaster).forEach(id => {
+          const name = playerMaster[id].name || "";
+          if (name) currentPlayers.push(name);
+          playerListBody.innerHTML += `<tr>
+            <td><input type="checkbox" class="master-del-check" value="${id}"></td>
+            <td>${pIdx++}</td>
+            <td><input type="text" value="${escapeHtml(name)}" onchange="updateMaster('${id}', this.value)"></td>
+          </tr>`;
         });
-        // 名簿が更新されたら対戦表とマトリクスも再描画
-        refreshGames();
+        currentPlayers.sort();
+
+        // 2. 対局リストの描画
+        const shogiBody = document.getElementById("shogiBody");
+        shogiBody.innerHTML = "";
+        const games = [];
+        let gIdx = 1;
+        Object.keys(shogiGames).forEach(id => {
+          const g = { id, no: gIdx++, ...shogiGames[id] };
+          games.push(g);
+          
+          let opt1 = `<option value="">--選択--</option>` + currentPlayers.map(p => `<option value="${escapeHtml(p)}" ${g.p1===p?'selected':''}>${escapeHtml(p)}</option>`).join("");
+          let opt2 = `<option value="">--選択--</option>` + currentPlayers.map(p => `<option value="${escapeHtml(p)}" ${g.p2===p?'selected':''}>${escapeHtml(p)}</option>`).join("");
+          
+          shogiBody.innerHTML += `<tr>
+            <td><input type="checkbox" class="del-check" value="${id}"></td>
+            <td>${g.no}</td>
+            <td><select onchange="updateGame('${id}','p1',this.value)">${opt1}</select></td>
+            <td>vs</td>
+            <td><select onchange="updateGame('${id}','p2',this.value)">${opt2}</select></td>
+            <td><select onchange="updateGame('${id}','result',this.value)">
+              <option value="-" ${g.result==='-'?'selected':''}>-</option>
+              <option value="○" ${g.result==='○'?'selected':''}>先手勝</option>
+              <option value="×" ${g.result==='×'?'selected':''}>後手勝</option>
+            </select></td>
+          </tr>`;
+        });
+
+        // 3. マトリクス（星取表）の描画
+        renderMatrix(currentPlayers, games);
       });
 
-      window.updateMasterName = (id, val) => update(ref(db, `${roomName}/playerMaster/${id}`), { name: val });
+      // Firebase更新用
+      window.updateMaster = (id, name) => update(ref(db, `${roomName}/playerMaster/${id}`), { name });
+      window.updateGame = (id, field, val) => update(ref(db, `${roomName}/shogiGames/${id}`), { [field]: val });
       
-      document.getElementById("addPlayerBtn").addEventListener("click", () => {
-        push(ref(db, `${roomName}/playerMaster`), { name: "" });
-      });
-
-      document.getElementById("delPlayerBtn").addEventListener("click", async () => {
-        const checks = document.querySelectorAll(".master-del-check:checked");
-        if (checks.length === 0) return;
-        if (confirm("選択した参加者を名簿から削除しますか？")) {
-          for (const chk of checks) await remove(ref(db, `${roomName}/playerMaster/${chk.value}`));
-        }
-      });
-
-      // --- 対戦表の同期 ---
-      function refreshGames() {
-        onValue(ref(db, `${roomName}/shogiGames`), (snapshot) => {
-          const shogiBody = document.getElementById("shogiBody");
-          shogiBody.innerHTML = "";
-          const games = [];
-          let index = 1;
-
-          snapshot.forEach((child) => {
-            const game = { id: child.key, no: index, ...child.val() };
-            games.push(game);
-
-            // プルダウンのオプション生成
-            let options = `<option value="">--選択--</option>`;
-            globalPlayers.forEach(p => {
-              if (!p.name) return;
-              options += `<option value="${escapeHtml(p.name)}" ${game.p1===p.name?'selected':''}>${escapeHtml(p.name)}</option>`;
-            });
-            let options2 = `<option value="">--選択--</option>`;
-            globalPlayers.forEach(p => {
-              if (!p.name) return;
-              options2 += `<option value="${escapeHtml(p.name)}" ${game.p2===p.name?'selected':''}>${escapeHtml(p.name)}</option>`;
-            });
-
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-              <td><input type="checkbox" class="del-check" value="${game.id}"></td>
-              <td>${game.no}</td>
-              <td><select class="player-select" onchange="updateGameField('${game.id}', 'p1', this.value)">${options}</select></td>
-              <td>vs</td>
-              <td><select class="player-select" onchange="updateGameField('${game.id}', 'p2', this.value)">${options2}</select></td>
-              <td>
-                <select onchange="updateGameField('${game.id}', 'result', this.value)">
-                  <option value="-" ${game.result==='-'?'selected':''}>-</option>
-                  <option value="○" ${game.result==='○'?'selected':''}>先手勝</option>
-                  <option value="×" ${game.result==='×'?'selected':''}>後手勝</option>
-                </select>
-              </td>
-            `;
-            shogiBody.appendChild(tr);
-            index++;
-          });
-          renderMatrix(globalPlayers.map(p => p.name).filter(n => n !== "").sort(), games);
-        }, { onlyOnce: true });
-      }
-
-      window.updateGameField = (id, field, val) => update(ref(db, `${roomName}/shogiGames/${id}`), { [field]: val });
-
-      function renderMatrix(playerList, games) {
-        const header = document.getElementById("matrixHeader");
+      function renderMatrix(players, games) {
+        const head = document.getElementById("matrixHeader");
         const body = document.getElementById("matrixBody");
-        header.innerHTML = "<tr><th></th>" + playerList.map(p => `<th>${escapeHtml(p)}</th>`).join("") + "</tr>";
+        head.innerHTML = "<tr><th></th>" + players.map(p => `<th>${escapeHtml(p)}</th>`).join("") + "</tr>";
         body.innerHTML = "";
-        playerList.forEach(rowP => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `<td class="row-label">${escapeHtml(rowP)}</td>`;
-          playerList.forEach(colP => {
-            const td = document.createElement("td");
-            if (rowP === colP) td.className = "matrix-diagonal";
+        players.forEach(rowP => {
+          let rowHtml = `<tr><td class="row-label">${escapeHtml(rowP)}</td>`;
+          players.forEach(colP => {
+            if (rowP === colP) rowHtml += `<td class="matrix-diagonal"></td>`;
             else {
               const matches = games.filter(g => (g.p1 === rowP && g.p2 === colP) || (g.p1 === colP && g.p2 === rowP));
-              td.innerHTML = matches.map(g => {
-                if (g.result === "-") return null;
+              const res = matches.map(g => {
+                if (!g.result || g.result === "-") return null;
                 let sym = (g.p1 === rowP) ? (g.result === "○" ? "○" : "×") : (g.result === "○" ? "×" : "○");
                 return `<span class="${sym==='○'?'win-text':'lose-text'}">${g.no}:${sym}</span>`;
               }).filter(r => r).join("、");
+              rowHtml += `<td>${res}</td>`;
             }
-            tr.appendChild(td);
           });
-          body.appendChild(tr);
+          body.innerHTML += rowHtml + "</tr>";
         });
       }
 
-      document.getElementById("addRowBtn").addEventListener("click", () => push(ref(db, `${roomName}/shogiGames`), { p1: "", p2: "", result: "-" }));
-      document.getElementById("listDelBtn").addEventListener("click", async () => {
+      // 追加・削除ボタン
+      document.getElementById("addRowBtn").onclick = () => push(ref(db, `${roomName}/shogiGames`), { p1: "", p2: "", result: "-" });
+      document.getElementById("addPlayerBtn").onclick = () => push(ref(db, `${roomName}/playerMaster`), { name: "" });
+      
+      document.getElementById("listDelBtn").onclick = async () => {
         const checks = document.querySelectorAll(".del-check:checked");
-        if (checks.length > 0 && confirm("選択した対局を削除しますか？")) {
-          for (const chk of checks) await remove(ref(db, `${roomName}/shogiGames/${chk.value}`));
-        }
-      });
-
-      document.getElementById("masterDeleteBtn").addEventListener("click", async () => {
-        if (confirm("全てのデータを完全に消去しますか？")) {
-          await remove(ref(db, roomName));
-          localStorage.removeItem(`${roomName}UserName`);
-          location.reload();
-        }
-      });
+        if (checks.length && confirm("削除しますか？")) for (const c of checks) await remove(ref(db, `${roomName}/shogiGames/${c.value}`));
+      };
+      document.getElementById("delPlayerBtn").onclick = async () => {
+        const checks = document.querySelectorAll(".master-del-check:checked");
+        if (checks.length && confirm("削除しますか？")) for (const c of checks) await remove(ref(db, `${roomName}/playerMaster/${c.value}`));
+      };
+      document.getElementById("masterDeleteBtn").onclick = async () => {
+        if (confirm("全データを消去しますか？")) { await remove(ref(db, roomName)); localStorage.removeItem(`${roomName}UserName`); location.reload(); }
+      };
     });
   </script>
 </head>
 <body>
-
   <h1>遠タメ大会</h1>
-
-  <div class="container">
-    <label>チャット入力者名: <input type="text" id="nameInput" placeholder="あなたの名前" /></label>
-  </div>
-
+  <div class="container">チャット入力者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
   <div class="container">
     <h2>チャット</h2>
     <div id="chatMessages"></div>
-    <div class="chat-input-area">
-      <input type="text" id="chatInput" placeholder="メッセージ" />
-      <button id="sendBtn">送信</button>
-      <button id="chatClearBtn">クリア</button>
-    </div>
+    <div class="chat-input-area"><input type="text" id="chatInput"><button id="sendBtn">送信</button><button id="chatClearBtn">クリア</button></div>
   </div>
-
   <div class="container">
     <h2>対戦表</h2>
-    <div class="matrix-wrapper">
-      <table class="matrix-table">
-        <thead id="matrixHeader"></thead>
-        <tbody id="matrixBody"></tbody>
-      </table>
-    </div>
-
+    <div class="matrix-wrapper"><table class="matrix-table"><thead id="matrixHeader"></thead><tbody id="matrixBody"></tbody></table></div>
     <table class="shogi-table">
-      <thead>
-        <tr><th style="width:30px;">選</th><th style="width:30px;">No</th><th>先手（▲）</th><th></th><th>後手（△）</th><th>結果</th></tr>
-      </thead>
+      <thead><tr><th>選</th><th>No</th><th>先手（▲）</th><th></th><th>後手（△）</th><th>結果</th></tr></thead>
       <tbody id="shogiBody"></tbody>
     </table>
     <button id="addRowBtn" class="add-row-btn">+ 新しい対局を追加</button>
     <button id="listDelBtn" class="list-del-btn">選択した対局を削除</button>
   </div>
-
   <div class="container">
     <h2>参加者名簿</h2>
     <table class="shogi-table">
-      <thead>
-        <tr><th style="width:30px;">選</th><th style="width:30px;">No</th><th>名前（テキスト入力）</th></tr>
-      </thead>
+      <thead><tr><th>選</th><th>No</th><th>名前</th></tr></thead>
       <tbody id="playerListBody"></tbody>
     </table>
     <button id="addPlayerBtn" class="add-row-btn" style="background-color:#4caf50;">+ 参加者を追加</button>
     <button id="delPlayerBtn" class="list-del-btn">選択した参加者を削除</button>
   </div>
-
-  <div class="master-delete-area">
-    <button id="masterDeleteBtn">全データ一括削除</button>
-  </div>
-
+  <div class="master-delete-area"><button id="masterDeleteBtn">全データ一括削除</button></div>
 </body>
 </html>
