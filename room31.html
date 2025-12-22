@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>遠タメ大会</title>
+  <style>
+    body {
+      font-family: "Yu Gothic", "Meiryo", sans-serif;
+      margin: 10px; padding: 0;
+      background: #f0f0f0; color: #333; line-height: 1.5;
+    }
+    h1, h2 { text-align: center; margin-bottom: 15px; color: #5d4037; }
+    .container {
+      max-width: 850px; margin: 0 auto 20px;
+      background: #fff; padding: 15px;
+      border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    input[type="text"] {
+      width: 100%; font-size: 1rem; padding: 8px;
+      border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
+    }
+
+    /* チャットエリア */
+    #chatMessages {
+      height: 150px; margin-bottom: 10px; padding: 10px;
+      background: #fafafa; border: 1px solid #eee; border-radius: 4px;
+      overflow-y: auto; font-size: 0.95rem;
+    }
+    .chat-input-area { display: flex; gap: 5px; }
+    .chat-input-area input { flex: 1; }
+
+    button {
+      padding: 8px 12px; border: none; border-radius: 4px;
+      cursor: pointer; color: white; font-weight: bold;
+    }
+    #sendBtn { background-color: #795548; }
+    #chatClearBtn { background-color: #9e9e9e; font-size: 0.85rem; } /* チャット削除ボタン */
+    
+    .add-row-btn { background-color: #5d4037; width: 100%; margin-top: 15px; }
+    .list-del-btn { background-color: #f44336; width: 100%; margin-top: 10px; font-size: 0.85rem; }
+
+    /* マトリクス表（星取表） */
+    .matrix-wrapper { overflow-x: auto; margin-bottom: 30px; border: 1px solid #d7ccc8; }
+    .matrix-table { width: auto; border-collapse: collapse; font-size: 0.85rem; background: #fff; min-width: 100%; }
+    .matrix-table th, .matrix-table td {
+      border: 1px solid #d7ccc8; padding: 10px; text-align: center; white-space: nowrap;
+    }
+    #matrixHeader th { background-color: #8d6e63; color: white; }
+    .row-label { background-color: #8d6e63 !important; color: white !important; font-weight: bold; }
+    .matrix-diagonal { background-color: #e0e0e0; }
+    .win-text { color: #d32f2f; font-weight: bold; }
+    .lose-text { color: #1976d2; font-weight: bold; }
+
+    /* 公式対戦表 */
+    .shogi-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .shogi-table th { background-color: #a1887f; color: white; padding: 8px; font-size: 0.8rem; }
+    .shogi-table td { border: 1px solid #d7ccc8; padding: 5px; text-align: center; }
+    .player-input {
+      width: 90%; border: none; border-bottom: 1px dashed #bcaaa4;
+      text-align: center; padding: 4px 0; background: transparent;
+    }
+    .del-check { transform: scale(1.2); cursor: pointer; }
+
+    /* 全データ一括削除ボタン */
+    .master-delete-area { max-width: 850px; margin: 40px auto; text-align: center; }
+    #masterDeleteBtn { background-color: #d32f2f; width: 100%; padding: 15px; font-size: 1rem; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+  </style>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getDatabase, ref, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
+      authDomain: "calendar-chousei.firebaseapp.com",
+      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "calendar-chousei",
+      storageBucket: "calendar-chousei.firebasestorage.app",
+      messagingSenderId: "368704703397",
+      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+  };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const roomName = location.pathname.split('/').pop().replace('.html', '');
+    let myUserName = "";
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const nameInput = document.getElementById("nameInput");
+      const chatMessages = document.getElementById("chatMessages");
+      const chatInput = document.getElementById("chatInput");
+      const sendBtn = document.getElementById("sendBtn");
+      const chatClearBtn = document.getElementById("chatClearBtn");
+      const shogiBody = document.getElementById("shogiBody");
+      const matrixHeader = document.getElementById("matrixHeader");
+      const matrixBody = document.getElementById("matrixBody");
+
+      const savedName = localStorage.getItem(`${roomName}UserName`);
+      if (savedName) { nameInput.value = savedName; myUserName = savedName; }
+      nameInput.addEventListener("input", () => {
+        myUserName = nameInput.value.trim();
+        localStorage.setItem(`${roomName}UserName`, myUserName);
+      });
+
+      // チャット送信
+      async function sendMessage() {
+        const text = chatInput.value.trim();
+        if (!myUserName || !text) return;
+        push(ref(db, `${roomName}/chat`), { name: myUserName, text, time: Date.now() });
+        chatInput.value = "";
+      }
+      sendBtn.addEventListener("click", sendMessage);
+
+      // チャットのみ削除
+      chatClearBtn.addEventListener("click", async () => {
+        if (confirm("チャット履歴をすべて削除しますか？")) {
+          await remove(ref(db, `${roomName}/chat`));
+        }
+      });
+
+      // リアルタイム同期
+      onValue(ref(db, `${roomName}/chat`), (snap) => {
+        chatMessages.innerHTML = "";
+        snap.forEach(c => {
+          const m = c.val();
+          chatMessages.innerHTML += `<p><strong>${escapeHtml(m.name)}</strong>: ${escapeHtml(m.text)}</p>`;
+        });
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      });
+
+      onValue(ref(db, `${roomName}/shogiGames`), (snapshot) => {
+        const games = [];
+        const players = new Set();
+        shogiBody.innerHTML = "";
+        
+        let index = 1;
+        snapshot.forEach((child) => {
+          const game = { id: child.key, no: index, ...child.val() };
+          games.push(game);
+          if (game.p1) players.add(game.p1);
+          if (game.p2) players.add(game.p2);
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td><input type="checkbox" class="del-check" value="${game.id}"></td>
+            <td style="font-weight:bold;">${game.no}</td>
+            <td><input type="text" class="player-input" value="${game.p1}" data-id="${game.id}" data-field="p1" placeholder="先手"></td>
+            <td style="font-size:0.75rem; color:#888;">vs</td>
+            <td><input type="text" class="player-input" value="${game.p2}" data-id="${game.id}" data-field="p2" placeholder="後手"></td>
+            <td>
+              <select onchange="updateResult('${game.id}', this.value)">
+                <option value="-" ${game.result==='-'?'selected':''}>-</option>
+                <option value="○" ${game.result==='○'?'selected':''}>先手勝</option>
+                <option value="×" ${game.result==='×'?'selected':''}>後手勝</option>
+              </select>
+            </td>
+          `;
+          shogiBody.appendChild(tr);
+          index++;
+        });
+        renderMatrix(Array.from(players).sort(), games);
+      });
+
+      function renderMatrix(playerList, games) {
+        let headerHtml = "<tr><th></th>";
+        playerList.forEach(p => headerHtml += `<th>${escapeHtml(p)}</th>`);
+        headerHtml += "</tr>";
+        matrixHeader.innerHTML = headerHtml;
+
+        matrixBody.innerHTML = "";
+        playerList.forEach(rowP => {
+          const tr = document.createElement("tr");
+          const rowLabel = document.createElement("td");
+          rowLabel.className = "row-label";
+          rowLabel.textContent = rowP;
+          tr.appendChild(rowLabel);
+          
+          playerList.forEach(colP => {
+            const td = document.createElement("td");
+            if (rowP === colP) {
+              td.className = "matrix-diagonal";
+            } else {
+              const matchGames = games.filter(g => 
+                (g.p1 === rowP && g.p2 === colP) || (g.p1 === colP && g.p2 === rowP)
+              );
+              if (matchGames.length > 0) {
+                const results = matchGames.map(g => {
+                  if (g.result === "-") return null;
+                  let symbol = (g.p1 === rowP) ? (g.result === "○" ? "○" : "×") : (g.result === "○" ? "×" : "○");
+                  const colorClass = (symbol === "○") ? "win-text" : "lose-text";
+                  return `<span class="${colorClass}">${g.no}:${symbol}</span>`;
+                }).filter(r => r !== null);
+                td.innerHTML = results.join("、");
+              }
+            }
+            tr.appendChild(td);
+          });
+          matrixBody.appendChild(tr);
+        });
+      }
+
+      window.updateResult = (id, val) => update(ref(db, `${roomName}/shogiGames/${id}`), { result: val });
+      shogiBody.addEventListener("change", (e) => {
+        if (e.target.classList.contains("player-input")) {
+          const id = e.target.dataset.id;
+          const field = e.target.dataset.field;
+          update(ref(db, `${roomName}/shogiGames/${id}`), { [field]: e.target.value });
+        }
+      });
+
+      document.getElementById("addRowBtn").addEventListener("click", () => {
+        push(ref(db, `${roomName}/shogiGames`), { p1: "", p2: "", result: "-" });
+      });
+
+      // 選択した対局を削除
+      document.getElementById("listDelBtn").addEventListener("click", async () => {
+        const checks = document.querySelectorAll(".del-check:checked");
+        if (checks.length === 0) return alert("削除したい対局にチェックを入れてください。");
+        if (confirm("選択した対局データを削除しますか？")) {
+          for (const chk of checks) await remove(ref(db, `${roomName}/shogiGames/${chk.value}`));
+        }
+      });
+
+      // ★全てのデータを一括削除
+      document.getElementById("masterDeleteBtn").addEventListener("click", async () => {
+        if (confirm("【警告】このページの全てのデータ（対戦表、チャット履歴、ユーザー名設定）を完全に削除します。本当によろしいですか？")) {
+          // 1. Firebaseのデータをまるごと削除
+          await remove(ref(db, roomName));
+          // 2. ローカルストレージのユーザー名を削除
+          localStorage.removeItem(`${roomName}UserName`);
+          // 3. 画面リフレッシュ
+          alert("すべてのデータを消去しました。");
+          location.reload();
+        }
+      });
+    });
+  </script>
+</head>
+<body>
+
+  <h1>遠タメ大会</h1>
+
+  <div class="container">
+    <label>チャット入力者名: <input type="text" id="nameInput" placeholder="あなたの名前" /></label>
+  </div>
+
+  <div class="container">
+    <h2>チャット</h2>
+    <div id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" placeholder="メッセージを入力" />
+      <button id="sendBtn">送信</button>
+      <button id="chatClearBtn">クリア</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <h2>対戦表</h2>
+    <div class="matrix-wrapper">
+      <table class="matrix-table">
+        <thead id="matrixHeader"></thead>
+        <tbody id="matrixBody"></tbody>
+      </table>
+    </div>
+
+    <table class="shogi-table">
+      <thead>
+        <tr>
+          <th style="width:30px;">選</th>
+          <th style="width:30px;">No</th>
+          <th>先手（▲）</th>
+          <th></th>
+          <th>後手（△）</th>
+          <th>結果</th>
+        </tr>
+      </thead>
+      <tbody id="shogiBody"></tbody>
+    </table>
+    <button id="addRowBtn" class="add-row-btn">+ 新しい対局を追加</button>
+    <button id="listDelBtn" class="list-del-btn">選択した対局を削除</button>
+  </div>
+
+  <div class="master-delete-area">
+    <button id="masterDeleteBtn">全データ一括削除</button>
+  </div>
+
+</body>
+</html>
