@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>遠タメ大会</title>
+  <title>将棋大会 待合室（全削除ロック版）</title>
   <style>
     body { font-family: "Yu Gothic", sans-serif; margin: 10px; background: #f0f0f0; }
     h1, h2 { text-align: center; color: #5d4037; }
@@ -33,13 +33,19 @@
     .shogi-table td { border: 1px solid #d7ccc8; padding: 5px; text-align: center; }
     .add-row-btn { background-color: #5d4037; width: 100%; margin-top: 10px; }
     .list-del-btn { background-color: #f44336; width: 100%; margin-top: 10px; }
-    .master-delete-area { max-width: 850px; margin: 40px auto; text-align: center; }
+    
+    /* 管理削除エリア */
+    .master-delete-area { max-width: 850px; margin: 40px auto; text-align: center; border-top: 2px dashed #ccc; padding-top: 20px; }
     #masterDeleteBtn { background-color: #d32f2f; width: 100%; padding: 15px; font-size: 1rem; }
   </style>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getDatabase, ref, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    // --- ★設定：管理用共通パスワード ---
+    const MASTER_PASSWORD = "totame25"; 
+    // ------------------------------------
 
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
@@ -61,6 +67,15 @@
       return div.innerHTML;
     }
 
+    // パスワード照合共通関数
+    function checkAuth() {
+      const pass = prompt("管理用パスワードを入力してください：");
+      if (pass === null) return false;
+      if (pass === MASTER_PASSWORD) return true;
+      alert("パスワードが違います。");
+      return false;
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
       // ユーザー名保存
       const nameInput = document.getElementById("nameInput");
@@ -68,7 +83,7 @@
       myUserName = nameInput.value;
       nameInput.oninput = () => { myUserName = nameInput.value; localStorage.setItem(`${roomName}UserName`, myUserName); };
 
-      // チャット送信
+      // チャット
       document.getElementById("sendBtn").onclick = () => {
         const text = document.getElementById("chatInput").value.trim();
         if (myUserName && text) push(ref(db, `${roomName}/chat`), { name: myUserName, text, time: Date.now() });
@@ -82,14 +97,12 @@
       });
       document.getElementById("chatClearBtn").onclick = () => confirm("クリアしますか？") && remove(ref(db, `${roomName}/chat`));
 
-      // --- ★重要：データの統合同期 ---
-      // 名簿または対局データが更新されたら、一括して画面を更新する
+      // データの統合同期
       onValue(ref(db, roomName), (snapshot) => {
         const data = snapshot.val() || {};
         const playerMaster = data.playerMaster || {};
         const shogiGames = data.shogiGames || {};
 
-        // 1. 名簿の描画 & キャッシュ作成
         const playerListBody = document.getElementById("playerListBody");
         playerListBody.innerHTML = "";
         const currentPlayers = [];
@@ -105,7 +118,6 @@
         });
         currentPlayers.sort();
 
-        // 2. 対局リストの描画
         const shogiBody = document.getElementById("shogiBody");
         shogiBody.innerHTML = "";
         const games = [];
@@ -113,10 +125,8 @@
         Object.keys(shogiGames).forEach(id => {
           const g = { id, no: gIdx++, ...shogiGames[id] };
           games.push(g);
-          
           let opt1 = `<option value="">--選択--</option>` + currentPlayers.map(p => `<option value="${escapeHtml(p)}" ${g.p1===p?'selected':''}>${escapeHtml(p)}</option>`).join("");
           let opt2 = `<option value="">--選択--</option>` + currentPlayers.map(p => `<option value="${escapeHtml(p)}" ${g.p2===p?'selected':''}>${escapeHtml(p)}</option>`).join("");
-          
           shogiBody.innerHTML += `<tr>
             <td><input type="checkbox" class="del-check" value="${id}"></td>
             <td>${g.no}</td>
@@ -130,12 +140,9 @@
             </select></td>
           </tr>`;
         });
-
-        // 3. マトリクス（星取表）の描画
         renderMatrix(currentPlayers, games);
       });
 
-      // Firebase更新用
       window.updateMaster = (id, name) => update(ref(db, `${roomName}/playerMaster/${id}`), { name });
       window.updateGame = (id, field, val) => update(ref(db, `${roomName}/shogiGames/${id}`), { [field]: val });
       
@@ -162,42 +169,59 @@
         });
       }
 
-      // 追加・削除ボタン
+      // 追加操作
       document.getElementById("addRowBtn").onclick = () => push(ref(db, `${roomName}/shogiGames`), { p1: "", p2: "", result: "-" });
       document.getElementById("addPlayerBtn").onclick = () => push(ref(db, `${roomName}/playerMaster`), { name: "" });
-      
+
+      // ★削除ボタン（パスワードロック付き）
       document.getElementById("listDelBtn").onclick = async () => {
         const checks = document.querySelectorAll(".del-check:checked");
-        if (checks.length && confirm("削除しますか？")) for (const c of checks) await remove(ref(db, `${roomName}/shogiGames/${c.value}`));
+        if (!checks.length) return alert("削除対象を選択してください。");
+        if (checkAuth() && confirm("選択した対局を削除しますか？")) {
+          for (const c of checks) await remove(ref(db, `${roomName}/shogiGames/${c.value}`));
+        }
       };
+
       document.getElementById("delPlayerBtn").onclick = async () => {
         const checks = document.querySelectorAll(".master-del-check:checked");
-        if (checks.length && confirm("削除しますか？")) for (const c of checks) await remove(ref(db, `${roomName}/playerMaster/${c.value}`));
+        if (!checks.length) return alert("削除対象を選択してください。");
+        if (checkAuth() && confirm("選択した参加者を名簿から削除しますか？")) {
+          for (const c of checks) await remove(ref(db, `${roomName}/playerMaster/${c.value}`));
+        }
       };
+
       document.getElementById("masterDeleteBtn").onclick = async () => {
-        if (confirm("全データを消去しますか？")) { await remove(ref(db, roomName)); localStorage.removeItem(`${roomName}UserName`); location.reload(); }
+        if (checkAuth() && confirm("全データを完全にリセットしますか？この操作は取り消せません。")) {
+          await remove(ref(db, roomName));
+          localStorage.removeItem(`${roomName}UserName`);
+          alert("すべてのデータを消去しました。");
+          location.reload();
+        }
       };
     });
   </script>
 </head>
 <body>
-  <h1>遠タメ大会</h1>
-  <div class="container">チャット入力者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
+  <h1>将棋大会 待合室</h1>
+  <div class="container">参加者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
+  
   <div class="container">
-    <h2>チャット</h2>
+    <h2>対局チャット</h2>
     <div id="chatMessages"></div>
     <div class="chat-input-area"><input type="text" id="chatInput"><button id="sendBtn">送信</button><button id="chatClearBtn">クリア</button></div>
   </div>
+
   <div class="container">
-    <h2>対戦表</h2>
+    <h2>公式対戦表 / 星取表</h2>
     <div class="matrix-wrapper"><table class="matrix-table"><thead id="matrixHeader"></thead><tbody id="matrixBody"></tbody></table></div>
     <table class="shogi-table">
       <thead><tr><th>選</th><th>No</th><th>先手（▲）</th><th></th><th>後手（△）</th><th>結果</th></tr></thead>
       <tbody id="shogiBody"></tbody>
     </table>
     <button id="addRowBtn" class="add-row-btn">+ 新しい対局を追加</button>
-    <button id="listDelBtn" class="list-del-btn">選択した対局を削除</button>
+    <button id="listDelBtn" class="list-del-btn">選択した対局を削除 (パスワード必要)</button>
   </div>
+
   <div class="container">
     <h2>参加者名簿</h2>
     <table class="shogi-table">
@@ -205,8 +229,11 @@
       <tbody id="playerListBody"></tbody>
     </table>
     <button id="addPlayerBtn" class="add-row-btn" style="background-color:#4caf50;">+ 参加者を追加</button>
-    <button id="delPlayerBtn" class="list-del-btn">選択した参加者を削除</button>
+    <button id="delPlayerBtn" class="list-del-btn">選択した参加者を削除 (パスワード必要)</button>
   </div>
-  <div class="master-delete-area"><button id="masterDeleteBtn">全データ一括削除</button></div>
+
+  <div class="master-delete-area">
+    <button id="masterDeleteBtn">全データを一括削除 (管理用パスワードが必要)</button>
+  </div>
 </body>
 </html>
