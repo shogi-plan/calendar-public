@@ -33,6 +33,9 @@
     .shogi-table th, .shogi-table td { border: 1px solid #d7ccc8; padding: 4px; text-align: center; vertical-align: middle; }
     .shogi-table th { background-color: #a1887f; color: white; font-size: 0.8rem; white-space: nowrap; }
     
+    /* No列のリンクスタイル */
+    .game-link { color: #1976d2; text-decoration: underline; font-weight: bold; cursor: pointer; }
+
     .col-check { width: 35px; }
     .col-no { width: 35px; }
     .col-result { width: 75px; }
@@ -50,6 +53,11 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getDatabase, ref, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
+    // --- ★オンコード設定：対局用ベースURL ---
+    // 例: "https://shogi-platform.com/room/" とすると、No.10は "https://shogi-platform.com/room/10" へ飛びます
+    const GAME_BASE_URL = "https://shogi-plan.github.io/calendar-public/room"; 
+    // ------------------------------------
+
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
@@ -66,7 +74,6 @@
     const urlParams = new URLSearchParams(window.location.search);
     const isAdmin = urlParams.get('admin') === 'true';
 
-    // URLをリンクに変換する関数
     function linkify(text) {
       const urlPattern = /(https?:\/\/[\w\/:%#\$&\?\(\)~\.=\+\-]+)/g;
       return text.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
@@ -100,21 +107,17 @@
         div.innerHTML = "";
         s.forEach(c => { 
           const m = c.val(); 
-          const safeName = escapeHtml(m.name);
-          const safeText = escapeHtml(m.text);
-          // HTMLエスケープした後にURLをリンク化する
-          div.innerHTML += `<p style="margin:4px 0;"><strong>${safeName}</strong>: ${linkify(safeText)}</p>`; 
+          div.innerHTML += `<p style="margin:4px 0;"><strong>${escapeHtml(m.name)}</strong>: ${linkify(escapeHtml(m.text))}</p>`; 
         });
         div.scrollTop = div.scrollHeight;
       });
-      
-      document.getElementById("chatClearBtn").onclick = () => confirm("チャットを全消去しますか？") && remove(ref(db, `${roomName}/chat`));
 
       onValue(ref(db, roomName), (snapshot) => {
         const data = snapshot.val() || {};
         const playerMaster = data.playerMaster || {};
         const shogiGames = data.shogiGames || {};
 
+        // 名簿
         const playerListBody = document.getElementById("playerListBody");
         playerListBody.innerHTML = "";
         const currentPlayers = [];
@@ -130,6 +133,7 @@
         });
         currentPlayers.sort();
 
+        // 対局リスト
         const shogiBody = document.getElementById("shogiBody");
         shogiBody.innerHTML = "";
         const games = [];
@@ -139,9 +143,12 @@
           games.push(g);
           let opts = (val) => `<option value="">-</option>` + currentPlayers.map(n => `<option value="${escapeHtml(n)}" ${val===n?'selected':''}>${escapeHtml(n)}</option>`).join("");
           
+          // No列をリンク化
+          const gameUrl = GAME_BASE_URL + g.no;
+
           shogiBody.innerHTML += `<tr>
             <td class="admin-only" style="${isAdmin ? 'display:table-cell' : 'display:none'}"><input type="checkbox" class="del-check" value="${id}"></td>
-            <td>${g.no}</td>
+            <td class="col-no"><a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="game-link">${g.no}</a></td>
             <td class="col-player"><select onchange="updateGame('${id}','p1',this.value)">${opts(g.p1)}</select></td>
             <td class="col-player"><select onchange="updateGame('${id}','p2',this.value)">${opts(g.p2)}</select></td>
             <td class="col-result"><select onchange="updateGame('${id}','result',this.value)">
@@ -170,7 +177,9 @@
               const res = m.map(g => {
                 if (!g.result || g.result === "-") return null;
                 let sym = (g.p1===rowP) ? (g.result==="○"?"○":"×") : (g.result==="○"?"×":"○");
-                return `<span class="${sym==="○"?"win-text":"lose-text"}">${g.no}:${sym}</span>`;
+                // 星取表内のNoにもリンクを適用（任意）
+                const gameUrl = GAME_BASE_URL + g.no;
+                return `<a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="${sym==="○"?"win-text":"lose-text"}" style="text-decoration:none;">${g.no}:${sym}</a>`;
               }).filter(r=>r).join("、");
               row += `<td>${res}</td>`;
             }
@@ -191,14 +200,14 @@
         if (c.length && confirm("名簿から削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/playerMaster/${x.value}`));
       };
       document.getElementById("masterDeleteBtn").onclick = async () => {
-        if (confirm("全データを完全にリセットしますか？")) { await remove(ref(db, roomName)); location.reload(); }
+        if (confirm("全データをリセットしますか？")) { await remove(ref(db, roomName)); location.reload(); }
       };
     });
   </script>
 </head>
 <body>
   <h1>遠タメ大会</h1>
-  <div class="container">チャット入力者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
+  <div class="container">参加者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
   
   <div class="container">
     <h2>チャット</h2>
