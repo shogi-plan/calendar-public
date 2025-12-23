@@ -12,23 +12,23 @@
     
     /* 盤面 */
     #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 92vmin; height: 92vmin; background: #f5deb3; position: relative; }
-    .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 4vmin, 30px); cursor: pointer; font-weight: bold; }
-    .selected { background: #fff5a6; outline: 2px solid orange; z-index: 5; }
+    .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 4vmin, 30px); cursor: pointer; font-weight: bold; user-select: none; }
+    .selected { background: #fff5a6 !important; box-shadow: inset 0 0 0 3px orange; z-index: 5; }
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: #d32f2f; }
 
     /* UIエリア */
     .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; max-width: 500px; }
-    button { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; background: #8d6e63; }
+    button { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; background: #8d6e63; font-size: 12px; }
     button:hover { background: #5d4037; }
-    select, input { padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
+    select { padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
 
     /* 駒台 */
     #hands { display: flex; justify-content: space-around; width: 100%; margin: 10px 0; max-width: 500px; }
     .hand-block { width: 45%; text-align: center; font-size: 12px; }
     .hand { min-height: 40px; border: 1px solid #d7ccc8; background: #fff; padding: 5px; display: flex; gap: 5px; border-radius: 5px; flex-wrap: wrap; margin-top: 4px; }
     .hand span { border: 1px solid #aaa; padding: 2px 6px; border-radius: 3px; cursor: pointer; background: #eee; }
-    .hand span.selected { background: #ffea00; border-color: orange; }
+    .hand span.selected { background: #ffea00 !important; outline: 2px solid orange; }
 
     /* 棋譜 */
     #kifuList { height: 100px; overflow-y: auto; background: #fff; width: 92vmin; max-width: 500px; border: 1px solid #d7ccc8; list-style: none; padding: 5px; font-size: 12px; margin: 10px 0; }
@@ -65,10 +65,10 @@
 <ul id="kifuList" class="hidden"></ul>
 
 <script type="module">
-  // 待合室コードと同じ import スタイルを採用
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-  import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+  import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
+  // --- Firebase Config (お手元のものを設定してください) ---
   const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
@@ -81,7 +81,6 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
-  // ルーム名は待合室と同じロジック（ファイル名など）で固定
   const roomName = location.pathname.split('/').pop().replace('.html', '') || "default_room";
   const gameRef = ref(db, `${roomName}/shogiData`);
 
@@ -96,37 +95,42 @@
   let sel = null;
   let selH = null;
 
-  // --- Firebase 監視 ---
+  // --- Firebase 受信 ---
   onValue(gameRef, (snapshot) => {
     const data = snapshot.val();
     if (!data) {
-      document.getElementById('status-badge').textContent = "盤面未作成：初期化してください";
+      document.getElementById('status-badge').textContent = "未初期化：リセットボタンを押してください";
       return;
     }
-    // データの復元
-    state = {
-      ...data,
-      board: JSON.parse(data.board),
-      history: JSON.parse(data.history),
-      handS: data.handS || [],
-      handG: data.handG || [],
-      kifu: data.kifu || []
-    };
-    document.getElementById('status-badge').textContent = `対局中（あなた: ${mySide==='S'?'先手':'後手'} / 手番: ${state.turn==='S'?'先手':'後手'}）`;
+    // データの復元と反映
+    state.turn = data.turn;
+    state.board = JSON.parse(data.board);
+    state.history = JSON.parse(data.history);
+    state.handS = data.handS || [];
+    state.handG = data.handG || [];
+    state.kifu = data.kifu || [];
+    state.hIdx = data.hIdx;
+
+    document.getElementById('status-badge').textContent = `対局中（あなた:${mySide==='S'?'先手':'後手'} / 手番:${state.turn==='S'?'先手':'後手'}）`;
     render();
   });
 
+  // --- 同期送信 ---
   async function sync() {
     await set(gameRef, {
-      ...state,
       board: JSON.stringify(state.board),
-      history: JSON.stringify(state.history)
+      handS: state.handS,
+      handG: state.handG,
+      turn: state.turn,
+      kifu: state.kifu,
+      history: JSON.stringify(state.history),
+      hIdx: state.hIdx
     });
   }
 
   // --- 将棋ロジック ---
   function resetGame() {
-    if (!confirm("現在の対局をリセットして初期状態にしますか？")) return;
+    if (!confirm("初期状態にリセットしますか？")) return;
     const b = Array(9).fill(null).map(()=>Array(9).fill(null));
     const setup = (y,o,ps) => ps.forEach((p,x)=>{if(p)b[y][x]={type:p,owner:o}});
     setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
@@ -141,6 +145,7 @@
       history: [{board: b, handS: [], handG: []}],
       hIdx: 0
     };
+    sel = null; selH = null;
     sync();
   }
 
@@ -148,6 +153,7 @@
     if (isKanso || state.turn !== mySide) return;
     const p = state.board[y][x];
 
+    // 持ち駒を打つ
     if (selH) {
       if (!p) {
         state.board[y][x] = {type: selH.type, owner: mySide};
@@ -157,11 +163,20 @@
       selH = null; render(); return;
     }
 
+    // 盤上の駒選択
     if (p && p.owner === mySide) {
-      sel = {x, y}; render();
-    } else if (sel) {
+      if (sel && sel.x === x && sel.y === y) {
+        sel = null; // 同じ駒を押したら選択解除
+      } else {
+        sel = {x, y};
+      }
+      render();
+    } 
+    // 移動
+    else if (sel) {
       const fromP = state.board[sel.y][sel.x];
-      if (p) {
+      // 駒を取る
+      if (p && p.owner !== mySide) {
         const unp = (t) => ({TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'}[t]||t);
         if (mySide === 'S') state.handS.push(unp(p.type)); else state.handG.push(unp(p.type));
       }
@@ -172,14 +187,15 @@
       }
       state.board[y][x] = {type, owner: mySide};
       state.board[sel.y][sel.x] = null;
-      finishMove(`${9-x}${y+1}${SYMBOLS[type]}`);
-      sel = null;
+      const moveTxt = `${9-x}${y+1}${SYMBOLS[type]}`;
+      sel = null; // 移動完了で選択解除
+      finishMove(moveTxt);
     }
   }
 
-  function finishMove(moveText) {
-    state.kifu.push(moveText);
-    state.turn = state.turn === 'S' ? 'G' : 'S';
+  function finishMove(txt) {
+    state.kifu.push(txt);
+    state.turn = (state.turn === 'S') ? 'G' : 'S';
     state.history.push({
       board: JSON.parse(JSON.stringify(state.board)), 
       handS: [...state.handS], 
@@ -191,7 +207,8 @@
 
   // --- 描画系 ---
   function render() {
-    const boardEl = document.getElementById('board'); boardEl.innerHTML = '';
+    const boardEl = document.getElementById('board'); 
+    boardEl.innerHTML = '';
     state.board.forEach((row, y) => {
       row.forEach((p, x) => {
         const c = document.createElement('div');
@@ -214,7 +231,10 @@
         if(selH && selH.owner===owner && selH.idx===i) s.className='selected';
         s.onclick = (e) => {
           e.stopPropagation();
-          if(state.turn===mySide && owner===mySide && !isKanso) { selH={type:t,owner,idx:i}; sel=null; render(); }
+          if(state.turn===mySide && owner===mySide && !isKanso) {
+            selH = (selH && selH.idx===i) ? null : {type:t,owner,idx:i};
+            sel = null; render();
+          }
         };
         el.appendChild(s);
       });
@@ -239,7 +259,7 @@
     render();
   }
 
-  // --- イベント ---
+  // --- イベント紐付け ---
   document.getElementById('btnReset').onclick = resetGame;
   document.getElementById('mySideSelect').onchange = (e) => { 
     mySide = e.target.value; 
@@ -259,8 +279,7 @@
   document.getElementById('btnPrev').onclick = () => { if(state.hIdx > 0) jump(state.hIdx - 1); };
   document.getElementById('btnNext').onclick = () => { if(state.hIdx < state.history.length - 1) jump(state.hIdx + 1); };
   document.getElementById('btnCopy').onclick = () => {
-    const txt = state.kifu.map((m, i) => `${i+1}.${m}`).join(' ');
-    navigator.clipboard.writeText(txt);
+    navigator.clipboard.writeText(state.kifu.map((m,i)=>`${i+1}.${m}`).join(' '));
     alert("棋譜をコピーしました。");
   };
 
