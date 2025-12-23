@@ -10,6 +10,9 @@
     .container { max-width: 850px; margin: 0 auto 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     input[type="text"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     
+    /* 注意事項ラベル */
+    .note-label { display: block; color: #d32f2f; font-size: 0.85rem; font-weight: bold; margin-bottom: 8px; }
+
     /* チャット */
     #chatMessages { height: 150px; margin-bottom: 10px; padding: 10px; background: #fafafa; border: 1px solid #eee; overflow-y: auto; font-size: 0.95rem; }
     #chatMessages a { color: #1976d2; text-decoration: underline; }
@@ -28,13 +31,12 @@
     .win-text { color: #d32f2f; font-weight: bold; }
     .lose-text { color: #1976d2; font-weight: bold; }
 
-    /* テーブル・レイアウト最適化 */
+    /* テーブル・レイアウト */
     .shogi-table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
     .shogi-table th, .shogi-table td { border: 1px solid #d7ccc8; padding: 4px; text-align: center; vertical-align: middle; }
     .shogi-table th { background-color: #a1887f; color: white; font-size: 0.8rem; white-space: nowrap; }
     
-    /* No列のリンクスタイル */
-    .game-link { color: #1976d2; text-decoration: underline; font-weight: bold; cursor: pointer; }
+    .game-link { color: #1976d2; text-decoration: underline; font-weight: bold; }
 
     .col-check { width: 35px; }
     .col-no { width: 35px; }
@@ -53,10 +55,8 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getDatabase, ref, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-    // --- ★オンコード設定：対局用ベースURL ---
-    // 例: "https://shogi-platform.com/room/" とすると、No.10は "https://shogi-platform.com/room/10" へ飛びます
-    const GAME_BASE_URL = "https://shogi-plan.github.io/calendar-public/room"; 
-    // ------------------------------------
+    // --- オンコード設定：対局用ベースURL ---
+    const GAME_BASE_URL = "https://example.com/game/"; 
 
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
@@ -117,7 +117,6 @@
         const playerMaster = data.playerMaster || {};
         const shogiGames = data.shogiGames || {};
 
-        // 名簿
         const playerListBody = document.getElementById("playerListBody");
         playerListBody.innerHTML = "";
         const currentPlayers = [];
@@ -133,7 +132,6 @@
         });
         currentPlayers.sort();
 
-        // 対局リスト
         const shogiBody = document.getElementById("shogiBody");
         shogiBody.innerHTML = "";
         const games = [];
@@ -142,10 +140,7 @@
           const g = { id, no: gIdx++, ...shogiGames[id] };
           games.push(g);
           let opts = (val) => `<option value="">-</option>` + currentPlayers.map(n => `<option value="${escapeHtml(n)}" ${val===n?'selected':''}>${escapeHtml(n)}</option>`).join("");
-          
-          // No列をリンク化
           const gameUrl = GAME_BASE_URL + g.no;
-
           shogiBody.innerHTML += `<tr>
             <td class="admin-only" style="${isAdmin ? 'display:table-cell' : 'display:none'}"><input type="checkbox" class="del-check" value="${id}"></td>
             <td class="col-no"><a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="game-link">${g.no}</a></td>
@@ -177,7 +172,6 @@
               const res = m.map(g => {
                 if (!g.result || g.result === "-") return null;
                 let sym = (g.p1===rowP) ? (g.result==="○"?"○":"×") : (g.result==="○"?"×":"○");
-                // 星取表内のNoにもリンクを適用（任意）
                 const gameUrl = GAME_BASE_URL + g.no;
                 return `<a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="${sym==="○"?"win-text":"lose-text"}" style="text-decoration:none;">${g.no}:${sym}</a>`;
               }).filter(r=>r).join("、");
@@ -193,14 +187,15 @@
 
       document.getElementById("listDelBtn").onclick = async () => {
         const c = document.querySelectorAll(".del-check:checked");
-        if (c.length && confirm("選択した対局を削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/shogiGames/${x.value}`));
+        if (c.length && confirm("削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/shogiGames/${x.value}`));
       };
       document.getElementById("delPlayerBtn").onclick = async () => {
         const c = document.querySelectorAll(".master-del-check:checked");
-        if (c.length && confirm("名簿から削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/playerMaster/${x.value}`));
+        if (c.length && confirm("削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/playerMaster/${x.value}`));
       };
+      document.getElementById("chatClearBtn").onclick = () => confirm("クリアしますか？") && remove(ref(db, `${roomName}/chat`));
       document.getElementById("masterDeleteBtn").onclick = async () => {
-        if (confirm("全データをリセットしますか？")) { await remove(ref(db, roomName)); location.reload(); }
+        if (confirm("全リセットしますか？")) { await remove(ref(db, roomName)); location.reload(); }
       };
     });
   </script>
@@ -210,13 +205,30 @@
   <div class="container">参加者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
   
   <div class="container">
-    <h2>チャット</h2>
+    <h2>対局チャット</h2>
     <div id="chatMessages"></div>
     <div class="chat-input-area"><input type="text" id="chatInput"><button id="sendBtn">送信</button><button id="chatClearBtn" class="admin-only">全消去</button></div>
   </div>
 
   <div class="container">
-    <h2>対戦表</h2>
+    <h2>参加者名簿</h2>
+    <label class="note-label">※81道場IDを入力してください</label>
+    <table class="shogi-table">
+      <thead>
+        <tr>
+          <th class="admin-only col-check">選</th>
+          <th class="col-no">No</th>
+          <th>名前</th>
+        </tr>
+      </thead>
+      <tbody id="playerListBody"></tbody>
+    </table>
+    <button id="addPlayerBtn" class="add-row-btn" style="background-color:#4caf50;">参加者を追加</button>
+    <button id="delPlayerBtn" class="list-del-btn admin-only">選択した参加者を削除</button>
+  </div>
+
+  <div class="container">
+    <h2>公式対戦表 / 星取表</h2>
     <div class="matrix-wrapper"><table class="matrix-table"><thead id="matrixHeader"></thead><tbody id="matrixBody"></tbody></table></div>
     <table class="shogi-table">
       <thead>
@@ -232,22 +244,6 @@
     </table>
     <button id="addRowBtn" class="add-row-btn">新しい対局を追加</button>
     <button id="listDelBtn" class="list-del-btn admin-only">選択した対局を削除</button>
-  </div>
-
-  <div class="container">
-    <h2>参加者名簿</h2>
-    <table class="shogi-table">
-      <thead>
-        <tr>
-          <th class="admin-only col-check">選</th>
-          <th class="col-no">No</th>
-          <th>名前</th>
-        </tr>
-      </thead>
-      <tbody id="playerListBody"></tbody>
-    </table>
-    <button id="addPlayerBtn" class="add-row-btn" style="background-color:#4caf50;">参加者を追加</button>
-    <button id="delPlayerBtn" class="list-del-btn admin-only">選択した参加者を削除</button>
   </div>
 
   <div class="master-delete-area admin-only">
