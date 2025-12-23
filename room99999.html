@@ -1,92 +1,75 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<title>遠タメ将棋 Online</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <meta charset="utf-8" />
+  <title>遠タメ将棋 Online</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root { --ui-font: 14px; }
+    body { font-family: "Yu Gothic", sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; padding: 10px; margin: 0; }
+    h1 { font-size: 1.2rem; color: #5d4037; margin: 10px 0; }
+    #status-badge { background: #795548; color: #fff; padding: 4px 12px; border-radius: 20px; margin-bottom: 10px; font-size: 12px; }
+    
+    /* 盤面 */
+    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 92vmin; height: 92vmin; background: #f5deb3; position: relative; }
+    .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 4vmin, 30px); cursor: pointer; font-weight: bold; }
+    .selected { background: #fff5a6; outline: 2px solid orange; z-index: 5; }
+    .piece.opposite { transform: rotate(180deg); }
+    .piece.promoted { color: #d32f2f; }
 
-<style>
-/* --- 元のデザインを維持 --- */
-:root{ --ui-font: 14px; --ui-font-lg: 16px; --btn-pad-y: 8px; --btn-pad-x: 12px; }
-body{ font-family: system-ui, sans-serif; display:flex; flex-direction:column; align-items:center; padding:10px; background: #f9f9f9; }
-h1{ font-size: 18px; margin: 6px 0 10px; }
-#status-badge { background: #007bff; color: #fff; padding: 5px 15px; border-radius: 20px; margin-bottom: 10px; font-size: 13px; font-weight: bold; }
+    /* UIエリア */
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; max-width: 500px; }
+    button { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; background: #8d6e63; }
+    button:hover { background: #5d4037; }
+    select, input { padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
 
-#controlsWrapper{ width:100%; max-width:500px; background:#fff; padding:10px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-bottom:10px; font-size: 14px; }
-#controls { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
-input[type="number"] { width: 40px; }
+    /* 駒台 */
+    #hands { display: flex; justify-content: space-around; width: 100%; margin: 10px 0; max-width: 500px; }
+    .hand-block { width: 45%; text-align: center; font-size: 12px; }
+    .hand { min-height: 40px; border: 1px solid #d7ccc8; background: #fff; padding: 5px; display: flex; gap: 5px; border-radius: 5px; flex-wrap: wrap; margin-top: 4px; }
+    .hand span { border: 1px solid #aaa; padding: 2px 6px; border-radius: 3px; cursor: pointer; background: #eee; }
+    .hand span.selected { background: #ffea00; border-color: orange; }
 
-#board{
-  display:grid; grid-template-columns:repeat(9,1fr); grid-template-rows:repeat(9,1fr);
-  border:3px solid #333; width:92vmin; height:92vmin; position:relative;
-  transition: transform 0.2s ease; transform-origin: center;
-}
-#board.flipped{ transform: rotate(180deg); }
-.cell{ display:flex; align-items:center; justify-content:center; cursor:pointer; background:#f5deb3; border:0.5px solid #999; font-weight:bold; font-size: clamp(14px, 4vmin, 28px); user-select:none; }
-.selected{ background:#fff5a6 !important; box-shadow: inset 0 0 0 3px #ffcd00; }
-.piece{ line-height:1; }
-.piece.promoted{ color:#b30000; }
-.piece.opposite{ transform: rotate(180deg); }
-
-#hands{ margin-top:10px; display:flex; gap:10px; width:100%; justify-content: center; }
-.hand-block{ width:48%; text-align:center; }
-.hand{ min-height:44px; border:1px solid #ccc; background:#fff; display:flex; flex-wrap:wrap; gap:4px; padding:5px; border-radius:4px; justify-content:center; }
-.hand span{ border:1px solid #aaa; padding:2px 8px; cursor:pointer; background:#fff; border-radius:4px; }
-.hand span.selected { background: #ffcd00; }
-
-#kifuPanel { width: 95vw; max-width: 500px; margin-top: 10px; background:#fff; padding:10px; border-radius:8px; border:1px solid #ccc; }
-#kifuList { height: 100px; overflow-y: scroll; font-size: 12px; border:1px solid #eee; padding:5px; list-style:none; }
-#kifuList li { border-bottom: 1px solid #f0f0f0; cursor: pointer; }
-.kifu-selected { background: #e7f3ff; }
-.hidden { display: none !important; }
-button { padding: 6px 10px; cursor: pointer; }
-</style>
+    /* 棋譜 */
+    #kifuList { height: 100px; overflow-y: auto; background: #fff; width: 92vmin; max-width: 500px; border: 1px solid #d7ccc8; list-style: none; padding: 5px; font-size: 12px; margin: 10px 0; }
+    .kifu-item { padding: 2px 5px; border-bottom: 1px solid #eee; cursor: pointer; }
+    .kifu-selected { background: #d1e9ff; }
+    .hidden { display: none !important; }
+  </style>
 </head>
 <body>
 
 <h1>遠タメ将棋 Online</h1>
-<div id="status-badge">通信中...</div>
+<div id="status-badge">接続中...</div>
 
-<div id="controlsWrapper">
-  <div id="controls">
-    <label>役割: <select id="mySideSelect"><option value="S">先手</option><option value="G">後手</option></select></label>
-    <label>持ち時間: <input type="number" id="timeMinutes" value="5">分</label>
-    <label>秒読み: <input type="number" id="timeSeconds" value="30">秒</label>
-    <button id="syncSettings" style="background:#e1e1e1">設定同期＆初期化</button>
-    <div style="width:100%; height:1px; background:#eee;"></div>
-    <button id="toggleKanso">感想戦切替</button>
-    <button id="copyKif">棋譜コピー</button>
-    <button id="flipBoard">盤面反転</button>
-    <button id="resign">投了</button>
-  </div>
-</div>
-
-<div id="timebar">
-  先手: <span id="timerS">--:--</span> | 後手: <span id="timerG">--:--</span>
+<div class="controls">
+  <label>自分: <select id="mySideSelect"><option value="S">先手</option><option value="G">後手</option></select></label>
+  <button id="btnReset" style="background:#d32f2f;">同期初期化</button>
+  <button id="btnFlip">盤面反転</button>
+  <button id="btnKanso">感想戦モード</button>
+  <button id="btnCopy">棋譜コピー</button>
 </div>
 
 <div id="board"></div>
 
-<div id="kansoControls" class="hidden" style="margin: 10px;">
-  <button id="prev">一手戻る</button>
-  <button id="next">一手進む</button>
+<div id="kanso-ui" class="controls hidden" style="margin-top:10px;">
+  <button id="btnPrev">← 一手戻る</button>
+  <button id="btnNext">一手進む →</button>
 </div>
 
 <div id="hands">
-  <div class="hand-block">先手 駒台<div id="handS" class="hand"></div></div>
-  <div class="hand-block">後手 駒台<div id="handG" class="hand"></div></div>
+  <div class="hand-block">先手 持ち駒<div class="hand" id="handS"></div></div>
+  <div class="hand-block">後手 持ち駒<div class="hand" id="handG"></div></div>
 </div>
 
-<section id="kifuPanel" class="hidden">
-  <strong>棋譜履歴</strong>
-  <ol id="kifuList"></ol>
-</section>
+<ul id="kifuList" class="hidden"></ul>
 
-<script>
-// ========== 重要: Firebase設定 (自分のプロジェクトのものに書き換えてください) ==========
-const firebaseConfig = {
+<script type="module">
+  // 待合室コードと同じ import スタイルを採用
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+  import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+  const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
       databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -95,217 +78,192 @@ const firebaseConfig = {
       messagingSenderId: "368704703397",
       appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
-// ==============================================================================
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const ROOM_ID = "global_match_room"; // パラメータなし。全員この部屋に接続
-const roomRef = db.collection('rooms').doc(ROOM_ID);
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  // ルーム名は待合室と同じロジック（ファイル名など）で固定
+  const roomName = location.pathname.split('/').pop().replace('.html', '') || "default_room";
+  const gameRef = ref(db, `${roomName}/shogiData`);
 
-const PIECE_SYMBOLS={FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'成香',NK:'成桂',NG:'成銀',UM:'馬',RY:'龍'};
-const PROMOTABLE=['FU','KY','KE','GI','KA','HI'];
+  // --- 定数 ---
+  const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'成香',NK:'成桂',NG:'成銀',UM:'馬',RY:'龍'};
+  const PROMOTABLES = ['FU','KY','KE','GI','KA','HI'];
 
-let localState = {
-  board: [], handS: [], handG: [], turn: 'S', kifu: [],
-  history: [], historyIndex: 0, gameOver: false,
-  mainTimeS: 300, mainTimeG: 300, byoBase: 30
-};
-let mySide = 'S';
-let kansoMode = false;
-let selected = null;
-let selectedHand = null;
+  // --- 状態 ---
+  let state = { board: [], handS: [], handG: [], turn: 'S', kifu: [], history: [], hIdx: 0 };
+  let mySide = 'S';
+  let isKanso = false;
+  let sel = null;
+  let selH = null;
 
-async function init() {
-  const doc = await roomRef.get();
-  if (!doc.exists) {
-    await resetGameRemote();
-  }
-  
-  // リアルタイムリスナー
-  roomRef.onSnapshot(snap => {
-    const data = snap.data();
-    if (!data) return;
-    localState = {
+  // --- Firebase 監視 ---
+  onValue(gameRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) {
+      document.getElementById('status-badge').textContent = "盤面未作成：初期化してください";
+      return;
+    }
+    // データの復元
+    state = {
       ...data,
       board: JSON.parse(data.board),
-      history: JSON.parse(data.history)
+      history: JSON.parse(data.history),
+      handS: data.handS || [],
+      handG: data.handG || [],
+      kifu: data.kifu || []
     };
-    document.getElementById('status-badge').textContent = `対局中 (${mySide==='S'?'先手':'後手'})`;
+    document.getElementById('status-badge').textContent = `対局中（あなた: ${mySide==='S'?'先手':'後手'} / 手番: ${state.turn==='S'?'先手':'後手'}）`;
     render();
-  }, err => {
-    document.getElementById('status-badge').textContent = "接続エラー: ルール設定を確認してください";
-    console.error(err);
   });
-}
 
-function render() {
-  const boardEl = document.getElementById('board');
-  boardEl.innerHTML = '';
-  localState.board.forEach((row, y) => {
-    row.forEach((p, x) => {
-      const cell = document.createElement('div');
-      cell.className = 'cell' + (selected && selected.x===x && selected.y===y ? ' selected' : '');
+  async function sync() {
+    await set(gameRef, {
+      ...state,
+      board: JSON.stringify(state.board),
+      history: JSON.stringify(state.history)
+    });
+  }
+
+  // --- 将棋ロジック ---
+  function resetGame() {
+    if (!confirm("現在の対局をリセットして初期状態にしますか？")) return;
+    const b = Array(9).fill(null).map(()=>Array(9).fill(null));
+    const setup = (y,o,ps) => ps.forEach((p,x)=>{if(p)b[y][x]={type:p,owner:o}});
+    setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
+    setup(1,'G',[null,'KA',null,null,null,null,null,'HI',null]);
+    setup(2,'G',Array(9).fill('FU'));
+    setup(6,'S',Array(9).fill('FU'));
+    setup(7,'S',[null,'HI',null,null,null,null,null,'KA',null]);
+    setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
+    
+    state = {
+      board: b, handS: [], handG: [], turn: 'S', kifu: [],
+      history: [{board: b, handS: [], handG: []}],
+      hIdx: 0
+    };
+    sync();
+  }
+
+  function handleCellClick(x, y) {
+    if (isKanso || state.turn !== mySide) return;
+    const p = state.board[y][x];
+
+    if (selH) {
+      if (!p) {
+        state.board[y][x] = {type: selH.type, owner: mySide};
+        if (mySide === 'S') state.handS.splice(selH.idx, 1); else state.handG.splice(selH.idx, 1);
+        finishMove(`打${9-x}${y+1}${SYMBOLS[selH.type]}`);
+      }
+      selH = null; render(); return;
+    }
+
+    if (p && p.owner === mySide) {
+      sel = {x, y}; render();
+    } else if (sel) {
+      const fromP = state.board[sel.y][sel.x];
       if (p) {
-        const div = document.createElement('div');
-        div.className = `piece ${p.owner !== 'S' ? 'opposite' : ''} ${['TO','NY','NK','NG','UM','RY'].includes(p.type) ? 'promoted' : ''}`;
-        div.textContent = PIECE_SYMBOLS[p.type];
-        cell.appendChild(div);
+        const unp = (t) => ({TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'}[t]||t);
+        if (mySide === 'S') state.handS.push(unp(p.type)); else state.handG.push(unp(p.type));
       }
-      cell.onclick = () => handleCellClick(x, y);
-      boardEl.appendChild(cell);
-    });
-  });
-  renderHands();
-  renderKifu();
-  updateDisplay();
-}
-
-function renderHands() {
-  const draw = (id, list, owner) => {
-    const el = document.getElementById(id); el.innerHTML = '';
-    list.forEach((type, i) => {
-      const s = document.createElement('span');
-      s.textContent = PIECE_SYMBOLS[type];
-      if (selectedHand && selectedHand.owner === owner && selectedHand.index === i) s.className = 'selected';
-      s.onclick = (e) => {
-        e.stopPropagation();
-        if (localState.turn !== mySide || owner !== mySide || kansoMode) return;
-        selectedHand = {type, owner, index: i}; selected = null; render();
-      };
-      el.appendChild(s);
-    });
-  };
-  draw('handS', localState.handS, 'S');
-  draw('handG', localState.handG, 'G');
-}
-
-function handleCellClick(x, y) {
-  if (kansoMode || localState.gameOver || localState.turn !== mySide) return;
-  const p = localState.board[y][x];
-
-  if (selectedHand) {
-    if (!p) {
-      localState.board[y][x] = {type: selectedHand.type, owner: mySide, initSide: mySide==='S'?'B':'T'};
-      if (mySide === 'S') localState.handS.splice(selectedHand.index, 1);
-      else localState.handG.splice(selectedHand.index, 1);
-      finishMove(`打${9-x}${y+1}${PIECE_SYMBOLS[selectedHand.type]}`);
+      let type = fromP.type;
+      const isPZone = (o,y) => o==='S'?y<=2:y>=6;
+      if (PROMOTABLES.includes(type) && (isPZone(mySide,y) || isPZone(mySide,sel.y))) {
+        if (confirm("成りますか？")) type = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'}[type];
+      }
+      state.board[y][x] = {type, owner: mySide};
+      state.board[sel.y][sel.x] = null;
+      finishMove(`${9-x}${y+1}${SYMBOLS[type]}`);
+      sel = null;
     }
-    selectedHand = null; render(); return;
   }
 
-  if (p && p.owner === mySide) {
-    selected = {x, y}; render();
-  } else if (selected) {
-    const fromP = localState.board[selected.y][selected.x];
-    if (p) {
-      const cap = (t) => { const m={TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'}; return m[t]||t; };
-      if (mySide === 'S') localState.handS.push(cap(p.type)); else localState.handG.push(cap(p.type));
-    }
-    let type = fromP.type;
-    const inZ = (o,y) => o==='S'?(y<=2):(y>=6);
-    if (PROMOTABLE.includes(type) && (inZ(mySide, y) || inZ(mySide, selected.y))) {
-      if (confirm("成りますか？")) {
-        const m={FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'}; type=m[type];
-      }
-    }
-    localState.board[y][x] = {type, owner: mySide, initSide: fromP.initSide};
-    localState.board[selected.y][selected.x] = null;
-    finishMove(`${9-x}${y+1}${PIECE_SYMBOLS[type]}`);
-    selected = null;
+  function finishMove(moveText) {
+    state.kifu.push(moveText);
+    state.turn = state.turn === 'S' ? 'G' : 'S';
+    state.history.push({
+      board: JSON.parse(JSON.stringify(state.board)), 
+      handS: [...state.handS], 
+      handG: [...state.handG]
+    });
+    state.hIdx = state.history.length - 1;
+    sync();
   }
-}
 
-async function finishMove(moveStr) {
-  localState.kifu.push(moveStr);
-  localState.turn = localState.turn === 'S' ? 'G' : 'S';
-  localState.history.push({board: JSON.parse(JSON.stringify(localState.board)), handS: [...localState.handS], handG: [...localState.handG]});
-  localState.historyIndex = localState.history.length - 1;
-  await sync();
-}
+  // --- 描画系 ---
+  function render() {
+    const boardEl = document.getElementById('board'); boardEl.innerHTML = '';
+    state.board.forEach((row, y) => {
+      row.forEach((p, x) => {
+        const c = document.createElement('div');
+        c.className = 'cell' + (sel && sel.x===x && sel.y===y ? ' selected' : '');
+        if (p) {
+          const d = document.createElement('div');
+          d.className = `piece ${p.owner!=='S'?'opposite':''} ${['TO','NY','NK','NG','UM','RY'].includes(p.type)?'promoted':''}`;
+          d.textContent = SYMBOLS[p.type];
+          c.appendChild(d);
+        }
+        c.onclick = () => handleCellClick(x, y);
+        boardEl.appendChild(c);
+      });
+    });
 
-async function resetGameRemote() {
-  const b = Array(9).fill(null).map(()=>Array(9).fill(null));
-  const setup = (y,o,ps) => ps.forEach((p,x)=>{if(p)b[y][x]={type:p,owner:o,initSide:o==='S'?'B':'T'}});
-  setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
-  setup(1,'G',[null,'HI',null,null,null,null,null,'KA',null]);
-  setup(2,'G',Array(9).fill('FU'));
-  setup(6,'S',Array(9).fill('FU'));
-  setup(7,'S',[null,'KA',null,null,null,null,null,'HI',null]);
-  setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
+    const drawHand = (id, list, owner) => {
+      const el = document.getElementById(id); el.innerHTML = '';
+      list.forEach((t, i) => {
+        const s = document.createElement('span'); s.textContent = SYMBOLS[t];
+        if(selH && selH.owner===owner && selH.idx===i) s.className='selected';
+        s.onclick = (e) => {
+          e.stopPropagation();
+          if(state.turn===mySide && owner===mySide && !isKanso) { selH={type:t,owner,idx:i}; sel=null; render(); }
+        };
+        el.appendChild(s);
+      });
+    };
+    drawHand('handS', state.handS, 'S'); drawHand('handG', state.handG, 'G');
 
-  localState = {
-    board: JSON.stringify(b),
-    handS: [], handG: [], turn: 'S', kifu: [],
-    history: JSON.stringify([{board: b, handS: [], handG: []}]),
-    historyIndex: 0, gameOver: false,
-    mainTimeS: parseInt(document.getElementById('timeMinutes').value)*60,
-    mainTimeG: parseInt(document.getElementById('timeMinutes').value)*60,
-    byoBase: parseInt(document.getElementById('timeSeconds').value)
+    const kList = document.getElementById('kifuList'); kList.innerHTML = '';
+    state.kifu.forEach((m, i) => {
+      const li = document.createElement('li');
+      li.className = 'kifu-item' + (i+1 === state.hIdx ? ' kifu-selected' : '');
+      li.textContent = `${i+1}. ${m}`;
+      li.onclick = () => { if(isKanso) jump(i+1); };
+      kList.appendChild(li);
+    });
+  }
+
+  function jump(idx) {
+    state.hIdx = idx;
+    const h = state.history[idx];
+    state.board = JSON.parse(JSON.stringify(h.board));
+    state.handS = [...h.handS]; state.handG = [...h.handG];
+    render();
+  }
+
+  // --- イベント ---
+  document.getElementById('btnReset').onclick = resetGame;
+  document.getElementById('mySideSelect').onchange = (e) => { 
+    mySide = e.target.value; 
+    document.getElementById('board').style.transform = (mySide==='G')?'rotate(180deg)':'rotate(0deg)';
+    render(); 
   };
-  await roomRef.set(localState);
-}
+  document.getElementById('btnFlip').onclick = () => {
+    const b = document.getElementById('board');
+    b.style.transform = (b.style.transform==='rotate(180deg)')?'rotate(0deg)':'rotate(180deg)';
+  };
+  document.getElementById('btnKanso').onclick = () => {
+    isKanso = !isKanso;
+    document.getElementById('kanso-ui').classList.toggle('hidden');
+    document.getElementById('kifuList').classList.toggle('hidden');
+    document.getElementById('btnKanso').textContent = isKanso ? "対局に戻る" : "感想戦モード";
+  };
+  document.getElementById('btnPrev').onclick = () => { if(state.hIdx > 0) jump(state.hIdx - 1); };
+  document.getElementById('btnNext').onclick = () => { if(state.hIdx < state.history.length - 1) jump(state.hIdx + 1); };
+  document.getElementById('btnCopy').onclick = () => {
+    const txt = state.kifu.map((m, i) => `${i+1}.${m}`).join(' ');
+    navigator.clipboard.writeText(txt);
+    alert("棋譜をコピーしました。");
+  };
 
-async function sync() {
-  await roomRef.update({
-    board: JSON.stringify(localState.board),
-    handS: localState.handS,
-    handG: localState.handG,
-    turn: localState.turn,
-    kifu: localState.kifu,
-    history: JSON.stringify(localState.history),
-    historyIndex: localState.historyIndex,
-    gameOver: localState.gameOver
-  });
-}
-
-function updateDisplay() {
-  document.getElementById('timerS').textContent = `${Math.floor(localState.mainTimeS/60)}分`;
-  document.getElementById('timerG').textContent = `${Math.floor(localState.mainTimeG/60)}分`;
-}
-
-function renderKifu() {
-  const list = document.getElementById('kifuList'); list.innerHTML = '';
-  localState.kifu.forEach((m, i) => {
-    const li = document.createElement('li');
-    li.textContent = `${i+1}. ${m}`;
-    if (i + 1 === localState.historyIndex) li.className = 'kifu-selected';
-    li.onclick = () => { if(!kansoMode) return; jumpTo(i+1); };
-    list.appendChild(li);
-  });
-}
-
-function jumpTo(idx) {
-  const h = localState.history[idx];
-  localState.board = JSON.parse(JSON.stringify(h.board));
-  localState.handS = [...h.handS];
-  localState.handG = [...h.handG];
-  localState.historyIndex = idx;
-  render();
-}
-
-// ボタンイベント
-document.getElementById('syncSettings').onclick = resetGameRemote;
-document.getElementById('mySideSelect').onchange = (e) => { 
-  mySide = e.target.value; 
-  document.getElementById('board').classList.toggle('flipped', mySide==='G');
-  render(); 
-};
-document.getElementById('flipBoard').onclick = () => document.getElementById('board').classList.toggle('flipped');
-document.getElementById('toggleKanso').onclick = () => {
-  kansoMode = !kansoMode;
-  document.getElementById('kansoControls').classList.toggle('hidden', !kansoMode);
-  document.getElementById('kifuPanel').classList.toggle('hidden', !kansoMode);
-};
-document.getElementById('prev').onclick = () => { if(localState.historyIndex>0) jumpTo(localState.historyIndex-1); };
-document.getElementById('next').onclick = () => { if(localState.historyIndex<localState.history.length-1) jumpTo(localState.historyIndex+1); };
-document.getElementById('copyKif').onclick = () => {
-  navigator.clipboard.writeText(localState.kifu.join("\n")); alert("コピーしました");
-};
-document.getElementById('resign').onclick = async () => {
-  if(confirm("投了しますか？")) { localState.gameOver = true; await sync(); }
-};
-
-init();
 </script>
 </body>
 </html>
