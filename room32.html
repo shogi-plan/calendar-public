@@ -10,7 +10,6 @@
     .container { max-width: 850px; margin: 0 auto 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     input[type="text"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
     
-    /* 注意事項ラベル */
     .note-label { display: block; color: #d32f2f; font-size: 0.85rem; font-weight: bold; margin-bottom: 8px; }
 
     /* チャット */
@@ -21,8 +20,8 @@
     #sendBtn { background-color: #795548; }
     #chatClearBtn { background-color: #9e9e9e; }
     
-    /* マトリクス */
-    .matrix-wrapper { overflow-x: auto; margin-bottom: 30px; border: 1px solid #d7ccc8; }
+    /* リーグ結果表（マトリクス） */
+    .matrix-wrapper { overflow-x: auto; border: 1px solid #d7ccc8; }
     .matrix-table { border-collapse: collapse; font-size: 0.85rem; background: #fff; min-width: 100%; }
     .matrix-table th, .matrix-table td { border: 1px solid #d7ccc8; padding: 10px; text-align: center; white-space: nowrap; }
     .matrix-table th { background-color: #8d6e63; color: white; }
@@ -31,7 +30,7 @@
     .win-text { color: #d32f2f; font-weight: bold; }
     .lose-text { color: #1976d2; font-weight: bold; }
 
-    /* テーブル・レイアウト */
+    /* 対局一覧（テーブル） */
     .shogi-table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
     .shogi-table th, .shogi-table td { border: 1px solid #d7ccc8; padding: 4px; text-align: center; vertical-align: middle; }
     .shogi-table th { background-color: #a1887f; color: white; font-size: 0.8rem; white-space: nowrap; }
@@ -56,7 +55,7 @@
     import { getDatabase, ref, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
     // --- オンコード設定：対局用ベースURL ---
-    const GAME_BASE_URL = "https://example.com/game/"; 
+    const GAME_BASE_URL = "https://shogi-plan.github.io/calendar-public/room"; 
 
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
@@ -117,6 +116,7 @@
         const playerMaster = data.playerMaster || {};
         const shogiGames = data.shogiGames || {};
 
+        // 参加者名簿の描画
         const playerListBody = document.getElementById("playerListBody");
         playerListBody.innerHTML = "";
         const currentPlayers = [];
@@ -132,6 +132,7 @@
         });
         currentPlayers.sort();
 
+        // 対局一覧の描画
         const shogiBody = document.getElementById("shogiBody");
         shogiBody.innerHTML = "";
         const games = [];
@@ -202,12 +203,17 @@
 </head>
 <body>
   <h1>遠タメ大会</h1>
+
   <div class="container">参加者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
   
   <div class="container">
     <h2>対局チャット</h2>
     <div id="chatMessages"></div>
-    <div class="chat-input-area"><input type="text" id="chatInput"><button id="sendBtn">送信</button><button id="chatClearBtn" class="admin-only">全消去</button></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput">
+      <button id="sendBtn">送信</button>
+      <button id="chatClearBtn" class="admin-only">全消去</button>
+    </div>
   </div>
 
   <div class="container">
@@ -228,8 +234,7 @@
   </div>
 
   <div class="container">
-    <h2>公式対戦表 / 星取表</h2>
-    <div class="matrix-wrapper"><table class="matrix-table"><thead id="matrixHeader"></thead><tbody id="matrixBody"></tbody></table></div>
+    <h2>対局一覧</h2>
     <table class="shogi-table">
       <thead>
         <tr>
@@ -244,6 +249,13 @@
     </table>
     <button id="addRowBtn" class="add-row-btn">新しい対局を追加</button>
     <button id="listDelBtn" class="list-del-btn admin-only">選択した対局を削除</button>
+  </div>
+
+  <div class="container">
+    <h2>リーグ結果表</h2>
+    <div class="matrix-wrapper">
+      <table class="matrix-table"><thead id="matrixHeader"></thead><tbody id="matrixBody"></tbody></table>
+    </div>
   </div>
 
   <div class="master-delete-area admin-only">
