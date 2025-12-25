@@ -1,157 +1,63 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>2人予定調整カレンダー</title>
-<style>
-  body {
-    font-family: sans-serif;
-    margin: 0; padding: 1em;
-    font-size: 16px;
-  }
-  .title-container {
-    text-align: center;
-    margin-bottom: 1em;
-  }
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5em;
-    margin-bottom: 1em;
-    justify-content: center;
-    align-items: center;
-  }
-  label {
-    display: flex;
-    align-items: center;
-    gap: 0.2em;
-  }
-  input, select, button {
-    font-size: 1em;
-    padding: 0.4em 0.7em;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-  }
-  th, td {
-    border: 1px solid #ccc;
-    text-align: center;
-    padding: 0.3em;
-    vertical-align: top;
-    user-select: none;
-    word-break: break-word;
-  }
-  th {
-    position: sticky;
-    top: 0;
-    background: #f0f0f0;
-    z-index: 10;
-  }
-  th.weekend, td.weekend {
-    color: red;
-  }
-  th.holiday, td.holiday {
-    color: red;
-  }
-  td.selected {
-    border: 3px solid orange !important;
-    background-color: inherit !important;
-  }
-  td.both {
-    background-color: #ccffcc !important;
-  }
-  .userA {
-    color: blue;
-    font-weight: bold;
-  }
-  .userB {
-    color: green;
-    font-weight: bold;
-  }
-  .chat {
-    margin-top: 2em;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  .chat-log {
-    border: 1px solid #ccc;
-    height: 200px;
-    overflow-y: auto;
-    padding: 0.5em;
-    background: #fafafa;
-  }
-  .chat-message {
-    margin-bottom: 0.5em;
-    white-space: pre-wrap;
-  }
-  @media screen and (max-width: 600px) {
-    table, thead, tbody, th, td, tr {
-      font-size: 12px;
-    }
-  }
-</style>
-</head>
-<body>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>遠タメ大会</title>
+  <style>
+    body { font-family: "Yu Gothic", sans-serif; margin: 10px; background: #f0f0f0; }
+    h1, h2 { text-align: center; color: #5d4037; }
+    .container { max-width: 850px; margin: 0 auto 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    input[type="text"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    
+    .note-label { display: block; color: #d32f2f; font-size: 0.85rem; font-weight: bold; margin-bottom: 8px; }
 
-<div class="title-container">
-  <h1>2人予定調整カレンダー</h1>
-</div>
+    /* チャット */
+    #chatMessages { height: 150px; margin-bottom: 10px; padding: 10px; background: #fafafa; border: 1px solid #eee; overflow-y: auto; font-size: 0.95rem; }
+    #chatMessages a { color: #1976d2; text-decoration: underline; }
+    .chat-input-area { display: flex; gap: 5px; }
+    button { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+    #sendBtn { background-color: #795548; }
+    #chatClearBtn { background-color: #9e9e9e; }
+    
+    /* リーグ結果表（マトリクス） */
+    .matrix-wrapper { overflow-x: auto; border: 1px solid #d7ccc8; }
+    .matrix-table { border-collapse: collapse; font-size: 0.85rem; background: #fff; min-width: 100%; }
+    .matrix-table th, .matrix-table td { border: 1px solid #d7ccc8; padding: 10px; text-align: center; white-space: nowrap; }
+    .matrix-table th { background-color: #8d6e63; color: white; }
+    .row-label { background-color: #8d6e63 !important; color: white !important; font-weight: bold; }
+    .matrix-diagonal { background-color: #e0e0e0; }
+    .win-text { color: #d32f2f; font-weight: bold; }
+    .lose-text { color: #1976d2; font-weight: bold; }
 
-<div class="controls">
-  <label>ユーザーA：<input type="text" id="userAName" autocomplete="off" /></label>
-  <label>ユーザーB：<input type="text" id="userBName" autocomplete="off" /></label>
-  <label><span style="font-size: 1.5em; font-weight: bold;">ユーザー選択：</span>
-  <select id="userSelect">
-  <option value="">未選択</option>
-  <option value="A">ユーザーA</option>
-  <option value="B">ユーザーB</option>
-  </select>
-  </label>
-</div>
+    /* 対局一覧（テーブル） */
+    .shogi-table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
+    .shogi-table th, .shogi-table td { border: 1px solid #d7ccc8; padding: 4px; text-align: center; vertical-align: middle; }
+    .shogi-table th { background-color: #a1887f; color: white; font-size: 0.8rem; white-space: nowrap; }
+    
+    .game-link { color: #1976d2; text-decoration: underline; font-weight: bold; }
 
-<div class="controls">
-  <button id="btn-mark-ok">選択セルに○</button>
-  <button id="btn-mark-no">選択セルに×</button>
-  <button id="btn-clear-cell">選択セルを削除</button>
-  <button id="btn-clear-all">退室</button>
-</div>
+    .col-check { width: 35px; }
+    .col-no { width: 35px; }
+    .col-result { width: 75px; }
+    .col-player { width: auto; }
 
-<div class="controls">
-  <button id="btn-prev-week">前の週</button>
-  <button id="btn-today">今日へ戻る</button>
-  <button id="btn-next-week">次の週</button>
-</div>
+    .add-row-btn { background-color: #5d4037; width: 100%; margin-top: 10px; }
+    .list-del-btn { background-color: #f44336; width: 100%; margin-top: 10px; }
+    
+    .admin-only { display: none; }
+    .master-delete-area { max-width: 850px; margin: 40px auto; text-align: center; border-top: 2px dashed #ccc; padding-top: 20px; }
+    #masterDeleteBtn { background-color: #d32f2f; width: 100%; padding: 15px; font-size: 1rem; }
+  </style>
 
-<table id="calendar"></table>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getDatabase, ref, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-<div class="chat">
-  <h2>チャット</h2>
-  <div class="chat-log" id="chatLog"></div>
- <div class="controls" style="margin-top:0.5em; gap:0.5em;">
-  <input type="text" id="chatInput" placeholder="メッセージを入力" style="flex:1; min-width: 0;" />
-  <button id="btn-send">送信</button>
-</div>
+    // --- オンコード設定：対局用ベースURL ---
+    const GAME_BASE_URL = "https://shogi-plan.github.io/calendar-public/room"; 
 
-<div class="controls" style="margin-top:0.5em; gap:0.5em; justify-content: center;">
-  <button id="btn-call-start">通話開始</button>
-  <button id="btn-mute" disabled>ミュート</button>
-  <button id="btn-call-end" disabled>通話終了</button>
-  <span id="callStatusDisplay" style="margin-left:1em; font-weight: bold;"></span>
-</div>
-</div>
-<audio id="remote-audio" autoplay></audio><br />
-<label for="volume-control">相手の音量：</label>
-<input type="range" id="volume-control" min="0" max="1" step="0.01" value="1" />
-<audio id="localAudio" autoplay muted style="display:none;"></audio>
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set, remove, update, get, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
-
-  const firebaseConfig = {
+    const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
       databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -160,1312 +66,200 @@
       messagingSenderId: "368704703397",
       appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const roomName = location.pathname.split('/').pop().replace('.html', '');
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const roomName = location.pathname.split('/').pop().replace('.html', '');
-  const callStatusRef = ref(db, `${roomName}/callStatus`);
-  const userANameInput = document.getElementById('userAName');
-  const userBNameInput = document.getElementById('userBName');
-  const userSelect = document.getElementById('userSelect');
-  const calendar = document.getElementById('calendar');
-  const chatLog = document.getElementById('chatLog');
-  const chatInput = document.getElementById('chatInput');
-  const btnMarkOk = document.getElementById('btn-mark-ok');
-  const btnMarkNo = document.getElementById('btn-mark-no');
-  const btnClearCell = document.getElementById('btn-clear-cell');
-  const btnClearAll = document.getElementById('btn-clear-all');
-  const btnPrevWeek = document.getElementById('btn-prev-week');
-  const btnToday = document.getElementById('btn-today');
-  const btnNextWeek = document.getElementById('btn-next-week');
-  const btnSend = document.getElementById('btn-send');
-  const btnCallStart = document.getElementById('btn-call-start');
-  const btnCallEnd = document.getElementById('btn-call-end');
-  const btnMute = document.getElementById('btn-mute');
-  const volumeControl = document.getElementById('volume-control');
-  
-  volumeControl.addEventListener('input', () => {
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) {
-    remoteAudio.volume = parseFloat(volumeControl.value);
-  }
-});
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAdmin = urlParams.get('admin') === 'true';
 
-  let isMuted = false;
-  let remoteStream = null;
-
-btnMute.addEventListener('click', () => {
-  if (!localStream) return;
-  isMuted = !isMuted;
-  localStream.getAudioTracks().forEach(track => {
-    track.enabled = !isMuted;
-  });
-  btnMute.textContent = isMuted ? 'ミュート解除' : 'ミュート';
-});
-  
-  const callStatusDisplay = document.getElementById('callStatusDisplay');
-
-let localStream = null;
-let peerConnection = null;
-let callTimeoutId = null;
-let localCallStartPressed = false;
-
-const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-const signalingRef = ref(db, `${roomName}/signaling`);
-
-let currentUser = localStorage.getItem(`${roomName}_currentUser`) || '';
-let selectedCells = new Set();
-let currentWeekOffset = 0;
-let holidays = {};
-let lockedUserA = false;
-let lockedUserB = false;
-let callStatus = 'none';
-
-  function formatDate(date) {
-    return date.toISOString().split('T')[0];
-  }
-  function getMonday(date) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = (day === 0 ? -6 : 1) - day;
-    d.setDate(d.getDate() + diff);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
-  async function fetchHolidays() {
-    try {
-      const res = await fetch('https://holidays-jp.github.io/api/v1/date.json');
-      if (!res.ok) throw new Error('祝日API取得失敗');
-      holidays = await res.json();
-      renderCalendar();
-    } catch (e) {
-      console.error(e);
-      holidays = {};
-      renderCalendar();
-    }
-  }
-
-  function renderCalendar() {
-    calendar.innerHTML = '';
-    const thead = document.createElement('thead');
-    const trHead = document.createElement('tr');
-    thead.appendChild(trHead);
-    trHead.appendChild(document.createElement('th'));
-
-    const monday = getMonday(new Date());
-    monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const mm = d.getMonth() + 1;
-      const dd = d.getDate();
-      const ymd = formatDate(d);
-
-      const th = document.createElement('th');
-      th.innerHTML = `${mm}/${dd}<br>(${weekdays[d.getDay()]})`;
-
-      if (d.getDay() === 0 || d.getDay() === 6) th.classList.add('weekend');
-      if (holidays[ymd]) {
-        th.classList.add('holiday');
-        th.title = holidays[ymd];
-      }
-
-      trHead.appendChild(th);
-    }
-    calendar.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    for (let h = 9; h <= 22; h++) {
-      for (let m = 0; m < 60; m += 30) {
-        const tr = document.createElement('tr');
-        const tdTime = document.createElement('td');
-        tdTime.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        tr.appendChild(tdTime);
-
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(monday);
-          d.setDate(monday.getDate() + i);
-          const ymd = formatDate(d);
-          const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-          const key = `${ymd}_${timeStr}`;
-          const td = document.createElement('td');
-          td.dataset.key = key;
-
-          if (d.getDay() === 0 || d.getDay() === 6) td.classList.add('weekend');
-          if (holidays[ymd]) td.classList.add('holiday');
-
-          td.addEventListener('click', (e) => {
-  e.stopPropagation();
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
-  if (selectedCells.has(key)) {
-    selectedCells.delete(key);
-    td.classList.remove('selected');
-  } else {
-    selectedCells.add(key);
-    td.classList.add('selected');
-  }
-});
-
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
-      }
-    }
-    calendar.appendChild(tbody);
-    updateScheduleTable();
-  }
-
-  async function updateScheduleTable() {
-    const monday = getMonday(new Date());
-    monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const schedulesRef = ref(db, `${roomName}/schedules`);
-    const snapshot = await get(schedulesRef);
-    const schedules = snapshot.exists() ? snapshot.val() : {};
-
-    const tds = calendar.querySelectorAll('tbody td[data-key]');
-    tds.forEach(td => {
-      const key = td.dataset.key;
-      const data = schedules[key] || {};
-      td.innerHTML = '';
-
-      let hasA = false, hasB = false;
-      if (data.A) {
-        const divA = document.createElement('div');
-        divA.textContent = `A: ${data.A}`;
-        divA.classList.add('userA');
-        td.appendChild(divA);
-        if (data.A === '○') hasA = true;
-      }
-      if (data.B) {
-        const divB = document.createElement('div');
-        divB.textContent = `B: ${data.B}`;
-        divB.classList.add('userB');
-        td.appendChild(divB);
-        if (data.B === '○') hasB = true;
-      }
-      td.classList.toggle('both', hasA && hasB);
-    });
-  }
-
-  async function applyToSelectedCells(value) {
-  if (selectedCells.size === 0 || !currentUser) return;
-  const updatesObj = {};
-  selectedCells.forEach(key => {
-    updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = value;
-  });
-  await update(ref(db), updatesObj);
-  selectedCells.clear();
-  updateScheduleTable();
-}
-
-async function clearSelectedCells() {
-  if (selectedCells.size === 0 || !currentUser) return;
-  const updatesObj = {};
-  selectedCells.forEach(key => {
-    updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = null;
-  });
-  await update(ref(db), updatesObj);
-  selectedCells.clear();
-  updateScheduleTable();
-}
-
-  let isClearingData = false;
-
-async function clearAllData() {
-  if (!confirm('全てのデータを削除して、退室しますか？')) return;
-
-  isClearingData = true; // フラグON
-
-  // Firebase データ削除
-  await remove(ref(db, `${roomName}/userNames`));
-  await remove(ref(db, `${roomName}/schedules`));
-  await remove(ref(db, `${roomName}/chatLog`));
-  await remove(ref(db, `${roomName}/roomUsers`));
-  await remove(ref(db, `${roomName}/callStatus`));
-  await set(ref(db, `${roomName}/callStatus`), {
-    status: 'none',
-    users: { A: false, B: false },
-    statusMessage: '',
-    timestamp: null
-  });
-  await remove(ref(db, `${roomName}/signaling`));
-
-  // ローカルUIリセット
-  userANameInput.value = '';
-  userBNameInput.value = '';
-  selectedCells.clear();
-  localStorage.removeItem(`${roomName}_currentUser`);
-
-  currentUser = ''; // 強制的に未選択にする
-  updateUserSelectDisplay(); // ドロップダウン描画を統一
-
-  updateCallStatusUI('none');
-
-  isClearingData = false;
-
-  // sessionStorage フラグやロック解除
-  sessionStorage.setItem('wasCleared', '1');
-  lockedUserA = false;
-  lockedUserB = false;
-  
-  // ブラウザバックで前のページに戻る
-  history.back();
-}
-
-  async function startLocalStream() {
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
-  }
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-      video: false
-    });
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-      console.log('Audio track enabled:', track);
-    });
-    return localStream;
-  } catch (error) {
-    console.error('startLocalStream error:', error);
-    throw error;
-  }
-}
-
-function createPeerConnection() {
-  if (peerConnection && peerConnection.signalingState !== 'closed') {
-    console.log('createPeerConnection: 既存のpeerConnectionを再利用します');
-
-    try {
-      if (localStream && peerConnection.getSenders) {
-        const senders = peerConnection.getSenders();
-        localStream.getTracks().forEach(track => {
-          const sameSender = senders.find(s => s.track === track);
-          if (sameSender) {
-            return;
-          }
-
-          const sameKindSender = senders.find(s => s.track && s.track.kind === track.kind);
-          if (sameKindSender) {
-            if (typeof sameKindSender.replaceTrack === 'function') {
-              sameKindSender.replaceTrack(track).then(() => {
-                console.log(`createPeerConnection(reuse): replaceTrack で ${track.kind} を差し替えました`);
-              }).catch(err => {
-                console.warn('createPeerConnection(reuse): replaceTrack に失敗しました。remove/add を試みます', err);
-                try {
-                  peerConnection.removeTrack(sameKindSender);
-                } catch (e) {
-                  console.warn('createPeerConnection(reuse): removeTrack でエラー', e);
-                }
-                try {
-                  peerConnection.addTrack(track, localStream);
-                  console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
-                } catch (e) {
-                  console.warn('createPeerConnection(reuse): addTrack に失敗', e);
-                }
-              });
-            } else {
-              try {
-                peerConnection.removeTrack(sameKindSender);
-              } catch (e) {
-                console.warn('createPeerConnection(reuse): removeTrack でエラー', e);
-              }
-              try {
-                peerConnection.addTrack(track, localStream);
-                console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
-              } catch (e) {
-                console.warn('createPeerConnection(reuse): addTrack に失敗', e);
-              }
-            }
-          } else {
-            try {
-              peerConnection.addTrack(track, localStream);
-              console.log(`createPeerConnection(reuse): ${track.kind} を addTrack しました`);
-            } catch (e) {
-              console.warn('createPeerConnection(reuse): addTrack に失敗', e);
-            }
-          }
-        });
-      }
-    } catch (e) {
-      console.warn('createPeerConnection(reuse): トラック再設定中にエラー', e);
+    function linkify(text) {
+      const urlPattern = /(https?:\/\/[\w\/:%#\$&\?\(\)~\.=\+\-]+)/g;
+      return text.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
     }
 
-    return;
-  }
-
-  peerConnection = new RTCPeerConnection(configuration);
-  console.log('createPeerConnection: 新しいRTCPeerConnectionを作成しました');
-
-  if (remoteStream) {
-    remoteStream.getTracks().forEach(track => {
-      try {
-        track.stop();
-      } catch (e) {
-        console.warn('remoteStream track stop error:', e);
-      }
-    });
-    remoteStream = null;
-  }
-
-  peerConnection.ontrack = event => {
-    if (event.streams && event.streams[0]) {
-      remoteStream = event.streams[0];
-    } else {
-      if (!remoteStream) remoteStream = new MediaStream();
-      remoteStream.addTrack(event.track);
-    }
-
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio) {
-      remoteAudio.srcObject = null;
-      remoteAudio.srcObject = remoteStream;
-      remoteAudio.play().catch(err => {
-        console.warn('remoteAudio.play() blocked or failed:', err);
-      });
-    } else {
-      const audio = document.createElement('audio');
-      audio.id = 'remote-audio';
-      audio.autoplay = true;
-      audio.playsInline = true;
-      document.body.appendChild(audio);
-
-      audio.srcObject = null;
-      audio.srcObject = remoteStream;
-      audio.play().catch(err => console.warn("audio.play() error:", err));
-    }
-  };
-
-  if (localStream) {
-    try {
-      localStream.getTracks().forEach(track => {
-        const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
-        if (!alreadyAdded) {
-          peerConnection.addTrack(track, localStream);
-          console.log(`createPeerConnection(new): ローカルトラック(${track.kind})を追加しました`);
-        }
-      });
-    } catch (e) {
-      console.warn('createPeerConnection(new): ローカルトラック追加でエラー', e);
-    }
-  }
-
-  peerConnection.oniceconnectionstatechange = () => {
-    const state = peerConnection.iceConnectionState;
-    console.log('ICE connection state:', state);
-
-    if (state === 'failed' || state === 'closed') {
-      update(ref(db, `${roomName}/callStatus`), {
-        status: 'ended',
-        users: { A: false, B: false },
-        statusMessage: 'ICE: ' + state
-      }).catch(console.error);
-
-      endCallCleanup();
-      resetUI();
-    } else if (state === 'disconnected') {
-      setTimeout(() => {
-        if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
-          update(ref(db, `${roomName}/callStatus`), {
-            status: 'ended',
-            users: { A: false, B: false },
-            statusMessage: 'ICE: disconnected timeout'
-          }).catch(console.error);
-
-          endCallCleanup();
-          resetUI();
-        }
-      }, 5000);
-    }
-  };
-
-  peerConnection.onicecandidate = event => {
-    if (event.candidate) {
-      const candRef = ref(db, `${roomName}/signaling/candidates/${currentUser}`);
-      const newCandRef = push(candRef);
-      set(newCandRef, { candidate: event.candidate.toJSON() });
-    }
-  };
-}
-
-async function endCallCleanup() {
-  console.log("=== 通話終了: ストリームと接続を解放 ===");
-
-  try {
-    await Promise.all([
-      remove(ref(db, `${roomName}/signaling/candidates/A`)),
-      remove(ref(db, `${roomName}/signaling/candidates/B`)),
-      remove(ref(db, `${roomName}/signaling/offer`)),
-      remove(ref(db, `${roomName}/signaling/answer`)),
-    ]);
-    console.log('シグナリングの候補とoffer/answerを削除しました');
-  } catch (e) {
-    console.error('候補削除エラー:', e);
-  }
-
-  if (remoteStream) {
-    remoteStream.getTracks().forEach(track => {
-      try {
-        track.stop();
-      } catch (e) {
-        console.warn('remoteStream track stop error:', e);
-      }
-    });
-    remoteStream = null;
-  }
-
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      try {
-        track.stop();
-      } catch (e) {
-        console.warn('localStream track stop error:', e);
-      }
-    });
-    localStream = null;
-  }
-
-  if (peerConnection) {
-    peerConnection.ontrack = null;
-    peerConnection.onicecandidate = null;
-    peerConnection.oniceconnectionstatechange = null;
-
-    try {
-      await Promise.all(peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender)));
-    } catch (e) {
-      console.warn('peerConnection removeTrack error:', e);
-    }
-
-    peerConnection.close();
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    peerConnection = null;
-  }
-
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) {
-    remoteAudio.pause();
-    remoteAudio.srcObject = null;
-  }
-
-  console.log("=== endCallCleanup 完了 ===");
-}
-
-async function sendOffer() {
-  createPeerConnection();
-
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
-      if (!alreadyAdded) {
-        console.log(`sendOffer: ローカルトラック(${track.kind})を追加`);
-        peerConnection.addTrack(track, localStream);
-      }
-    });
-  } else {
-    console.warn("sendOffer: localStream がまだありません");
-  }
-
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-
-  await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: currentUser });
-}
-
-function startCallTimeout() {
-  if (callTimeoutId) clearTimeout(callTimeoutId);
-
-  callTimeoutId = setTimeout(async () => {
-    await update(callStatusRef, {
-      status: 'none',
-      timestamp: null
-    });
-
-    callStatusDisplay.textContent = '通話終了（30秒経過）';
-
-    if (peerConnection) {
-      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-      peerConnection.close();
-      peerConnection = null;
-    }
-
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-      localStream = null;
-    }
-
-    await remove(ref(db, `${roomName}/signaling`));
-  }, 30000);
-}
-
-async function sendAnswer() {
-  const offerSnapshot = await get(ref(db, `${roomName}/signaling/offer`));
-  if (!offerSnapshot.exists()) return;
-  const offer = offerSnapshot.val();
-
-  createPeerConnection();
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      const alreadyAdded = peerConnection.getSenders().some(sender => sender.track === track);
-      if (!alreadyAdded) {
-        console.log(`sendAnswer: ローカルトラック(${track.kind})を追加`);
-        peerConnection.addTrack(track, localStream);
-      }
-    });
-  } else {
-    console.warn("sendAnswer: localStream がまだありません");
-  }
-
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-
-  await set(ref(db, `${roomName}/signaling/answer`), { sdp: answer.sdp, type: answer.type, from: currentUser });
-}
-
-function listenSignaling() {
-  onValue(ref(db, `${roomName}/signaling/offer`), snapshot => {
-    const offer = snapshot.val();
-    if (!offer || offer.from === currentUser) return;
-    handleOffer(offer);
-  });
-
-  async function handleOffer(offer) {
-    createPeerConnection();
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    await sendAnswer();
-  }
-
-  onValue(ref(db, `${roomName}/signaling/answer`), async snapshot => {
-    const answer = snapshot.val();
-    if (!answer || answer.from === currentUser) return;
-    if (peerConnection) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    }
-  });
-
-  onValue(ref(db, `${roomName}/signaling/candidates/A`), snapshot => {
-    if (currentUser === 'B') {
-      const candidates = snapshot.val();
-      if (!candidates) return;
-      Object.values(candidates).forEach(data => {
-        if (data?.candidate && peerConnection) {
-          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
-      });
-    }
-  });
-
-  onValue(ref(db, `${roomName}/signaling/candidates/B`), snapshot => {
-    if (currentUser === 'A') {
-      const candidates = snapshot.val();
-      if (!candidates) return;
-      Object.values(candidates).forEach(data => {
-        if (data?.candidate && peerConnection) {
-          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
-      });
-    }
-  });
-
-  onValue(ref(db, `${roomName}/roomUsers`), () => {
-  // セレクトは表示専用。現在の選択状態だけ反映。
-  updateUserSelectDisplay();
-});
-}
-
-async function getUserType(uid) {
-  const snapshot = await get(ref(db, `${roomName}/users/${uid}/type`));
-  return snapshot.exists() ? snapshot.val() : null;
-}
-
-async function updateCallStatus(status) {
-  try {
-    const snap = await get(ref(db, `${roomName}/callStatus`));
-    const prev = snap.exists() ? snap.val() : {};
-    const users = prev && prev.users ? prev.users : { A: false, B: false };
-
-    const statusMessage = status === 'waiting'
-      ? '相手が通話開始ボタンを押すのを待っています'
-      : (status === 'started' ? '通話が開始されました' : (status === 'ended' ? '通話が終了しました' : ''));
-
-    await set(ref(db, `${roomName}/callStatus`), {
-      status,
-      users,
-      statusMessage,
-      timestamp: new Date().toISOString()
-    });
-  } catch (e) {
-    console.error('updateCallStatus error:', e);
-    await set(ref(db, `${roomName}/callStatus`), {
-      status,
-      users: { A: false, B: false },
-      statusMessage: '',
-      timestamp: new Date().toISOString()
-    });
-  }
-}
-
-// --- ユーザー選択表示更新 ---
-function updateUserSelectDisplay() {
-  userSelect.innerHTML = '';
-
-  // 手動変更可能にするため、常に有効
-  userSelect.disabled = false;
-
-  // 選択肢は固定
-  const options = [
-    { value: '', text: '未選択' },
-    { value: 'A', text: 'A' },
-    { value: 'B', text: 'B' }
-  ];
-
-  options.forEach(optData => {
-    const opt = document.createElement('option');
-    opt.value = optData.value;
-    opt.textContent = optData.text;
-    if (currentUser === optData.value) opt.selected = true;
-    userSelect.appendChild(opt);
-  });
-}
-
-// --- ドロップダウン変更イベント ---
-userSelect.addEventListener('change', e => {
-  const val = e.target.value;
-  currentUser = val;
-
-  if (val) {
-    localStorage.setItem(`${roomName}_currentUser`, val);
-  } else {
-    localStorage.removeItem(`${roomName}_currentUser`);
-  }
-
-  // 手動で変更した場合のみリロード
-  window.location.reload();
-});
-
-function resetUI() {
-  localCallStartPressed = false;
-  updateMyButtonStatusLocal();
-  btnCallStart.disabled = false;
-  btnCallEnd.disabled = true;
-  btnMute.disabled = true;
-  btnMute.textContent = 'ミュート';
-  isMuted = false;
-
-  if (localStream) {
-  try {
-    localStream.getTracks().forEach(track => {
-      if (track.readyState === 'live') track.stop();
-    });
-  } catch (e) {
-    console.warn('localStream stop error:', e);
-  }
-  localStream = null;
-}
-
-if (remoteStream) {
-  try {
-    remoteStream.getTracks().forEach(track => {
-      if (track.readyState === 'live') track.stop();
-    });
-  } catch (e) {
-    console.warn('remoteStream stop error:', e);
-  }
-  remoteStream = null;
-}
-
-  const localAudio = document.getElementById('localAudio');
-  if (localAudio) localAudio.srcObject = null;
-
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) remoteAudio.srcObject = null;
-
-  if (peerConnection) {
-    try {
-      peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-      peerConnection.close();
-    } catch (e) {
-      console.error('peerConnection close error:', e);
-    }
-    peerConnection = null;
-  }
-}
-
-  renderCalendar();
-  async function sendMessage() {
-  if (!currentUser) {
-    callStatusDisplay.textContent = 'ユーザーを選択してください';
-    return;
-  }
-
-  const text = chatInput.value.trim();
-  if (!text) return;
-
-  const userName = currentUser;
-  const newMsgRef = ref(db, `${roomName}/chatLog`);
-  const snapshot = await get(newMsgRef);
-  const chatData = snapshot.exists() ? snapshot.val() : [];
-  chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
-  await set(newMsgRef, chatData);
-  chatInput.value = '';
-}
-
-  function renderChat(chatData) {
-    chatLog.innerHTML = '';
-    chatData.slice(-100).forEach(entry => {
+    function escapeHtml(str) {
       const div = document.createElement('div');
-      div.classList.add('chat-message');
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = `${entry.name}: `;
-      nameSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
-      nameSpan.style.fontWeight = 'bold';
-
-      const textSpan = document.createElement('span');
-      textSpan.textContent = entry.text;
-      textSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
-
-      div.appendChild(nameSpan);
-      div.appendChild(textSpan);
-      chatLog.appendChild(div);
-    });
-    chatLog.scrollTop = chatLog.scrollHeight;
-  }
-
-// --- 初期化処理 ---
-async function initializeUsers() {
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const roomUsersSnap = await get(roomUsersRef);
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
-
-  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
-  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
-
-  if (savedUser) {
-    // 保存済みユーザーを維持
-    currentUser = savedUser;
-  } else {
-    // currentUser 未設定時のみ自動割り当て
-    if (roomUsers.A && !roomUsers.B) {
-      currentUser = 'A';
-    } else if (roomUsers.B && !roomUsers.A) {
-      currentUser = 'B';
-    } else if (roomUsers.A && roomUsers.B) {
-      currentUser = 'B'; // 両方 true の場合は B を優先
-    } else {
-      currentUser = ''; // 未選択
+      div.textContent = str;
+      return div.innerHTML;
     }
 
-    if (currentUser) {
-      localStorage.setItem(`${roomName}_currentUser`, currentUser);
-    } else {
-      localStorage.removeItem(`${roomName}_currentUser`);
-    }
-  }
-
-  // --- ドロップダウン選択肢を常に A/B にして更新 ---
-  updateUserSelectDisplay();
-}
-
-// --- DOMContentLoaded で初期化 ---
-document.addEventListener('DOMContentLoaded', async () => {
-  await initializeUsers();
-
-  const chatInput = document.getElementById("chatInput");
-  const btnSend = document.getElementById("btn-send");
-
-  chatInput.addEventListener("keydown", (e) => {
-    // --- Shift + Enter は改行 ---
-    if (e.key === "Enter" && e.shiftKey) {
-      return; // 普通に改行させるので何もしない
-    }
-
-    // --- Enter（単体）で送信 ---
-    if (e.key === "Enter") {
-      e.preventDefault();   // 改行を抑制
-      btnSend.click();      // ボタンクリックと同じ動作
-    }
-  });
-});
-
-initializeUsers();
-listenSignaling();
-
-// --- userNames 変更監視 ---
-const userNamesRef = ref(db, `${roomName}/userNames`);
-onValue(userNamesRef, (snapshot) => {
-  const data = snapshot.val() || {};
-  userANameInput.value = data.A || '';
-  userBNameInput.value = data.B || '';
-
-  // currentUser が未設定の場合のみ自動割り当て
-  if (!currentUser) {
-    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-    get(roomUsersRef).then((snap) => {
-      const roomUsers = snap.exists() ? snap.val() : { A: false, B: false };
-      if (roomUsers.A && !roomUsers.B) {
-        currentUser = 'A';
-      } else if (roomUsers.B && !roomUsers.A) {
-        currentUser = 'B';
-      } else if (roomUsers.A && roomUsers.B) {
-        currentUser = 'B'; // 両方 true の場合は B を優先
-      } else {
-        currentUser = '';
-      }
-      updateUserSelectDisplay();
-    });
-  }
-});
-
-userANameInput.addEventListener('input', async () => {
-  const name = userANameInput.value.trim();
-  if (!name) {
-    await remove(ref(db, `${roomName}/userNames/A`));
-    return;
-  }
-  await set(ref(db, `${roomName}/userNames/A`), name);
-});
-
-userBNameInput.addEventListener('input', async () => {
-  const name = userBNameInput.value.trim();
-  if (!name) {
-    await remove(ref(db, `${roomName}/userNames/B`));
-    return;
-  }
-  await set(ref(db, `${roomName}/userNames/B`), name);
-});
-
-  btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
-  btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
-  btnClearCell.addEventListener('click', clearSelectedCells);
-  btnClearAll.addEventListener('click', async () => {
-    await clearAllData();
-    renderCalendar();
-    renderChat([]);
-  });
-  btnPrevWeek.addEventListener('click', () => {
-    currentWeekOffset--;
-    renderCalendar();
-  });
-  btnToday.addEventListener('click', () => {
-    currentWeekOffset = 0;
-    renderCalendar();
-  });
-  btnNextWeek.addEventListener('click', () => {
-    currentWeekOffset++;
-    renderCalendar();
-  });
-  btnSend.addEventListener('click', sendMessage);
-  let isCallStarting = false;
-
-btnCallStart.addEventListener('click', async () => {
-  if (isCallStarting) {
-    return;
-  }
-  isCallStarting = true;
-  btnCallStart.disabled = true;
-
-  if (!currentUser) {
-    callStatusDisplay.textContent = 'ユーザーを選択してください';
-    isCallStarting = false;
-    btnCallStart.disabled = false;
-    return;
-  }
-
-  try {
-    if (peerConnection) {
-      try {
-        peerConnection.getSenders().forEach(sender => {
-          try {
-            peerConnection.removeTrack(sender);
-          } catch (e) {
-            console.warn('removeTrack error:', e);
-          }
+    document.addEventListener("DOMContentLoaded", () => {
+      if (isAdmin) {
+        document.querySelectorAll('.admin-only').forEach(el => {
+          el.style.display = (el.tagName === 'TH' || el.tagName === 'TD') ? 'table-cell' : 'block';
         });
-        peerConnection.close();
-      } catch (e) {
-        console.warn('peerConnection close時のエラー:', e);
       }
-      peerConnection = null;
-    }
 
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        try {
-          track.stop();
-        } catch (e) {
-          console.warn('localStream track stop error:', e);
-        }
+      const nameInput = document.getElementById("nameInput");
+      nameInput.value = localStorage.getItem(`${roomName}UserName`) || "";
+      nameInput.oninput = () => localStorage.setItem(`${roomName}UserName`, nameInput.value);
+
+      document.getElementById("sendBtn").onclick = () => {
+        const text = document.getElementById("chatInput").value.trim();
+        if (nameInput.value && text) push(ref(db, `${roomName}/chat`), { name: nameInput.value, text, time: Date.now() });
+        document.getElementById("chatInput").value = "";
+      };
+
+      onValue(ref(db, `${roomName}/chat`), (s) => {
+        const div = document.getElementById("chatMessages");
+        div.innerHTML = "";
+        s.forEach(c => { 
+          const m = c.val(); 
+          div.innerHTML += `<p style="margin:4px 0;"><strong>${escapeHtml(m.name)}</strong>: ${linkify(escapeHtml(m.text))}</p>`; 
+        });
+        div.scrollTop = div.scrollHeight;
       });
-      localStream = null;
-    }
 
-    await startLocalStream();
+      onValue(ref(db, roomName), (snapshot) => {
+        const data = snapshot.val() || {};
+        const playerMaster = data.playerMaster || {};
+        const shogiGames = data.shogiGames || {};
 
-    resetMuteState();
-    createPeerConnection();
+        // 参加者名簿の描画
+        const playerListBody = document.getElementById("playerListBody");
+        playerListBody.innerHTML = "";
+        const currentPlayers = [];
+        let pIdx = 1;
+        Object.keys(playerMaster).forEach(id => {
+          const name = playerMaster[id].name || "";
+          if (name) currentPlayers.push(name);
+          playerListBody.innerHTML += `<tr>
+            <td class="admin-only" style="${isAdmin ? 'display:table-cell' : 'display:none'}"><input type="checkbox" class="master-del-check" value="${id}"></td>
+            <td>${pIdx++}</td>
+            <td><input type="text" value="${escapeHtml(name)}" onchange="updateMaster('${id}', this.value)"></td>
+          </tr>`;
+        });
+        currentPlayers.sort();
 
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        const senderExists = peerConnection.getSenders().some(sender => sender.track === track);
-        if (!senderExists) {
-          peerConnection.addTrack(track, localStream);
-        }
+        // 対局一覧の描画
+        const shogiBody = document.getElementById("shogiBody");
+        shogiBody.innerHTML = "";
+        const games = [];
+        let gIdx = 1;
+        Object.keys(shogiGames).forEach(id => {
+          const g = { id, no: gIdx++, ...shogiGames[id] };
+          games.push(g);
+          let opts = (val) => `<option value="">-</option>` + currentPlayers.map(n => `<option value="${escapeHtml(n)}" ${val===n?'selected':''}>${escapeHtml(n)}</option>`).join("");
+          const gameUrl = GAME_BASE_URL + g.no;
+          shogiBody.innerHTML += `<tr>
+            <td class="admin-only" style="${isAdmin ? 'display:table-cell' : 'display:none'}"><input type="checkbox" class="del-check" value="${id}"></td>
+            <td class="col-no"><a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="game-link">${g.no}</a></td>
+            <td class="col-player"><select onchange="updateGame('${id}','p1',this.value)">${opts(g.p1)}</select></td>
+            <td class="col-player"><select onchange="updateGame('${id}','p2',this.value)">${opts(g.p2)}</select></td>
+            <td class="col-result"><select onchange="updateGame('${id}','result',this.value)">
+              <option value="-" ${g.result==='-'?'selected':''}>-</option>
+              <option value="○" ${g.result==='○'?'selected':''}>先勝</option>
+              <option value="×" ${g.result==='×'?'selected':''}>後勝</option>
+            </select></td>
+          </tr>`;
+        });
+        renderMatrix(currentPlayers, games);
       });
-    }
 
-const localAudio = document.getElementById('localAudio');
-if (localAudio) {
-  localAudio.srcObject = localStream;
-  localAudio.play().catch(err => {
-    console.warn('localAudio.play() blocked or failed:', err);
-  });
-}
-
-    await remove(ref(db, `${roomName}/signaling`));
-
-    const callStatusSnap = await get(callStatusRef);
-    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
-      status: 'none',
-      users: { A: false, B: false }
-    };
-
-    if (!callData.users) {
-      callData.users = { A: false, B: false };
-    }
-
-    callData.users[currentUser] = true;
-
-    let newStatus = 'waiting';
-    if (callData.users.A && callData.users.B) {
-      newStatus = 'started';
-      await sendOffer();
-    } else if (!callData.users.A && !callData.users.B) {
-      newStatus = 'none';
-    } else {
-      newStatus = 'waiting';
-    }
-
-    await update(callStatusRef, {
-      status: newStatus,
-      users: callData.users,
-      statusMessage: newStatus === 'waiting'
-        ? '相手が通話開始ボタンを押すのを待っています'
-        : (newStatus === 'started' ? '通話が開始されました' : '')
-    });
-
-    localCallStartPressed = true;
-    updateMyButtonStatusLocal();
-
-  } catch (e) {
-    console.error(e);
-    callStatusDisplay.textContent = '通話の準備に失敗しました';
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal();
-  } finally {
-    isCallStarting = false;
-  }
-});
-
-btnCallEnd.addEventListener('click', async () => {
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
-
-  try {
-    const callStatusSnap = await get(callStatusRef);
-    const callData = callStatusSnap.exists() ? callStatusSnap.val() : {
-      status: 'none',
-      users: { A: false, B: false }
-    };
-
-    if (callData.users && callData.users[currentUser] !== undefined) {
-      callData.users[currentUser] = false;
-    }
-
-await update(ref(db, `${roomName}/callStatus`), {
-  status: 'ended',
-  users: { A: false, B: false },
-  statusMessage: '通話が切断されました'
-});
-
-    localCallStartPressed = false;
-    updateMyButtonStatusLocal();
-
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;
-    btnMute.textContent = 'ミュート';
-
-    isMuted = false;
-
-    if (localStream) {
-      try {
-        localStream.getAudioTracks().forEach(track => {
-          track.enabled = true;
-        });
-        localStream.getTracks().forEach(track => {
-          if (track.readyState === 'live') {
-            track.stop();
-          }
-        });
-      } catch (e) {
-        console.warn('localStream stop error:', e);
-      }
-      localStream = null;
-    }
-
-    if (remoteStream) {
-      try {
-        remoteStream.getTracks().forEach(track => {
-          if (track.readyState === 'live') {
-            track.stop();
-          }
-        });
-      } catch (e) {
-        console.warn('remoteStream stop error:', e);
-      }
-      remoteStream = null;
-    }
-
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio) {
-      remoteAudio.srcObject = null;
-    }
-
-    const localAudio = document.getElementById('localAudio');
-    if (localAudio) {
-      localAudio.srcObject = null;
-    }
-
-    if (peerConnection) {
-  try {
-    await Promise.all(peerConnection.getSenders().map(sender => peerConnection.removeTrack(sender)));
-    peerConnection.close();
-    await new Promise(resolve => setTimeout(resolve, 200));
-  } catch (e) {
-    console.warn('peerConnection close時のエラー:', e);
-  }
-  peerConnection = null;
-}
-
-    try {
-      await remove(ref(db, `${roomName}/signaling`));
-    } catch (e) {
-      console.error('signaling remove error:', e);
-    }
-
-    callStatusDisplay.textContent = '通話は終了しました';
-    
-    window.location.reload();
-
-  } catch (e) {
-    console.error('通話終了処理でエラー:', e);
-    callStatusDisplay.textContent = '通話終了時にエラーが発生しました';
-  }
-});
-
-let hasReloaded = false;
-onValue(callStatusRef, (snapshot) => {
-  const callData = snapshot.val();
-  if (!callData) return;
-  if (callData.status === 'ended' && localCallStartPressed && !hasReloaded) {
-    hasReloaded = true;
-    window.location.reload();
-    return;
-    }
-
-  const iPressed = !!callData.users?.[currentUser];
-  const otherPressed = !!callData.users?.[currentUser === 'A' ? 'B' : 'A'];
-  const status = callData.status;
-
-  localCallStartPressed = iPressed;
-
-  switch (status) {
-    case 'ended':
-      localCallStartPressed = false;
-      updateMyButtonStatusLocal(); 
-      resetUI();
-      callStatusDisplay.textContent = '通話は終了しました';
-
-      isMuted = false;
-      btnCallStart.disabled = false;
-      btnCallEnd.disabled = true;
-      btnMute.disabled = true;
-      btnMute.textContent = 'ミュート';
-
-      if (localStream) {
-        try {
-          localStream.getTracks().forEach(track => {
-            if (track.readyState === 'live') track.stop();
+      window.updateMaster = (id, name) => update(ref(db, `${roomName}/playerMaster/${id}`), { name });
+      window.updateGame = (id, f, v) => update(ref(db, `${roomName}/shogiGames/${id}`), { [f]: v });
+      
+      function renderMatrix(players, games) {
+        const head = document.getElementById("matrixHeader");
+        const body = document.getElementById("matrixBody");
+        head.innerHTML = "<tr><th></th>" + players.map(p => `<th>${escapeHtml(p)}</th>`).join("") + "</tr>";
+        body.innerHTML = players.map(rowP => {
+          let row = `<tr><td class="row-label">${escapeHtml(rowP)}</td>`;
+          players.forEach(colP => {
+            if (rowP === colP) row += `<td class="matrix-diagonal"></td>`;
+            else {
+              const m = games.filter(g => (g.p1===rowP && g.p2===colP) || (g.p1===colP && g.p2===rowP));
+              const res = m.map(g => {
+                if (!g.result || g.result === "-") return null;
+                let sym = (g.p1===rowP) ? (g.result==="○"?"○":"×") : (g.result==="○"?"×":"○");
+                const gameUrl = GAME_BASE_URL + g.no;
+                return `<a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="${sym==="○"?"win-text":"lose-text"}" style="text-decoration:none;">${g.no}:${sym}</a>`;
+              }).filter(r=>r).join("、");
+              row += `<td>${res}</td>`;
+            }
           });
-        } catch (e) {
-          console.warn('localStream stop error:', e);
-        }
-        localStream = null;
+          return row + "</tr>";
+        }).join("");
       }
 
-      if (remoteStream) {
-        try {
-          remoteStream.getTracks().forEach(track => {
-            if (track.readyState === 'live') track.stop();
-          });
-        } catch (e) {
-          console.warn('remoteStream stop error:', e);
-        }
-        remoteStream = null;
-      }
+      document.getElementById("addRowBtn").onclick = () => push(ref(db, `${roomName}/shogiGames`), { p1: "", p2: "", result: "-" });
+      document.getElementById("addPlayerBtn").onclick = () => push(ref(db, `${roomName}/playerMaster`), { name: "" });
 
-      const remoteAudio = document.getElementById('remote-audio');
-      if (remoteAudio) remoteAudio.srcObject = null;
-
-      const localAudio = document.getElementById('localAudio');
-      if (localAudio) localAudio.srcObject = null;
-
-      if (peerConnection) {
-        try {
-          peerConnection.getSenders().forEach(sender => peerConnection.removeTrack(sender));
-          peerConnection.close();
-        } catch (e) {
-          console.error('peerConnection close error:', e);
-        }
-        peerConnection = null;
-      }
-      break;
-
-    case 'waiting':
-      callStatusDisplay.textContent = '通話ボタンが押されました（相手を待っています）';
-
-      if (!iPressed && !otherPressed) {
-        updateMyButtonStatus('none');
-      } else if (!iPressed && otherPressed) {
-        updateMyButtonStatus('none');
-      } else if (iPressed && !otherPressed) {
-        updateMyButtonStatusLocal();
-      } else {
-        updateMyButtonStatus('started');
-      }
-      break;
-
-    case 'started':
-      callStatusDisplay.textContent = '通話中';
-      updateMyButtonStatus('started');
-      break;
-
-    case 'none':
-    default:
-      callStatusDisplay.textContent = '';
-      resetUI();
-      break;
-  }
-});
-
-onValue(ref(db, `${roomName}/schedules`), snapshot => updateScheduleTable());
-onValue(ref(db, `${roomName}/chatLog`), snapshot => {
-  const chatData = snapshot.exists() ? snapshot.val() : [];
-  renderChat(chatData);
-});
-
-fetchHolidays();
-renderCalendar();
-
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('td')) {
-    selectedCells.forEach(key => {
-      const td = calendar.querySelector(`td[data-key="${key}"]`);
-      if (td) td.classList.remove('selected');
+      document.getElementById("listDelBtn").onclick = async () => {
+        const c = document.querySelectorAll(".del-check:checked");
+        if (c.length && confirm("削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/shogiGames/${x.value}`));
+      };
+      document.getElementById("delPlayerBtn").onclick = async () => {
+        const c = document.querySelectorAll(".master-del-check:checked");
+        if (c.length && confirm("削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/playerMaster/${x.value}`));
+      };
+      document.getElementById("chatClearBtn").onclick = () => confirm("クリアしますか？") && remove(ref(db, `${roomName}/chat`));
+      document.getElementById("masterDeleteBtn").onclick = async () => {
+        if (confirm("全リセットしますか？")) { await remove(ref(db, roomName)); location.reload(); }
+      };
     });
-    selectedCells.clear();
-  }
-});
+  </script>
+</head>
+<body>
+  <h1>遠タメ大会</h1>
 
-function updateCallStatusUI(status) {
-  callStatus = status;
-  callStatusDisplay.textContent = {
-    'started': '通話中',
-    'waiting': '通話ボタンが押されました（相手を待っています）',
-    'ended': '通話が終了しました',
-    'none': ''
-  }[status] || '';
+  <div class="container">参加者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
+  
+  <div class="container">
+    <h2>対局チャット</h2>
+    <div id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput">
+      <button id="sendBtn">送信</button>
+      <button id="chatClearBtn" class="admin-only">全消去</button>
+    </div>
+  </div>
 
-  updateMyButtonStatus(status);
-}
+  <div class="container">
+    <h2>参加者名簿</h2>
+    <label class="note-label">※81道場IDを入力してください</label>
+    <table class="shogi-table">
+      <thead>
+        <tr>
+          <th class="admin-only col-check">選</th>
+          <th class="col-no">No</th>
+          <th>名前</th>
+        </tr>
+      </thead>
+      <tbody id="playerListBody"></tbody>
+    </table>
+    <button id="addPlayerBtn" class="add-row-btn" style="background-color:#4caf50;">参加者を追加</button>
+    <button id="delPlayerBtn" class="list-del-btn admin-only">選択した参加者を削除</button>
+  </div>
 
-function updateMyButtonStatus(status) {
-  switch (status) {
-    case 'started':
-      btnCallStart.disabled = true;
-      btnCallEnd.disabled = false;
-      btnMute.disabled = false;
-      break;
-    case 'none':
-    default:
-      btnCallStart.disabled = false;
-      btnCallEnd.disabled = true;
-      btnMute.disabled = true;
-      btnMute.textContent = 'ミュート';
-      isMuted = false;
-      break;
-  }
-}
+  <div class="container">
+    <h2>対局一覧</h2>
+    <table class="shogi-table">
+      <thead>
+        <tr>
+          <th class="admin-only col-check">選</th>
+          <th class="col-no">No</th>
+          <th class="col-player">先手（▲）</th>
+          <th class="col-player">後手（△）</th>
+          <th class="col-result">結果</th>
+        </tr>
+      </thead>
+      <tbody id="shogiBody"></tbody>
+    </table>
+    <button id="addRowBtn" class="add-row-btn">新しい対局を追加</button>
+    <button id="listDelBtn" class="list-del-btn admin-only">選択した対局を削除</button>
+  </div>
 
-function updateMyButtonStatusLocal() {
-  if (localCallStartPressed) {
-    btnCallStart.disabled = true;
-    btnCallEnd.disabled = false;
-    btnMute.disabled = false;
-  } else {
-    btnCallStart.disabled = false;
-    btnCallEnd.disabled = true;
-    btnMute.disabled = true;
-  }
-}
+  <div class="container">
+    <h2>リーグ結果表</h2>
+    <div class="matrix-wrapper">
+      <table class="matrix-table"><thead id="matrixHeader"></thead><tbody id="matrixBody"></tbody></table>
+    </div>
+  </div>
 
-function resetMuteState() {
-  isMuted = false;
-  btnMute.textContent = 'ミュート';
-
-  if (localStream) {
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = true;
-    });
-  }
-}
-
-(async () => {
-  const callStatusSnap = await get(callStatusRef);
-  const callData = callStatusSnap.exists() ? callStatusSnap.val() : {};
-
-  if (callData.status === 'waiting') {
-    if (callData.user !== currentUser) {
-      if (localCallStartPressed) {
-        localCallStartPressed = false;
-        updateMyButtonStatusLocal();
-      }
-      callStatusDisplay.textContent = '相手が通話を開始しました（あなたの応答待ち）';
-    }
-  }
-})();
-
-volumeControl.addEventListener('input', () => {
-  const remoteAudio = document.getElementById('remote-audio');
-  if (remoteAudio) remoteAudio.volume = parseFloat(volumeControl.value);
-});
-
-</script>
+  <div class="master-delete-area admin-only">
+    <button id="masterDeleteBtn">全データ一括削除</button>
+  </div>
 </body>
 </html>
