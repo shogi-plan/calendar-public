@@ -29,6 +29,7 @@
     .matrix-diagonal { background-color: #e0e0e0; }
     .win-text { color: #d32f2f; font-weight: bold; }
     .lose-text { color: #1976d2; font-weight: bold; }
+    .draw-text { color: #757575; font-weight: bold; } /* 引分用スタイル */
 
     /* 対局一覧（テーブル） */
     .shogi-table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
@@ -55,7 +56,7 @@
     import { getDatabase, ref, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
     // --- オンコード設定：対局用ベースURL ---
-    const GAME_BASE_URL = "https://shogi-plan.github.io/calendar-public/room"; 
+    const GAME_BASE_URL = "https://example.com/game/"; 
 
     const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
@@ -116,7 +117,6 @@
         const playerMaster = data.playerMaster || {};
         const shogiGames = data.shogiGames || {};
 
-        // 参加者名簿の描画
         const playerListBody = document.getElementById("playerListBody");
         playerListBody.innerHTML = "";
         const currentPlayers = [];
@@ -132,7 +132,6 @@
         });
         currentPlayers.sort();
 
-        // 対局一覧の描画
         const shogiBody = document.getElementById("shogiBody");
         shogiBody.innerHTML = "";
         const games = [];
@@ -173,9 +172,23 @@
               const m = games.filter(g => (g.p1===rowP && g.p2===colP) || (g.p1===colP && g.p2===rowP));
               const res = m.map(g => {
                 if (!g.result || g.result === "-") return null;
-                let sym = (g.p1===rowP) ? (g.result==="○"?"○":"×") : (g.result==="○"?"×":"○");
+                
+                let sym = "";
+                let className = "";
+                
+                if (g.result === "△") {
+                  sym = "△";
+                  className = "draw-text";
+                } else if (g.p1 === rowP) {
+                  sym = (g.result === "○") ? "○" : "×";
+                  className = (sym === "○") ? "win-text" : "lose-text";
+                } else {
+                  sym = (g.result === "○") ? "×" : "○";
+                  className = (sym === "○") ? "win-text" : "lose-text";
+                }
+
                 const gameUrl = GAME_BASE_URL + g.no;
-                return `<a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="${sym==="○"?"win-text":"lose-text"}" style="text-decoration:none;">${g.no}:${sym}</a>`;
+                return `<a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="${className}" style="text-decoration:none;">${g.no}:${sym}</a>`;
               }).filter(r=>r).join("、");
               row += `<td>${res}</td>`;
             }
