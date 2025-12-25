@@ -3,92 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>2人用予定調整カレンダー</title>
+  <title>遠タメ大会</title>
   <style>
-    body {
-      font-family: sans-serif;
-      margin: 0; padding: 1em;
-      font-size: 16px;
-    }
-    .title-container { text-align: center; margin-bottom: 1em; }
-    .controls {
-      display: flex; flex-wrap: wrap; gap: 0.5em;
-      margin-bottom: 1em; justify-content: center; align-items: center;
-    }
-    label { display: flex; align-items: center; gap: 0.2em; }
-    input, select, button { font-size: 1em; padding: 0.4em 0.7em; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th, td {
-      border: 1px solid #ccc; text-align: center; padding: 0.3em;
-      vertical-align: top; user-select: none; word-break: break-word;
-    }
-    th { position: sticky; top: 0; background: #f0f0f0; z-index: 10; }
-    th.weekend, td.weekend { color: red; }
-    th.holiday, td.holiday { color: red; }
-    td.selected { border: 3px solid orange !important; background-color: inherit !important; }
-    td.both { background-color: #ccffcc !important; }
-    .userA { color: blue; font-weight: bold; }
-    .userB { color: green; font-weight: bold; }
-    .chat {
-      margin-top: 2em;
-      max-width: 600px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .chat-log {
-      border: 1px solid #ccc; height: 200px; overflow-y: auto;
-      padding: 0.5em; background: #fafafa;
-    }
-    .chat-message { margin-bottom: 0.5em; white-space: pre-wrap; }
-    @media screen and (max-width: 600px) {
-      table, thead, tbody, th, td, tr { font-size: 12px; }
-    }
+    body { font-family: "Yu Gothic", sans-serif; margin: 10px; background: #f0f0f0; }
+    h1, h2 { text-align: center; color: #5d4037; }
+    .container { max-width: 850px; margin: 0 auto 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    input[type="text"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    
+    .note-label { display: block; color: #d32f2f; font-size: 0.85rem; font-weight: bold; margin-bottom: 8px; }
+
+    /* チャット */
+    #chatMessages { height: 150px; margin-bottom: 10px; padding: 10px; background: #fafafa; border: 1px solid #eee; overflow-y: auto; font-size: 0.95rem; }
+    #chatMessages a { color: #1976d2; text-decoration: underline; }
+    .chat-input-area { display: flex; gap: 5px; }
+    button { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+    #sendBtn { background-color: #795548; }
+    #chatClearBtn { background-color: #9e9e9e; }
+    
+    /* リーグ結果表（マトリクス） */
+    .matrix-wrapper { overflow-x: auto; border: 1px solid #d7ccc8; }
+    .matrix-table { border-collapse: collapse; font-size: 0.85rem; background: #fff; min-width: 100%; }
+    .matrix-table th, .matrix-table td { border: 1px solid #d7ccc8; padding: 10px; text-align: center; white-space: nowrap; }
+    .matrix-table th { background-color: #8d6e63; color: white; }
+    .row-label { background-color: #8d6e63 !important; color: white !important; font-weight: bold; }
+    .matrix-diagonal { background-color: #e0e0e0; }
+    .win-text { color: #d32f2f; font-weight: bold; }
+    .lose-text { color: #1976d2; font-weight: bold; }
+
+    /* 対局一覧（テーブル） */
+    .shogi-table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
+    .shogi-table th, .shogi-table td { border: 1px solid #d7ccc8; padding: 4px; text-align: center; vertical-align: middle; }
+    .shogi-table th { background-color: #a1887f; color: white; font-size: 0.8rem; white-space: nowrap; }
+    
+    .game-link { color: #1976d2; text-decoration: underline; font-weight: bold; }
+
+    .col-check { width: 35px; }
+    .col-no { width: 35px; }
+    .col-result { width: 75px; }
+    .col-player { width: auto; }
+
+    .add-row-btn { background-color: #5d4037; width: 100%; margin-top: 10px; }
+    .list-del-btn { background-color: #f44336; width: 100%; margin-top: 10px; }
+    
+    .admin-only { display: none; }
+    .master-delete-area { max-width: 850px; margin: 40px auto; text-align: center; border-top: 2px dashed #ccc; padding-top: 20px; }
+    #masterDeleteBtn { background-color: #d32f2f; width: 100%; padding: 15px; font-size: 1rem; }
   </style>
-</head>
-<body>
 
-<div class="title-container">
-  <h1>2人用予定調整カレンダー</h1>
-</div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getDatabase, ref, remove, update, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-<div class="controls">
-  <label>A：<input type="text" id="userAName" placeholder="名前" value="ユーザーA" /></label>
-  <label>B：<input type="text" id="userBName" placeholder="名前" value="ユーザーB" /></label>
-  <label><span style="font-size: 1.5em; font-weight: bold;">入力ユーザー切り替え：</span><select id="userSelect">
-    <option value="A">A</option>
-    <option value="B">B</option>
-  </select></label>
-</div>
+    // --- オンコード設定：対局用ベースURL ---
+    const GAME_BASE_URL = "https://shogi-plan.github.io/calendar-public/room"; 
 
-<div class="controls">
-  <button id="btn-mark-ok">選択セルに○</button>
-  <button id="btn-mark-no">選択セルに×</button>
-  <button id="btn-clear-cell">選択セルを削除</button>
-  <button id="btn-clear-all">全データ削除</button>
-</div>
-
-<div class="controls">
-  <button id="btn-prev-week">前の週</button>
-  <button id="btn-today">今日へ戻る</button>
-  <button id="btn-next-week">次の週</button>
-</div>
-
-<table id="calendar"></table>
-
-<div class="chat">
-  <h2>チャット</h2>
-  <div class="chat-log" id="chatLog"></div>
-  <div class="controls" style="margin-top:0.5em; gap:0.5em;">
-    <input type="text" id="chatInput" placeholder="メッセージを入力" style="flex:1; min-width: 0;" />
-    <button id="btn-send">送信</button>
-  </div>
-</div>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getDatabase, ref, onValue, set, remove, update, get } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
-
-  const firebaseConfig = {
+    const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
       databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -97,266 +66,200 @@
       messagingSenderId: "368704703397",
       appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const roomName = location.pathname.split('/').pop().replace('.html', '');
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAdmin = urlParams.get('admin') === 'true';
 
-  const basePath = location.pathname.replace(/^\/|\.html$/g, '').replace(/\W/g, '_') || 'default';
-
-  const userANameInput = document.getElementById('userAName');
-  const userBNameInput = document.getElementById('userBName');
-  const userSelect = document.getElementById('userSelect');
-  const calendar = document.getElementById('calendar');
-  const chatLog = document.getElementById('chatLog');
-  const chatInput = document.getElementById('chatInput');
-
-  const btnMarkOk = document.getElementById('btn-mark-ok');
-  const btnMarkNo = document.getElementById('btn-mark-no');
-  const btnClearCell = document.getElementById('btn-clear-cell');
-  const btnClearAll = document.getElementById('btn-clear-all');
-  const btnPrevWeek = document.getElementById('btn-prev-week');
-  const btnToday = document.getElementById('btn-today');
-  const btnNextWeek = document.getElementById('btn-next-week');
-  const btnSend = document.getElementById('btn-send');
-
-  let currentUser = 'A';
-  let selectedCells = new Set();
-  let currentWeekOffset = 0;
-  let holidays = {};
-
-  function formatDate(date) {
-    return date.toISOString().split('T')[0];
-  }
-  function getMonday(date) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = (day === 0 ? -6 : 1) - day;
-    d.setDate(d.getDate() + diff);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
-  async function fetchHolidays() {
-    try {
-      const res = await fetch('https://holidays-jp.github.io/api/v1/date.json');
-      if (!res.ok) throw new Error('祝日API取得失敗');
-      holidays = await res.json();
-      renderCalendar();
-    } catch (e) {
-      console.error(e);
-      holidays = {};
-      renderCalendar();
+    function linkify(text) {
+      const urlPattern = /(https?:\/\/[\w\/:%#\$&\?\(\)~\.=\+\-]+)/g;
+      return text.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
     }
-  }
 
-  function renderCalendar() {
-    calendar.innerHTML = '';
-    const thead = document.createElement('thead');
-    const trHead = document.createElement('tr');
-    thead.appendChild(trHead);
-    trHead.appendChild(document.createElement('th'));
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
 
-    const monday = getMonday(new Date());
-    monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const mm = d.getMonth() + 1;
-      const dd = d.getDate();
-      const ymd = formatDate(d);
-
-      const th = document.createElement('th');
-      th.innerHTML = `${mm}/${dd}<br>(${weekdays[d.getDay()]})`;
-      if (d.getDay() === 0 || d.getDay() === 6) th.classList.add('weekend');
-      if (holidays[ymd]) {
-        th.classList.add('holiday');
-        th.title = holidays[ymd];
+    document.addEventListener("DOMContentLoaded", () => {
+      if (isAdmin) {
+        document.querySelectorAll('.admin-only').forEach(el => {
+          el.style.display = (el.tagName === 'TH' || el.tagName === 'TD') ? 'table-cell' : 'block';
+        });
       }
 
-      trHead.appendChild(th);
-    }
-    calendar.appendChild(thead);
+      const nameInput = document.getElementById("nameInput");
+      nameInput.value = localStorage.getItem(`${roomName}UserName`) || "";
+      nameInput.oninput = () => localStorage.setItem(`${roomName}UserName`, nameInput.value);
 
-    const tbody = document.createElement('tbody');
-    for (let h = 9; h <= 20; h++) {
-      for (let m = 0; m < 60; m += 30) {
-        const tr = document.createElement('tr');
-        const tdTime = document.createElement('td');
-        tdTime.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        tr.appendChild(tdTime);
+      document.getElementById("sendBtn").onclick = () => {
+        const text = document.getElementById("chatInput").value.trim();
+        if (nameInput.value && text) push(ref(db, `${roomName}/chat`), { name: nameInput.value, text, time: Date.now() });
+        document.getElementById("chatInput").value = "";
+      };
 
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(monday);
-          d.setDate(monday.getDate() + i);
-          const ymd = formatDate(d);
-          const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-          const key = `${ymd}_${timeStr}`;
-          const td = document.createElement('td');
-          td.dataset.key = key;
+      onValue(ref(db, `${roomName}/chat`), (s) => {
+        const div = document.getElementById("chatMessages");
+        div.innerHTML = "";
+        s.forEach(c => { 
+          const m = c.val(); 
+          div.innerHTML += `<p style="margin:4px 0;"><strong>${escapeHtml(m.name)}</strong>: ${linkify(escapeHtml(m.text))}</p>`; 
+        });
+        div.scrollTop = div.scrollHeight;
+      });
 
-          if (d.getDay() === 0 || d.getDay() === 6) td.classList.add('weekend');
-          if (holidays[ymd]) td.classList.add('holiday');
+      onValue(ref(db, roomName), (snapshot) => {
+        const data = snapshot.val() || {};
+        const playerMaster = data.playerMaster || {};
+        const shogiGames = data.shogiGames || {};
 
-          td.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (selectedCells.has(key)) {
-              selectedCells.delete(key);
-              td.classList.remove('selected');
-            } else {
-              selectedCells.add(key);
-              td.classList.add('selected');
+        // 参加者名簿の描画
+        const playerListBody = document.getElementById("playerListBody");
+        playerListBody.innerHTML = "";
+        const currentPlayers = [];
+        let pIdx = 1;
+        Object.keys(playerMaster).forEach(id => {
+          const name = playerMaster[id].name || "";
+          if (name) currentPlayers.push(name);
+          playerListBody.innerHTML += `<tr>
+            <td class="admin-only" style="${isAdmin ? 'display:table-cell' : 'display:none'}"><input type="checkbox" class="master-del-check" value="${id}"></td>
+            <td>${pIdx++}</td>
+            <td><input type="text" value="${escapeHtml(name)}" onchange="updateMaster('${id}', this.value)"></td>
+          </tr>`;
+        });
+        currentPlayers.sort();
+
+        // 対局一覧の描画
+        const shogiBody = document.getElementById("shogiBody");
+        shogiBody.innerHTML = "";
+        const games = [];
+        let gIdx = 1;
+        Object.keys(shogiGames).forEach(id => {
+          const g = { id, no: gIdx++, ...shogiGames[id] };
+          games.push(g);
+          let opts = (val) => `<option value="">-</option>` + currentPlayers.map(n => `<option value="${escapeHtml(n)}" ${val===n?'selected':''}>${escapeHtml(n)}</option>`).join("");
+          const gameUrl = GAME_BASE_URL + g.no;
+          shogiBody.innerHTML += `<tr>
+            <td class="admin-only" style="${isAdmin ? 'display:table-cell' : 'display:none'}"><input type="checkbox" class="del-check" value="${id}"></td>
+            <td class="col-no"><a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="game-link">${g.no}</a></td>
+            <td class="col-player"><select onchange="updateGame('${id}','p1',this.value)">${opts(g.p1)}</select></td>
+            <td class="col-player"><select onchange="updateGame('${id}','p2',this.value)">${opts(g.p2)}</select></td>
+            <td class="col-result"><select onchange="updateGame('${id}','result',this.value)">
+              <option value="-" ${g.result==='-'?'selected':''}>-</option>
+              <option value="○" ${g.result==='○'?'selected':''}>先勝</option>
+              <option value="×" ${g.result==='×'?'selected':''}>後勝</option>
+            </select></td>
+          </tr>`;
+        });
+        renderMatrix(currentPlayers, games);
+      });
+
+      window.updateMaster = (id, name) => update(ref(db, `${roomName}/playerMaster/${id}`), { name });
+      window.updateGame = (id, f, v) => update(ref(db, `${roomName}/shogiGames/${id}`), { [f]: v });
+      
+      function renderMatrix(players, games) {
+        const head = document.getElementById("matrixHeader");
+        const body = document.getElementById("matrixBody");
+        head.innerHTML = "<tr><th></th>" + players.map(p => `<th>${escapeHtml(p)}</th>`).join("") + "</tr>";
+        body.innerHTML = players.map(rowP => {
+          let row = `<tr><td class="row-label">${escapeHtml(rowP)}</td>`;
+          players.forEach(colP => {
+            if (rowP === colP) row += `<td class="matrix-diagonal"></td>`;
+            else {
+              const m = games.filter(g => (g.p1===rowP && g.p2===colP) || (g.p1===colP && g.p2===rowP));
+              const res = m.map(g => {
+                if (!g.result || g.result === "-") return null;
+                let sym = (g.p1===rowP) ? (g.result==="○"?"○":"×") : (g.result==="○"?"×":"○");
+                const gameUrl = GAME_BASE_URL + g.no;
+                return `<a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="${sym==="○"?"win-text":"lose-text"}" style="text-decoration:none;">${g.no}:${sym}</a>`;
+              }).filter(r=>r).join("、");
+              row += `<td>${res}</td>`;
             }
           });
-
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
+          return row + "</tr>";
+        }).join("");
       }
-    }
-    calendar.appendChild(tbody);
-    updateScheduleTable();
-  }
 
-  async function updateScheduleTable() {
-    const monday = getMonday(new Date());
-    monday.setDate(monday.getDate() + currentWeekOffset * 7);
-    const schedulesRef = ref(db, `${basePath}/schedules`);
-    const snapshot = await get(schedulesRef);
-    const schedules = snapshot.exists() ? snapshot.val() : {};
+      document.getElementById("addRowBtn").onclick = () => push(ref(db, `${roomName}/shogiGames`), { p1: "", p2: "", result: "-" });
+      document.getElementById("addPlayerBtn").onclick = () => push(ref(db, `${roomName}/playerMaster`), { name: "" });
 
-    const tds = calendar.querySelectorAll('tbody td[data-key]');
-    tds.forEach(td => {
-      const key = td.dataset.key;
-      const data = schedules[key] || {};
-      td.innerHTML = '';
-
-      let hasA = false, hasB = false;
-      if (data.A) {
-        const divA = document.createElement('div');
-        divA.textContent = `A: ${data.A}`;
-        divA.classList.add('userA');
-        td.appendChild(divA);
-        if (data.A === '○') hasA = true;
-      }
-      if (data.B) {
-        const divB = document.createElement('div');
-        divB.textContent = `B: ${data.B}`;
-        divB.classList.add('userB');
-        td.appendChild(divB);
-        if (data.B === '○') hasB = true;
-      }
-      td.classList.toggle('both', hasA && hasB);
+      document.getElementById("listDelBtn").onclick = async () => {
+        const c = document.querySelectorAll(".del-check:checked");
+        if (c.length && confirm("削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/shogiGames/${x.value}`));
+      };
+      document.getElementById("delPlayerBtn").onclick = async () => {
+        const c = document.querySelectorAll(".master-del-check:checked");
+        if (c.length && confirm("削除しますか？")) for (const x of c) await remove(ref(db, `${roomName}/playerMaster/${x.value}`));
+      };
+      document.getElementById("chatClearBtn").onclick = () => confirm("クリアしますか？") && remove(ref(db, `${roomName}/chat`));
+      document.getElementById("masterDeleteBtn").onclick = async () => {
+        if (confirm("全リセットしますか？")) { await remove(ref(db, roomName)); location.reload(); }
+      };
     });
-  }
+  </script>
+</head>
+<body>
+  <h1>遠タメ大会</h1>
 
-  async function applyToSelectedCells(value) {
-    if (selectedCells.size === 0) return;
-    const updates = {};
-    selectedCells.forEach(key => {
-      updates[`${basePath}/schedules/${key}/${currentUser}`] = value;
-    });
-    await update(ref(db), updates);
-    selectedCells.clear();
-  }
+  <div class="container">参加者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
+  
+  <div class="container">
+    <h2>対局チャット</h2>
+    <div id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput">
+      <button id="sendBtn">送信</button>
+      <button id="chatClearBtn" class="admin-only">全消去</button>
+    </div>
+  </div>
 
-  async function clearSelectedCells() {
-    if (selectedCells.size === 0) return;
-    const updates = {};
-    selectedCells.forEach(key => {
-      updates[`${basePath}/schedules/${key}/${currentUser}`] = null;
-    });
-    await update(ref(db), updates);
-    selectedCells.clear();
-  }
+  <div class="container">
+    <h2>参加者名簿</h2>
+    <label class="note-label">※81道場IDを入力してください</label>
+    <table class="shogi-table">
+      <thead>
+        <tr>
+          <th class="admin-only col-check">選</th>
+          <th class="col-no">No</th>
+          <th>名前</th>
+        </tr>
+      </thead>
+      <tbody id="playerListBody"></tbody>
+    </table>
+    <button id="addPlayerBtn" class="add-row-btn" style="background-color:#4caf50;">参加者を追加</button>
+    <button id="delPlayerBtn" class="list-del-btn admin-only">選択した参加者を削除</button>
+  </div>
 
-  async function clearAllData() {
-    if (!confirm('本当に全てのデータを削除しますか？')) return;
-    await remove(ref(db, `${basePath}/schedules`));
-    await remove(ref(db, `${basePath}/chatLog`));
-    selectedCells.clear();
-  }
+  <div class="container">
+    <h2>対局一覧</h2>
+    <table class="shogi-table">
+      <thead>
+        <tr>
+          <th class="admin-only col-check">選</th>
+          <th class="col-no">No</th>
+          <th class="col-player">先手（▲）</th>
+          <th class="col-player">後手（△）</th>
+          <th class="col-result">結果</th>
+        </tr>
+      </thead>
+      <tbody id="shogiBody"></tbody>
+    </table>
+    <button id="addRowBtn" class="add-row-btn">新しい対局を追加</button>
+    <button id="listDelBtn" class="list-del-btn admin-only">選択した対局を削除</button>
+  </div>
 
-  async function sendMessage() {
-    const text = chatInput.value.trim();
-    if (!text) return;
-    const userName = currentUser;
-    const newMsgRef = ref(db, `${basePath}/chatLog`);
-    const snapshot = await get(newMsgRef);
-    const chatData = snapshot.exists() ? snapshot.val() : [];
-    chatData.push({ user: currentUser, name: userName, text, time: new Date().toISOString() });
-    await set(newMsgRef, chatData);
-    chatInput.value = '';
-  }
+  <div class="container">
+    <h2>リーグ結果表</h2>
+    <div class="matrix-wrapper">
+      <table class="matrix-table"><thead id="matrixHeader"></thead><tbody id="matrixBody"></tbody></table>
+    </div>
+  </div>
 
-  function renderChat(chatData) {
-    chatLog.innerHTML = '';
-    chatData.slice(-100).forEach(entry => {
-      const div = document.createElement('div');
-      div.classList.add('chat-message');
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = `${entry.name}: `;
-      nameSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
-      nameSpan.style.fontWeight = 'bold';
-
-      const textSpan = document.createElement('span');
-      textSpan.textContent = entry.text;
-      textSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
-
-      div.appendChild(nameSpan);
-      div.appendChild(textSpan);
-      chatLog.appendChild(div);
-    });
-    chatLog.scrollTop = chatLog.scrollHeight;
-  }
-
-  userSelect.addEventListener('change', e => {
-    currentUser = e.target.value;
-  });
-  userANameInput.addEventListener('input', renderCalendar);
-  userBNameInput.addEventListener('input', renderCalendar);
-  btnMarkOk.addEventListener('click', () => applyToSelectedCells('○'));
-  btnMarkNo.addEventListener('click', () => applyToSelectedCells('×'));
-  btnClearCell.addEventListener('click', clearSelectedCells);
-  btnClearAll.addEventListener('click', async () => {
-    await clearAllData();
-    renderCalendar();
-    renderChat([]);
-  });
-  btnPrevWeek.addEventListener('click', () => {
-    currentWeekOffset--;
-    renderCalendar();
-  });
-  btnToday.addEventListener('click', () => {
-    currentWeekOffset = 0;
-    renderCalendar();
-  });
-  btnNextWeek.addEventListener('click', () => {
-    currentWeekOffset++;
-    renderCalendar();
-  });
-  btnSend.addEventListener('click', sendMessage);
-
-  onValue(ref(db, `${basePath}/schedules`), snapshot => updateScheduleTable());
-  onValue(ref(db, `${basePath}/chatLog`), snapshot => {
-    const chatData = snapshot.exists() ? snapshot.val() : [];
-    renderChat(chatData);
-  });
-
-  fetchHolidays();
-  renderCalendar();
-
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('td')) {
-      selectedCells.forEach(key => {
-        const td = calendar.querySelector(`td[data-key="${key}"]`);
-        if (td) td.classList.remove('selected');
-      });
-      selectedCells.clear();
-    }
-  });
-</script>
-
+  <div class="master-delete-area admin-only">
+    <button id="masterDeleteBtn">全データ一括削除</button>
+  </div>
 </body>
 </html>
