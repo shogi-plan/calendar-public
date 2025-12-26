@@ -225,9 +225,14 @@ const signalingRef = ref(db, `${roomName}/signaling`);
 let currentUser = localStorage.getItem(`${roomName}_currentUser`) || '';
 const userPromptModal = document.getElementById('userPromptModal');
 function checkUserSelected() {
-  if (currentUser === 'A' || currentUser === 'B') return true;
-  userPromptModal.style.display = 'flex';
-  return false;
+  // currentUserが空文字、null、未定義、または"未選択"の場合
+  if (!currentUser || currentUser === "" || currentUser === "未選択") {
+    // 自作ダイアログを強制表示
+    userPromptModal.style.display = 'flex';
+    // ブラウザ標準のalertは一切使わない（OKボタンだけの画面を出さないため）
+    return false;
+  }
+  return true;
 }
 document.getElementById('m-btn-a').onclick = () => { localStorage.setItem(`${roomName}_currentUser`, 'A'); location.reload(); };
 document.getElementById('m-btn-b').onclick = () => { localStorage.setItem(`${roomName}_currentUser`, 'B'); location.reload(); };
@@ -1488,16 +1493,15 @@ volumeControl.addEventListener('input', () => {
 });
 
 </script>
-<div id="userPromptModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
-  <div style="background: #fff; padding: 30px; border-radius: 16px; text-align: center; width: 85%; max-width: 380px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-    <p style="font-size: 1.2em; font-weight: bold; margin-bottom: 25px; color: #333;">ユーザーを選択して下さい。</p>
-    <div style="display: flex; gap: 15px;">
-      <button id="m-btn-a" style="flex: 1; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">ユーザーA</button>
-      <button id="m-btn-b" style="flex: 1; padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">ユーザーB</button>
+<div id="userPromptModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10000; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+  <div style="background: #fff; padding: 30px; border-radius: 16px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #ccc;">
+    <p style="font-size: 1.2em; font-weight: bold; margin-bottom: 25px; color: #333; font-family: sans-serif;">ユーザーを選択して下さい</p>
+    <div style="display: flex; gap: 20px; justify-content: center;">
+      <button id="m-btn-a" style="flex: 1; min-width: 100px; padding: 15px; background: #007bff; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1.1em;">ユーザーA</button>
+      <button id="m-btn-b" style="flex: 1; min-width: 100px; padding: 15px; background: #28a745; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1.1em;">ユーザーB</button>
     </div>
-    <button onclick="document.getElementById('userPromptModal').style.display='none'" style="margin-top:20px; background:none; border:none; color:#999; cursor:pointer; text-decoration: underline;">キャンセル</button>
+    <button onclick="document.getElementById('userPromptModal').style.display='none'" style="margin-top:25px; background:none; border:none; color:#777; cursor:pointer; text-decoration: underline; font-size: 0.9em;">閉じる</button>
   </div>
 </div>
-
 </body>
 </html>
