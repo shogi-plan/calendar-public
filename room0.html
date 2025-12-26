@@ -12,8 +12,9 @@
     
     /* 共通ラベルスタイル */
     .note-label { display: block; color: #d32f2f; font-size: 0.85rem; font-weight: bold; margin-bottom: 8px; }
-    /* タイトル直下のラベルは中央寄せ */
-    .left-label { text-align: left; margin-bottom: 20px; }
+    
+    /* タイトル直下のラベル用のコンテナ（幅を合わせるため） */
+    .title-note-wrapper { max-width: 850px; margin: 0 auto 10px; }
 
     /* チャット */
     #chatMessages { height: 150px; margin-bottom: 10px; padding: 10px; background: #fafafa; border: 1px solid #eee; overflow-y: auto; font-size: 0.95rem; }
@@ -209,7 +210,9 @@
 </head>
 <body>
   <h1>遠タメ大会</h1>
-  <div class="note-label left-label">下記順番で入力おねがいします。<br>
+  
+  <div class="title-note-wrapper">
+    <div class="note-label">下記順番で入力おねがいします。<br>
 ①「参加者氏名」をに苗字を入力　例：山田<br>
 ②「対局チャット」に、グループ名と苗字と81道場IDを入力し「送信」<br>
 ③「参加者名簿」の「参加者追加」を押し、81道場IDを入力<br><br>
@@ -218,6 +221,7 @@
 ⑤対局の勝敗は対局者のどちらかが、遠タメ大会ページに戻り、「対局一覧」の対局ナンバーの左にある「結果」に入力お願いします。そうすると、リーグ結果表が更新されます。<br>
 ※使用上の不明点は、「遠タメ大会ページ」のチャット欄に書き込みください。席主が気付き次第、お返事いたします。<br>
 ※「予定調整カレンダー」の使い方はそちらのページ上部をご確認ください。</div>
+  </div>
 
   <div class="container">参加者名: <input type="text" id="nameInput" placeholder="あなたの名前"></div>
   
