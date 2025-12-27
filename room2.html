@@ -970,31 +970,31 @@ if (remoteStream) {
 // --- 初期化処理 ---
 async function initializeUsers() {
   try {
-    // 1. URLパラメータから名前を取得してFirebaseへ保存
+    // 1. URLパラメータから名前を取得
     const urlParams = new URLSearchParams(window.location.search);
     const p1 = urlParams.get('p1');
     const p2 = urlParams.get('p2');
     
-    const userNamesRef = ref(db, `${roomName}/userNames`);
-    const nameSnapshot = await get(userNamesRef); 
-    const currentNames = nameSnapshot.exists() ? nameSnapshot.val() : { A: '', B: '' };
-
-    let nameUpdates = {};
-    if (!currentNames.A && p1) nameUpdates.A = p1;
-    if (!currentNames.B && p2) nameUpdates.B = p2;
-    
-    // 名前の更新がある場合のみ実行
-    if (Object.keys(nameUpdates).length > 0) {
-      await update(userNamesRef, nameUpdates);
-    }
-
-    // パラメータが存在する場合、リスク回避のためURLから名前を消去してクリーンにする
+    // URLに名前が含まれている場合、Firebaseのデータ有無に関わらず保存を試みる
     if (p1 || p2) {
+      const userNamesRef = ref(db, `${roomName}/userNames`);
+      
+      // 直接updateをかける（データがなければ新規作成、あれば上書き）
+      // URLから来た名前を最優先する設定
+      const nameUpdates = {};
+      if (p1) nameUpdates.A = p1;
+      if (p2) nameUpdates.B = p2;
+      
+      if (Object.keys(nameUpdates).length > 0) {
+        await update(userNamesRef, nameUpdates);
+      }
+
+      // 保存が完了した直後にURLをクリーンにする
       const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
       window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
     }
 
-    // 2. 部屋のユーザー利用状況を確認
+    // 2. 部屋のユーザー利用状況（オンライン状態）を確認
     const roomUsersRef = ref(db, `${roomName}/roomUsers`);
     const roomUsersSnap = await get(roomUsersRef);
     const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
@@ -1035,7 +1035,6 @@ async function initializeUsers() {
 
 // --- DOMContentLoaded で初期化 ---
 document.addEventListener('DOMContentLoaded', async () => {
-  // 初期化（名前の取得・消去・ユーザー選定・描画）を待つ
   await initializeUsers();
 
   const chatInput = document.getElementById("chatInput");
@@ -1043,11 +1042,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (chatInput && btnSend) {
     chatInput.addEventListener("keydown", (e) => {
-      // --- Shift + Enter は改行 ---
-      if (e.key === "Enter" && e.shiftKey) {
-        return; 
-      }
-      // --- Enter（単体）で送信 ---
+      if (e.key === "Enter" && e.shiftKey) return; 
       if (e.key === "Enter") {
         e.preventDefault();   
         btnSend.click();      
