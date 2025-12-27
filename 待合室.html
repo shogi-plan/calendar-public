@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>待合室</title>
+  <style>
+    body {
+      font-family: "Yu Gothic", "Meiryo", sans-serif;
+      margin: 10px;
+      padding: 0;
+      background: #f9f9f9;
+      color: #333;
+      line-height: 1.5;
+    }
+    h1, h2 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: bold;
+      text-align: center;
+    }
+    input[type="text"] {
+      width: 90%;
+      max-width: 400px;
+      font-size: 1rem;
+      padding: 8px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      box-sizing: border-box;
+    }
+    #roomStatus {
+      max-width: 400px;
+      margin: 0 auto 20px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    #roomStatus p {
+      margin: 8px 0;
+      font-size: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #roomStatus button {
+      padding: 5px 10px;
+      font-size: 0.9rem;
+      border: none;
+      border-radius: 4px;
+      background-color: #4caf50;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    #roomStatus button:hover {
+      background-color: #45a049;
+    }
+    #chatMessages {
+      max-width: 400px;
+      height: 200px;
+      margin: 0 auto 10px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+      overflow-y: auto;
+      font-size: 1rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    /* ▼ 追加：チャット入力コンテナ（中央揃え） */
+.chat-input-area {
+  max-width: 400px;
+  margin: 0 auto;
+  display: flex;
+  gap: 6px;
+  margin-bottom: 15px;
+}
+
+/* ▼ 修正：入力欄 */
+#chatInput {
+  flex: 1;
+  font-size: 1rem;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  margin-left: 0;   /* ← 元の margin-left を消す */
+}
+
+/* ▼ 修正：ボタン（サイズ統一） */
+#sendBtn, #clearBtn {
+  flex: 0 0 80px;   /* ← 横幅を統一 */
+  font-size: 1rem;
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: white;
+}
+
+    #sendBtn {
+  background-color: #2196F3; /* ← 青い通常色を追加 */
+}
+
+#sendBtn:hover {
+  background-color: #1976D2;
+}
+
+    #clearBtn {
+      background-color: #f44336;
+    }
+    #clearBtn:hover {
+      background-color: #d32f2f;
+    }
+    @media (max-width: 480px) {
+      #chatInput, #sendBtn, #clearBtn {
+        width: 100%;
+        max-width: none;
+        margin-left: 0;
+        margin-bottom: 8px;
+      }
+      #sendBtn, #clearBtn {
+        font-size: 1.1rem;
+      }
+      #roomStatus p {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      #roomStatus button {
+        margin-top: 6px;
+        width: 100%;
+      }
+    }
+  </style>
+ <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+  import { 
+    getDatabase, ref, get, remove, update, onValue, push, runTransaction 
+  } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
+      authDomain: "calendar-chousei.firebaseapp.com",
+      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "calendar-chousei",
+      storageBucket: "calendar-chousei.firebasestorage.app",
+      messagingSenderId: "368704703397",
+      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+  };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const roomName = location.pathname.split('/').pop().replace('.html', '');
+    let myUserName = "";
+
+    let latestRoomStatusCallId = 0;
+
+    document.addEventListener("DOMContentLoaded", () => {
+  const nameInput = document.getElementById("nameInput");
+  const roomStatusDiv = document.getElementById("roomStatus");
+  const chatMessages = document.getElementById("chatMessages");
+  const chatInput = document.getElementById("chatInput");
+  const sendBtn = document.getElementById("sendBtn");  // ← 必須
+
+  const savedName = localStorage.getItem(`${roomName}UserName`);
+  if (savedName) {
+    nameInput.value = savedName;
+    myUserName = savedName;
+  }
+
+  nameInput.addEventListener("input", () => {
+    myUserName = nameInput.value.trim();
+    localStorage.setItem(`${roomName}UserName`, myUserName);
+    updateRoomStatus();
+  });
+
+  // -------- ここから Enter送信処理 --------
+  chatInput.addEventListener("keydown", async (e) => {
+  // Shift + Enter → 改行を許可
+  if (e.key === "Enter" && e.shiftKey) {
+    e.preventDefault();
+    chatInput.value += "\n";
+    return;
+  }
+
+  // Enter → 送信
+  if (e.key === "Enter") {
+    e.preventDefault();
+    await sendMessage();  // sendBtn.click()の代わりに直接関数を呼ぶ
+  }
+});
+
+      async function updateRoomStatus() {
+        const callId = ++latestRoomStatusCallId;
+        const frag = document.createDocumentFragment();
+
+        if (!myUserName) {
+          const p = document.createElement("p");
+          p.textContent = "ユーザー名を入力すると空き状況が表示されます";
+          frag.appendChild(p);
+          if (callId === latestRoomStatusCallId) {
+            roomStatusDiv.innerHTML = "";
+            roomStatusDiv.appendChild(frag);
+          }
+          return;
+        }
+
+        for (let i = 7; i <= 9; i++) {
+          if (callId !== latestRoomStatusCallId) return;
+
+          const roomUsersRef = ref(db, `room${i}/roomUsers`);
+          const roomUsersSnapshot = await get(roomUsersRef);
+
+          if (callId !== latestRoomStatusCallId) return;
+
+          const roomUsers = roomUsersSnapshot.exists() ? roomUsersSnapshot.val() : { A: false, B: false };
+
+          const isASelected = roomUsers.A === true;
+          const isBSelected = roomUsers.B === true;
+          const vacant = !isASelected || !isBSelected;
+
+          const p = document.createElement("p");
+          p.textContent = `room${i}: ${vacant ? "空きあり" : "満室"}`;
+          if (vacant) {
+            const btn = document.createElement("button");
+            btn.textContent = "入室";
+            btn.addEventListener("click", () => joinRoom(i, !isASelected ? "A" : "B"));
+            p.appendChild(btn);
+          }
+          frag.appendChild(p);
+        }
+
+        if (callId === latestRoomStatusCallId) {
+          roomStatusDiv.innerHTML = "";
+          roomStatusDiv.appendChild(frag);
+        }
+      }
+
+      async function joinRoom(num, slot) {
+  if (!myUserName || !myUserName.trim()) {
+    alert("先にユーザー名を入力してください");
+    return;
+  }
+
+  const roomRef = ref(db, `room${num}`);
+
+  try {
+    const result = await runTransaction(roomRef, (roomData) => {
+      // 初期化（安全に既存データを尊重しつつ不足を補う）
+      if (roomData == null || typeof roomData !== "object") {
+        roomData = {};
+      }
+      if (!roomData.roomUsers || typeof roomData.roomUsers !== "object") {
+        roomData.roomUsers = { A: false, B: false };
+      } else {
+        // 片方だけ存在などの歪みを補正
+        roomData.roomUsers.A = roomData.roomUsers.A === true;
+        roomData.roomUsers.B = roomData.roomUsers.B === true;
+      }
+      if (!roomData.userNames || typeof roomData.userNames !== "object") {
+        roomData.userNames = { A: "", B: "" };
+      } else {
+        if (typeof roomData.userNames.A !== "string") roomData.userNames.A = "";
+        if (typeof roomData.userNames.B !== "string") roomData.userNames.B = "";
+      }
+
+      // 既に埋まっていれば更新せず中断（committed=false になる）
+      if (roomData.roomUsers[slot] === true) {
+        return; // 変更なし
+      }
+
+      // 席確保＋名前登録を同時に行う
+      roomData.roomUsers[slot] = true;
+      roomData.userNames[slot] = myUserName;
+
+      return roomData; // これがDBに反映される
+    });
+
+    if (result.committed) {
+      window.location.href = `room${num}.html`;
+    } else {
+      alert("入室に失敗しました。他の人が先に入室しました。");
+      window.location.reload();
+    }
+  } catch (e) {
+    console.error("入室処理でエラー:", e);
+    alert("入室処理でエラーが発生しました");
+    window.location.reload();
+  }
+}
+
+      // -------- 送信処理を関数化 --------
+async function sendMessage() {
+  const text = chatInput.value.trim();
+  if (!myUserName || !text) return;
+
+  const msgRef = push(ref(db, `${roomName}/chat`));
+  await update(msgRef, { name: myUserName, text, time: Date.now() });
+
+  chatInput.value = "";
+  chatInput.focus();
+}
+
+// クリック時も同じ sendMessage() を呼ぶ
+sendBtn.addEventListener("click", sendMessage);
+
+      onValue(ref(db, `${roomName}/chat`), (snapshot) => {
+        chatMessages.innerHTML = "";
+        snapshot.forEach((child) => {
+          const { name, text } = child.val();
+          const p = document.createElement("p");
+          p.textContent = `${name}：${text}`;
+          chatMessages.appendChild(p);
+        });
+      });
+
+      // 修正：自分の名前と自分のチャットだけ削除する処理
+      document.getElementById("clearBtn").addEventListener("click", async () => {
+        if (!myUserName) return;
+
+        // ローカル保存のユーザー名を削除
+        localStorage.removeItem(`${roomName}UserName`);
+
+        // 自分が送信したチャットのみ削除
+        const chatRef = ref(db, `${roomName}/chat`);
+        const chatSnapshot = await get(chatRef);
+        chatSnapshot.forEach((child) => {
+          const msg = child.val();
+          if (msg.name === myUserName) {
+            remove(ref(db, `${roomName}/chat/${child.key}`));
+          }
+        });
+
+        // 自分のユーザー名をroomから削除
+        const userNamesRef = ref(db, `${roomName}/userNames`);
+        const userNamesSnapshot = await get(userNamesRef);
+        userNamesSnapshot.forEach((child) => {
+          if (child.val() === myUserName) {
+            remove(ref(db, `${roomName}/userNames/${child.key}`));
+          }
+        });
+
+        myUserName = "";
+        nameInput.value = "";
+        chatMessages.innerHTML = "";
+        updateRoomStatus();
+        location.reload();
+      });
+
+      updateRoomStatus();
+    });
+  </script>
+</head>
+<body>
+  <h1>待合室</h1>
+  <label>ユーザー名: <input type="text" id="nameInput" autocomplete="off" /></label>
+
+  <h2>空き状況</h2>
+  <div id="roomStatus"></div>
+
+  <h2>チャット</h2>
+  <div id="chatMessages" aria-live="polite"></div>
+  <div class="chat-input-area">
+  <input type="text" id="chatInput" placeholder="メッセージ" autocomplete="off" />
+  <button id="sendBtn">送信</button>
+  <button id="clearBtn">入力情報削除</button>
+</div>
+</body>
+</html>
