@@ -976,15 +976,22 @@ async function initializeUsers() {
     const p2 = urlParams.get('p2');
     
     const userNamesRef = ref(db, `${roomName}/userNames`);
-    const nameSnapshot = await get(userNamesRef); // 名前を重複させないよう変数名を変更
+    const nameSnapshot = await get(userNamesRef); 
     const currentNames = nameSnapshot.exists() ? nameSnapshot.val() : { A: '', B: '' };
 
     let nameUpdates = {};
     if (!currentNames.A && p1) nameUpdates.A = p1;
     if (!currentNames.B && p2) nameUpdates.B = p2;
     
+    // 名前の更新がある場合のみ実行
     if (Object.keys(nameUpdates).length > 0) {
       await update(userNamesRef, nameUpdates);
+    }
+
+    // パラメータが存在する場合、リスク回避のためURLから名前を消去してクリーンにする
+    if (p1 || p2) {
+      const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+      window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
     }
 
     // 2. 部屋のユーザー利用状況を確認
@@ -1028,7 +1035,7 @@ async function initializeUsers() {
 
 // --- DOMContentLoaded で初期化 ---
 document.addEventListener('DOMContentLoaded', async () => {
-  // 初期化（名前の取得・ユーザー選定・描画）を待つ
+  // 初期化（名前の取得・消去・ユーザー選定・描画）を待つ
   await initializeUsers();
 
   const chatInput = document.getElementById("chatInput");
@@ -1036,9 +1043,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (chatInput && btnSend) {
     chatInput.addEventListener("keydown", (e) => {
+      // --- Shift + Enter は改行 ---
       if (e.key === "Enter" && e.shiftKey) {
         return; 
       }
+      // --- Enter（単体）で送信 ---
       if (e.key === "Enter") {
         e.preventDefault();   
         btnSend.click();      
