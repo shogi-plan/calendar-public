@@ -325,10 +325,7 @@ let callStatus = 'none';
           td.addEventListener('click', (e) => {
           if (!checkUserSelected()) return;
   e.stopPropagation();
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
+  if (!checkUserSelected()) return; // ← checkUserSelectedに置き換え
   if (selectedCells.has(key)) {
     selectedCells.delete(key);
     td.classList.remove('selected');
@@ -972,38 +969,68 @@ if (remoteStream) {
 
 // --- 初期化処理 ---
 async function initializeUsers() {
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const roomUsersSnap = await get(roomUsersRef);
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
+  try {
+    // 1. URLパラメータから名前を取得
+    const urlParams = new URLSearchParams(window.location.search);
+    const p1 = urlParams.get('p1');
+    const p2 = urlParams.get('p2');
+    
+    // URLに名前が含まれている場合、Firebaseのデータ有無に関わらず保存を試みる
+    if (p1 || p2) {
+      const userNamesRef = ref(db, `${roomName}/userNames`);
+      
+      // 直接updateをかける（データがなければ新規作成、あれば上書き）
+      // URLから来た名前を最優先する設定
+      const nameUpdates = {};
+      if (p1) nameUpdates.A = p1;
+      if (p2) nameUpdates.B = p2;
+      
+      if (Object.keys(nameUpdates).length > 0) {
+        await update(userNamesRef, nameUpdates);
+      }
 
-  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
-  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
-
-  if (savedUser) {
-    // 保存済みユーザーを維持
-    currentUser = savedUser;
-  } else {
-    // currentUser 未設定時のみ自動割り当て
-    if (roomUsers.A && !roomUsers.B) {
-      currentUser = 'A';
-    } else if (roomUsers.B && !roomUsers.A) {
-      currentUser = 'B';
-    } else if (roomUsers.A && roomUsers.B) {
-      currentUser = 'B'; // 両方 true の場合は B を優先
-    } else {
-      currentUser = ''; // 未選択
+      // 保存が完了した直後にURLをクリーンにする
+      const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+      window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
     }
 
-    if (currentUser) {
-      localStorage.setItem(`${roomName}_currentUser`, currentUser);
+    // 2. 部屋のユーザー利用状況（オンライン状態）を確認
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    const roomUsersSnap = await get(roomUsersRef);
+    const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
+
+    // 3. ユーザー選択の復元または自動割り当て
+    const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+
+    if (savedUser) {
+      currentUser = savedUser;
     } else {
-      localStorage.removeItem(`${roomName}_currentUser`);
+      if (roomUsers.A && !roomUsers.B) {
+        currentUser = 'A';
+      } else if (roomUsers.B && !roomUsers.A) {
+        currentUser = 'B';
+      } else if (roomUsers.A && roomUsers.B) {
+        currentUser = 'B'; 
+      } else {
+        currentUser = '';
+      }
+
+      if (currentUser) {
+        localStorage.setItem(`${roomName}_currentUser`, currentUser);
+      } else {
+        localStorage.removeItem(`${roomName}_currentUser`);
+      }
     }
+
+    // 4. UIの更新とカレンダーの描画を確実に実行
+    updateUserSelectDisplay();
+    renderCalendar(); 
+
+  } catch (error) {
+    console.error("Initialization failed:", error);
+    // エラーが起きても描画だけは試みる
+    renderCalendar();
   }
-
-  // --- ドロップダウン選択肢を常に A/B にして更新 ---
-  updateUserSelectDisplay();
 }
 
 // --- DOMContentLoaded で初期化 ---
@@ -1013,18 +1040,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const chatInput = document.getElementById("chatInput");
   const btnSend = document.getElementById("btn-send");
 
-  chatInput.addEventListener("keydown", (e) => {
-    // --- Shift + Enter は改行 ---
-    if (e.key === "Enter" && e.shiftKey) {
-      return; // 普通に改行させるので何もしない
-    }
-
-    // --- Enter（単体）で送信 ---
-    if (e.key === "Enter") {
-      e.preventDefault();   // 改行を抑制
-      btnSend.click();      // ボタンクリックと同じ動作
-    }
-  });
+  if (chatInput && btnSend) {
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.shiftKey) return; 
+      if (e.key === "Enter") {
+        e.preventDefault();   
+        btnSend.click();      
+      }
+    });
+  }
 });
 
 initializeUsers();
@@ -1209,10 +1233,7 @@ if (localAudio) {
 });
 
 btnCallEnd.addEventListener('click', async () => {
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
+  if (!checkUserSelected()) return; // ← checkUserSelectedに置き換え
 
   try {
     const callStatusSnap = await get(callStatusRef);
