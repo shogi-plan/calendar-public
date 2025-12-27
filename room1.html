@@ -325,10 +325,7 @@ let callStatus = 'none';
           td.addEventListener('click', (e) => {
           if (!checkUserSelected()) return;
   e.stopPropagation();
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
+  if (!checkUserSelected()) return; // ← checkUserSelectedに置き換え
   if (selectedCells.has(key)) {
     selectedCells.delete(key);
     td.classList.remove('selected');
@@ -1209,10 +1206,7 @@ if (localAudio) {
 });
 
 btnCallEnd.addEventListener('click', async () => {
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
+  if (!checkUserSelected()) return; // ← checkUserSelectedに置き換え
 
   try {
     const callStatusSnap = await get(callStatusRef);
