@@ -325,10 +325,7 @@ let callStatus = 'none';
           td.addEventListener('click', (e) => {
           if (!checkUserSelected()) return;
   e.stopPropagation();
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
+  if (!checkUserSelected()) return; // ← checkUserSelectedに置き換え
   if (selectedCells.has(key)) {
     selectedCells.delete(key);
     td.classList.remove('selected');
@@ -972,59 +969,91 @@ if (remoteStream) {
 
 // --- 初期化処理 ---
 async function initializeUsers() {
-  const roomUsersRef = ref(db, `${roomName}/roomUsers`);
-  const roomUsersSnap = await get(roomUsersRef);
-  const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
+  try {
+    // 1. URLパラメータから名前を取得してFirebaseへ保存
+    const urlParams = new URLSearchParams(window.location.search);
+    const p1 = urlParams.get('p1');
+    const p2 = urlParams.get('p2');
+    
+    const userNamesRef = ref(db, `${roomName}/userNames`);
+    const nameSnapshot = await get(userNamesRef); 
+    const currentNames = nameSnapshot.exists() ? nameSnapshot.val() : { A: '', B: '' };
 
-  const savedUser = localStorage.getItem(`${roomName}_currentUser`);
-  const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
-  const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
-
-  if (savedUser) {
-    // 保存済みユーザーを維持
-    currentUser = savedUser;
-  } else {
-    // currentUser 未設定時のみ自動割り当て
-    if (roomUsers.A && !roomUsers.B) {
-      currentUser = 'A';
-    } else if (roomUsers.B && !roomUsers.A) {
-      currentUser = 'B';
-    } else if (roomUsers.A && roomUsers.B) {
-      currentUser = 'B'; // 両方 true の場合は B を優先
-    } else {
-      currentUser = ''; // 未選択
+    let nameUpdates = {};
+    if (!currentNames.A && p1) nameUpdates.A = p1;
+    if (!currentNames.B && p2) nameUpdates.B = p2;
+    
+    // 名前の更新がある場合のみ実行
+    if (Object.keys(nameUpdates).length > 0) {
+      await update(userNamesRef, nameUpdates);
     }
 
-    if (currentUser) {
-      localStorage.setItem(`${roomName}_currentUser`, currentUser);
-    } else {
-      localStorage.removeItem(`${roomName}_currentUser`);
+    // パラメータが存在する場合、リスク回避のためURLから名前を消去してクリーンにする
+    if (p1 || p2) {
+      const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+      window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
     }
+
+    // 2. 部屋のユーザー利用状況を確認
+    const roomUsersRef = ref(db, `${roomName}/roomUsers`);
+    const roomUsersSnap = await get(roomUsersRef);
+    const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
+
+    // 3. ユーザー選択の復元または自動割り当て
+    const savedUser = localStorage.getItem(`${roomName}_currentUser`);
+
+    if (savedUser) {
+      currentUser = savedUser;
+    } else {
+      if (roomUsers.A && !roomUsers.B) {
+        currentUser = 'A';
+      } else if (roomUsers.B && !roomUsers.A) {
+        currentUser = 'B';
+      } else if (roomUsers.A && roomUsers.B) {
+        currentUser = 'B'; 
+      } else {
+        currentUser = '';
+      }
+
+      if (currentUser) {
+        localStorage.setItem(`${roomName}_currentUser`, currentUser);
+      } else {
+        localStorage.removeItem(`${roomName}_currentUser`);
+      }
+    }
+
+    // 4. UIの更新とカレンダーの描画を確実に実行
+    updateUserSelectDisplay();
+    renderCalendar(); 
+
+  } catch (error) {
+    console.error("Initialization failed:", error);
+    // エラーが起きても描画だけは試みる
+    renderCalendar();
   }
-
-  // --- ドロップダウン選択肢を常に A/B にして更新 ---
-  updateUserSelectDisplay();
 }
 
 // --- DOMContentLoaded で初期化 ---
 document.addEventListener('DOMContentLoaded', async () => {
+  // 初期化（名前の取得・消去・ユーザー選定・描画）を待つ
   await initializeUsers();
 
   const chatInput = document.getElementById("chatInput");
   const btnSend = document.getElementById("btn-send");
 
-  chatInput.addEventListener("keydown", (e) => {
-    // --- Shift + Enter は改行 ---
-    if (e.key === "Enter" && e.shiftKey) {
-      return; // 普通に改行させるので何もしない
-    }
-
-    // --- Enter（単体）で送信 ---
-    if (e.key === "Enter") {
-      e.preventDefault();   // 改行を抑制
-      btnSend.click();      // ボタンクリックと同じ動作
-    }
-  });
+  if (chatInput && btnSend) {
+    chatInput.addEventListener("keydown", (e) => {
+      // --- Shift + Enter は改行 ---
+      if (e.key === "Enter" && e.shiftKey) {
+        return; 
+      }
+      // --- Enter（単体）で送信 ---
+      if (e.key === "Enter") {
+        e.preventDefault();   
+        btnSend.click();      
+      }
+    });
+  }
 });
 
 initializeUsers();
@@ -1209,10 +1238,7 @@ if (localAudio) {
 });
 
 btnCallEnd.addEventListener('click', async () => {
-  if (!currentUser) {
-    alert('ユーザーを選択してください');
-    return;
-  }
+  if (!checkUserSelected()) return; // ← checkUserSelectedに置き換え
 
   try {
     const callStatusSnap = await get(callStatusRef);
