@@ -142,7 +142,8 @@
         const opts = (val) => `<option value="">-</option>` + currentPlayers.map(n => `<option value="${escapeHtml(n)}" ${val===n?'selected':''}>${escapeHtml(n)}</option>`).join("");
         const rowBgColor = (g.result && g.result !== "-") ? 'style="background-color: #a9a9a9;"' : "";
         const isLocked = g.isLocked === true;
-        const gameUrl = GAME_BASE_URL + g.no;
+        // 名前を安全にURLに含めるための処理を追加
+        const gameUrl = `${GAME_BASE_URL}${g.no}?p1=${encodeURIComponent(g.p1 || '')}&p2=${encodeURIComponent(g.p2 || '')}`;
 
         shogiBody.innerHTML += `<tr ${rowBgColor}>
           <td class="admin-only" style="${isAdmin ? 'display:table-cell' : 'display:none'}"><input type="checkbox" class="del-check" value="${id}"></td>

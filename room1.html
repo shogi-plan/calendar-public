@@ -972,7 +972,24 @@ async function initializeUsers() {
   const roomUsersRef = ref(db, `${roomName}/roomUsers`);
   const roomUsersSnap = await get(roomUsersRef);
   const roomUsers = roomUsersSnap.exists() ? roomUsersSnap.val() : { A: false, B: false };
+  // --- 追加：URLパラメータから名前を取得してFirebaseへ保存 ---
+  const urlParams = new URLSearchParams(window.location.search);
+  const p1 = urlParams.get('p1');
+  const p2 = urlParams.get('p2');
+  
+  const userNamesRef = ref(db, `${roomName}/userNames`);
+  const userNamesSnap = await get(userNamesRef);
+  const currentNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
 
+  // カレンダー側の名前が空で、URLに名前がある場合のみ自動セット
+  let nameUpdates = {};
+  if (!currentNames.A && p1) nameUpdates.A = p1;
+  if (!currentNames.B && p2) nameUpdates.B = p2;
+  
+  if (Object.keys(nameUpdates).length > 0) {
+    await update(userNamesRef, nameUpdates);
+  }
+  // --- ここまで追加 ---
   const savedUser = localStorage.getItem(`${roomName}_currentUser`);
   const userNamesSnap = await get(ref(db, `${roomName}/userNames`));
   const userNames = userNamesSnap.exists() ? userNamesSnap.val() : { A: '', B: '' };
