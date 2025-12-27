@@ -13,7 +13,7 @@
     /* 共通ラベルスタイル */
     .note-label { display: block; color: #d32f2f; font-size: 0.85rem; font-weight: bold; margin-bottom: 8px; }
     
-    /* タイトル直下のラベル用のコンテナ（幅を合わせるため） */
+    /* タイトル直下のラベル用のコンテナ */
     .title-note-wrapper { max-width: 850px; margin: 0 auto 10px; }
 
     /* チャット */
@@ -144,7 +144,11 @@
           games.push(g);
           let opts = (val) => `<option value="">-</option>` + currentPlayers.map(n => `<option value="${escapeHtml(n)}" ${val===n?'selected':''}>${escapeHtml(n)}</option>`).join("");
           const gameUrl = GAME_BASE_URL + g.no;
-          shogiBody.innerHTML += `<tr>
+          
+          // 結果がハイフン以外なら背景色をグレーにする
+          const rowBgColor = (g.result && g.result !== "-") ? 'style="background-color: #a9a9a9;"' : "";
+
+          shogiBody.innerHTML += `<tr ${rowBgColor}>
             <td class="admin-only" style="${isAdmin ? 'display:table-cell' : 'display:none'}"><input type="checkbox" class="del-check" value="${id}"></td>
             <td class="col-no"><a href="${gameUrl}" target="_blank" rel="noopener noreferrer" class="game-link">${g.no}</a></td>
             <td class="col-player"><select onchange="updateGame('${id}','p1',this.value)">${opts(g.p1)}</select></td>
