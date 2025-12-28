@@ -300,6 +300,20 @@ let callStatus = 'none';
 
       const th = document.createElement('th');
       th.innerHTML = `${mm}/${dd}<br>(${weekdays[d.getDay()]})`;
+      th.style.cursor = 'pointer';
+
+      // 列選択イベントの追加
+      const targetYmd = ymd;
+      th.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!checkUserSelected()) return;
+        const targetTds = calendar.querySelectorAll(`td[data-key^="${targetYmd}_"]`);
+        const allSel = Array.from(targetTds).every(td => selectedCells.has(td.dataset.key));
+        targetTds.forEach(td => {
+          if (allSel) { selectedCells.delete(td.dataset.key); td.classList.remove('selected'); }
+          else { selectedCells.add(td.dataset.key); td.classList.add('selected'); }
+        });
+      });
 
       if (d.getDay() === 0 || d.getDay() === 6) th.classList.add('weekend');
       if (holidays[ymd]) {
@@ -314,9 +328,24 @@ let callStatus = 'none';
     const tbody = document.createElement('tbody');
     for (let h = 9; h <= 22; h++) {
       for (let m = 0; m < 60; m += 30) {
-        const tr = document.createElement('tr');
+                const tr = document.createElement('tr');
         const tdTime = document.createElement('td');
-        tdTime.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        tdTime.textContent = timeStr;
+        tdTime.style.cursor = 'pointer';
+
+        // 行選択イベントの追加
+        tdTime.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!checkUserSelected()) return;
+          const targetTds = calendar.querySelectorAll(`td[data-key$="_${timeStr}"]`);
+          const allSel = Array.from(targetTds).every(td => selectedCells.has(td.dataset.key));
+          targetTds.forEach(td => {
+            if (allSel) { selectedCells.delete(td.dataset.key); td.classList.remove('selected'); }
+            else { selectedCells.add(td.dataset.key); td.classList.add('selected'); }
+          });
+        });
+
         tr.appendChild(tdTime);
 
         for (let i = 0; i < 7; i++) {
