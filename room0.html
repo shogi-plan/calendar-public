@@ -195,7 +195,7 @@
         div.innerHTML = "";
         s.forEach(c => { 
           const m = c.val(); 
-          div.innerHTML += `<p style="margin:4px 0;"><strong>${escapeHtml(m.name)}</strong>: ${linkify(escapeHtml(m.text))}</p>`; 
+          div.innerHTML += `<p style="margin:4px 0;"><strong style="color: #1976d2;">${escapeHtml(m.name)}</strong>: ${linkify(escapeHtml(m.text))}</p>`; 
         });
         div.scrollTop = div.scrollHeight;
       });
@@ -210,7 +210,27 @@
         if (name && text) push(ref(db, `${roomName}/chat`), { name, text, time: Date.now() });
         document.getElementById("chatInput").value = "";
       };
+      // モーダル表示関数
+const openRoomModal = (msg) => {
+  const modal = document.getElementById("roomCustomModal");
+  document.getElementById("modalMsgText").textContent = msg;
+  modal.style.display = "flex";
+};
 
+// OKボタンで閉じて名前入力へ誘導
+document.getElementById("modalOkBtn").onclick = () => {
+  document.getElementById("roomCustomModal").style.display = "none";
+  document.getElementById("nameInput").focus();
+};
+
+// チャット入力欄フォーカス時のチェック
+document.getElementById("chatInput").onfocus = () => {
+  const name = document.getElementById("nameInput").value.trim();
+  if (!name) {
+    openRoomModal("参加者名を入力してください。");
+    document.getElementById("chatInput").blur(); // 入力を一時的にブロック
+  }
+};
       document.getElementById("chatClearBtn").onclick = () => {
         if (confirm("チャットを全消去しますか？")) remove(ref(db, `${roomName}/chat`));
       };
@@ -354,5 +374,17 @@
   <div class="master-delete-area admin-only">
     <button id="masterDeleteBtn">全データ一括削除</button>
   </div>
+    <div id="roomCustomModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; justify-content:center; align-items:center;">
+    <div style="background:#fff; border:2px solid #5d4037; border-radius:12px; max-width:320px; width:85%; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+      <div style="background:#5d4037; color:#fff; padding:12px; text-align:center; font-weight:bold;">通知</div>
+      <div style="padding:20px; text-align:center; color:#333; font-size:0.95rem; line-height:1.5;">
+        <p id="modalMsgText"></p>
+      </div>
+      <div style="padding:10px 15px 15px; text-align:center;">
+        <button id="modalOkBtn" style="background:#795548; color:#fff; border:none; padding:10px 0; width:100%; border-radius:6px; font-weight:bold; cursor:pointer;">OK</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
