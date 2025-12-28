@@ -946,19 +946,30 @@ if (remoteStream) {
   chatInput.value = '';
 }
 
-  function renderChat(chatData) {
+    function renderChat(chatData) {
     chatLog.innerHTML = '';
+    
+    // 現在入力欄に入っている名前を取得（AさんとBさんの名前）
+    const nameA = userANameInput.value.trim() || 'ユーザーA';
+    const nameB = userBNameInput.value.trim() || 'ユーザーB';
+
     chatData.slice(-100).forEach(entry => {
       const div = document.createElement('div');
       div.classList.add('chat-message');
+      
+      // 1. 名前の表示部分 (AならnameA、BならnameBを表示)
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = `${entry.name}: `;
-      nameSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
+      const actualName = (entry.user === 'A') ? nameA : nameB;
+      nameSpan.textContent = `${actualName}: `;
+      
+      // 2. スタイル設定 (青字太字に統一)
+      nameSpan.style.color = '#1976d2'; 
       nameSpan.style.fontWeight = 'bold';
 
+      // 3. メッセージ本文
       const textSpan = document.createElement('span');
       textSpan.textContent = entry.text;
-      textSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
+      textSpan.style.color = '#333'; // 本文は読みやすいように濃いグレー
 
       div.appendChild(nameSpan);
       div.appendChild(textSpan);
