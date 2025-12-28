@@ -60,6 +60,14 @@
     border: 3px solid orange !important;
     background-color: inherit !important;
   }
+  /* 確定時の太い赤枠 */
+td.confirmed {
+  outline: 4px solid red !important;
+  outline-offset: -4px; /* 枠線を内側に寄せて隣のセルと重ならないようにする */
+  z-index: 5;
+  position: relative;
+}
+
   td.both {
     background-color: #ccffcc !important;
   }
@@ -127,7 +135,8 @@
 <div class="controls">
   <button id="btn-mark-ok">選択セルに○</button>
   <button id="btn-mark-no">選択セルに×</button>
-  <button id="btn-clear-cell">選択セルを削除</button>
+<button id="btn-mark-confirm" style="background-color: #ffc107; color: #000; font-weight: bold;">選択セルを確定</button>
+<button id="btn-clear-cell">選択セルを削除</button>
   <button id="btn-clear-all">退室</button>
 </div>
 
@@ -356,6 +365,14 @@ let callStatus = 'none';
       const key = td.dataset.key;
       const data = schedules[key] || {};
       td.innerHTML = '';
+      
+// 1. 赤枠（確定）の判定
+  // 両者が「○」であり、かつ confirmed フラグが true の場合のみクラス付与
+  if (data.A === '○' && data.B === '○' && data.confirmed === true) {
+    td.classList.add('confirmed');
+  } else {
+    td.classList.remove('confirmed');
+  }
 
       let hasA = false, hasB = false;
       if (data.A) {
@@ -394,6 +411,32 @@ async function clearSelectedCells() {
     updatesObj[`${roomName}/schedules/${key}/${currentUser}`] = null;
   });
   await update(ref(db), updatesObj);
+  selectedCells.clear();
+  updateScheduleTable();
+}
+
+// --- 選択セルを確定/解除する関数 ---
+async function toggleConfirmSelectedCells() {
+  if (selectedCells.size === 0 || !currentUser) {
+    if (!currentUser) checkUserSelected();
+    return;
+  }
+  const schedulesRef = ref(db, `${roomName}/schedules`);
+  const snapshot = await get(schedulesRef);
+  const schedules = snapshot.exists() ? snapshot.val() : {};
+  const updates = {};
+
+  selectedCells.forEach(key => {
+    const data = schedules[key] || {};
+    const isNowConfirmed = data.confirmed === true;
+    updates[`${key}/confirmed`] = isNowConfirmed ? null : true;
+  });
+
+  await update(schedulesRef, updates);
+  selectedCells.forEach(key => {
+    const td = calendar.querySelector(`td[data-key="${key}"]`);
+    if (td) td.classList.remove('selected');
+  });
   selectedCells.clear();
   updateScheduleTable();
 }
@@ -946,19 +989,30 @@ if (remoteStream) {
   chatInput.value = '';
 }
 
-  function renderChat(chatData) {
+    function renderChat(chatData) {
     chatLog.innerHTML = '';
+    
+    // 現在入力欄に入っている名前を取得（AさんとBさんの名前）
+    const nameA = userANameInput.value.trim() || 'ユーザーA';
+    const nameB = userBNameInput.value.trim() || 'ユーザーB';
+
     chatData.slice(-100).forEach(entry => {
       const div = document.createElement('div');
       div.classList.add('chat-message');
+      
+      // 1. 名前の表示部分 (AならnameA、BならnameBを表示)
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = `${entry.name}: `;
-      nameSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
+      const actualName = (entry.user === 'A') ? nameA : nameB;
+      nameSpan.textContent = `${actualName}: `;
+      
+      // 2. スタイル設定 (青字太字に統一)
+      nameSpan.style.color = '#1976d2'; 
       nameSpan.style.fontWeight = 'bold';
 
+      // 3. メッセージ本文
       const textSpan = document.createElement('span');
       textSpan.textContent = entry.text;
-      textSpan.style.color = entry.user === 'A' ? 'blue' : 'green';
+      textSpan.style.color = '#333'; // 本文は読みやすいように濃いグレー
 
       div.appendChild(nameSpan);
       div.appendChild(textSpan);
@@ -1101,6 +1155,8 @@ userBNameInput.addEventListener('input', async () => {
     btnMarkOk.addEventListener('click', () => { if (!checkUserSelected()) return; applyToSelectedCells('○'); });
   btnMarkNo.addEventListener('click', () => { if (!checkUserSelected()) return; applyToSelectedCells('×'); });
   btnClearCell.addEventListener('click', () => { if (!checkUserSelected()) return; clearSelectedCells(); });
+    document.getElementById('btn-mark-confirm').addEventListener('click', toggleConfirmSelectedCells);
+
   btnClearAll.addEventListener('click', async () => {
     await clearAllData();
     renderCalendar();
