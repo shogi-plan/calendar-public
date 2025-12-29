@@ -11,7 +11,7 @@
     #status-badge { background: #795548; color: #fff; padding: 4px 15px; border-radius: 20px; margin-bottom: 8px; font-size: 12px; font-weight: bold; }
     .your-turn { background: #d32f2f !important; }
     
-    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 94vmin; height: 94vmin; background: #f5deb3; }
+    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 94vmin; height: 94vmin; background: #f5deb3; transition: transform 0.3s; }
     .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 4.5vmin, 32px); cursor: pointer; font-weight: bold; user-select: none; }
     .selected { background: rgba(255, 245, 166, 0.9) !important; box-shadow: inset 0 0 0 3px orange; }
     .valid-dest { background: rgba(255, 165, 0, 0.2); }
@@ -67,7 +67,6 @@
   let state = { board: [], handS: [], handG: [], turn: 'S', history: [] };
   let mySide = 'S', sel = null, selH = null, possibleMoves = [];
 
-  // 動きの定義を軽量化（スライド処理の共通化）
   const getRawMoves = (x, y, board, owner) => {
     const moves = [];
     const p = board[y][x];
@@ -97,26 +96,21 @@
     return moves;
   };
 
-  // 王手放置チェックの高速化
   const isSafeMove = (fx, fy, tx, ty, board, owner) => {
     const originalTarget = board[ty][tx];
     const piece = board[fy][fx];
     board[ty][tx] = piece; board[fy][fx] = null;
-    
-    // 王の位置を特定
     let kx, ky;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) {kx=x; ky=y; break;}
-    
     const enemy = owner==='S'?'G':'S';
     let safe = true;
-    // 敵の駒が王を取れるか確認
     outer: for(let y=0; y<9; y++) for(let x=0; x<9; x++) {
       if(board[y][x]?.owner === enemy) {
         const moves = getRawMoves(x, y, board, enemy);
         if(moves.some(m => m.x===kx && m.y===ky)) { safe = false; break outer; }
       }
     }
-    board[fy][fx] = piece; board[ty][tx] = originalTarget; // 元に戻す
+    board[fy][fx] = piece; board[ty][tx] = originalTarget;
     return safe;
   };
 
@@ -135,13 +129,21 @@
     if (!confirm("初期化しますか？")) return;
     const b = Array(9).fill(null).map(()=>Array(9).fill(null));
     const setup = (y,o,ps) => ps.forEach((p,x)=>{if(p)b[y][x]={type:p,owner:o}});
-    // 飛車・角の配置修正（先手右飛車、後手右飛車）
+    
+    // 1・9段目
     setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
-    setup(1,'G',[null,'HI',null,null,null,null,null,'KA',null]);
+    setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
+
+    // 2・8段目 (先手: 左から2番目(x=1)が角、右から2番目(x=7)が飛車)
+    b[1][1] = {type:'HI', owner:'G'}; // 後手飛車
+    b[1][7] = {type:'KA', owner:'G'}; // 後手角
+    b[7][1] = {type:'KA', owner:'S'}; // 先手角
+    b[7][7] = {type:'HI', owner:'S'}; // 先手飛車
+
+    // 3・7段目
     setup(2,'G',Array(9).fill('FU'));
     setup(6,'S',Array(9).fill('FU'));
-    setup(7,'S',[null,'KA',null,null,null,null,null,'HI',null]);
-    setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
+
     state = { board: b, handS: [], handG: [], turn: 'S', history: [] };
     sync();
   }
@@ -150,7 +152,7 @@
     if (state.turn !== mySide) return;
     const p = state.board[y][x];
 
-    if (selH) { // 持ち駒を打つ
+    if (selH) {
       if (!p) {
         if (selH.type==='FU' && state.board.some(r => r[x]?.type==='FU' && r[x]?.owner===mySide)) { alert("二歩"); return; }
         state.board[y][x] = {type: selH.type, owner: mySide};
@@ -209,6 +211,14 @@
     badge.textContent = `手番: ${state.turn==='S'?'先手':'後手'} ${state.turn===mySide?'(あなたの番)':''}`;
     badge.className = state.turn===mySide ? 'your-turn' : '';
   }
+
+  // --- 修正箇所：mySideの同期処理を追加 ---
+  document.getElementById('mySideSelect').onchange = (e) => {
+    mySide = e.target.value;
+    const boardEl = document.getElementById('board');
+    boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)';
+    render();
+  };
 
   document.getElementById('btnReset').onclick = resetGame;
   document.getElementById('btnFlip').onclick = () => {
