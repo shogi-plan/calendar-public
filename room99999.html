@@ -2,30 +2,28 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>遠タメ将棋 Online (Responsive)</title>
+  <title>遠タメ将棋 Online (High-Speed)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root { --ui-font: 14px; }
-    body { font-family: "Yu Gothic", sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; padding: 10px; margin: 0; }
-    h1 { font-size: 1.1rem; color: #5d4037; margin: 5px 0; }
-    #status-badge { background: #795548; color: #fff; padding: 4px 15px; border-radius: 20px; margin-bottom: 8px; font-size: 12px; font-weight: bold; }
+    body { font-family: "Yu Gothic", sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; padding: 5px; margin: 0; }
+    h1 { font-size: 1rem; color: #5d4037; margin: 5px 0; }
+    #status-badge { background: #795548; color: #fff; padding: 4px 15px; border-radius: 20px; margin-bottom: 5px; font-size: 12px; font-weight: bold; }
     .your-turn { background: #d32f2f !important; }
-    
-    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 94vmin; height: 94vmin; background: #f5deb3; transition: transform 0.2s; }
-    .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 4.5vmin, 32px); cursor: pointer; font-weight: bold; user-select: none; position: relative; }
+    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 92vmin; height: 92vmin; background: #f5deb3; position: relative; }
+    .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 5vmin, 32px); cursor: pointer; user-select: none; }
     .selected { background: rgba(255, 245, 166, 0.9) !important; box-shadow: inset 0 0 0 3px orange; }
-    .valid-dest { background: rgba(255, 165, 0, 0.2); }
-    .piece { transition: all 0.1s; }
+    .valid-dest { position: relative; }
+    .valid-dest::after { content: ""; position: absolute; width: 30%; height: 30%; background: rgba(0, 0, 0, 0.1); border-radius: 50%; }
+    .piece { font-weight: bold; transition: transform 0.1s; z-index: 2; }
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: #d32f2f; }
-
-    .controls { display: flex; gap: 8px; justify-content: center; margin-bottom: 8px; width: 100%; }
-    button { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; background: #8d6e63; font-size: 12px; }
-    
-    #hands { display: flex; justify-content: space-around; width: 100%; max-width: 500px; }
-    .hand-block { width: 48%; text-align: center; font-size: 11px; }
-    .hand { min-height: 40px; border: 1px solid #d7ccc8; background: #fff; display: flex; gap: 4px; border-radius: 4px; flex-wrap: wrap; padding: 4px; }
-    .hand span { border: 1px solid #aaa; padding: 1px 5px; border-radius: 3px; cursor: pointer; background: #eee; font-size: 14px; }
+    .controls { display: flex; gap: 5px; margin-bottom: 5px; }
+    button { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; color: white; background: #8d6e63; font-size: 11px; }
+    #hands { display: flex; justify-content: space-around; width: 100%; max-width: 500px; margin-top: 5px; }
+    .hand-block { width: 48%; text-align: center; font-size: 10px; }
+    .hand { min-height: 40px; border: 1px solid #d7ccc8; background: #fff; display: flex; gap: 3px; border-radius: 4px; flex-wrap: wrap; padding: 3px; }
+    .hand span { border: 1px solid #aaa; padding: 1px 4px; border-radius: 3px; cursor: pointer; background: #eee; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -65,6 +63,9 @@
   const gameRef = ref(db, `${roomName}/shogiData`);
 
   const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'成香',NK:'成桂',NG:'成銀',UM:'馬',RY:'龍'};
+  const PROMOTE_MAP = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'};
+  const UNPROMOTE_MAP = {TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'};
+
   let state = { board: [], handS: [], handG: [], turn: 'S' };
   let mySide = 'S', sel = null, selH = null, possibleMoves = [];
 
@@ -82,6 +83,7 @@
         moves.push({x:tx, y:ty}); tx += vx; ty += vy;
       }
     };
+
     const t = p.type;
     if (['KI','TO','NY','NK','NG'].includes(t)) [[-1,f],[0,f],[1,f],[-1,0],[1,0],[0,-f]].forEach(([vx,vy])=>add(x+vx,y+vy));
     else if (t==='FU') add(x, y+f);
@@ -97,9 +99,9 @@
   };
 
   const isSafeMove = (fx, fy, tx, ty, board, owner) => {
-    const originalTarget = board[ty][tx];
-    const piece = board[fy][fx];
-    board[ty][tx] = piece; board[fy][fx] = null;
+    const targetPiece = board[ty][tx];
+    const sourcePiece = board[fy][fx];
+    board[ty][tx] = sourcePiece; board[fy][fx] = null;
     let kx, ky;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) {kx=x; ky=y; break;}
     const enemy = owner==='S'?'G':'S';
@@ -109,31 +111,32 @@
         if(getRawMoves(x, y, board, enemy).some(m => m.x===kx && m.y===ky)) { safe = false; break outer; }
       }
     }
-    board[fy][fx] = piece; board[ty][tx] = originalTarget;
+    board[fy][fx] = sourcePiece; board[ty][tx] = targetPiece;
     return safe;
   };
 
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
-    state = { ...data, board: JSON.parse(data.board) };
-    render();
+    const newBoard = JSON.parse(data.board);
+    if (JSON.stringify(newBoard) !== JSON.stringify(state.board) || data.turn !== state.turn) {
+      state = { ...data, board: newBoard };
+      render();
+    }
   });
 
-  function sync() {
-    set(gameRef, { ...state, board: JSON.stringify(state.board) });
-  }
+  function sync() { set(gameRef, { ...state, board: JSON.stringify(state.board) }); }
 
   function resetGame() {
     if (!confirm("初期化しますか？")) return;
     const b = Array(9).fill(null).map(()=>Array(9).fill(null));
     const setup = (y,o,ps) => ps.forEach((p,x)=>{if(p)b[y][x]={type:p,owner:o}});
     setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
-    setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
     b[1][1] = {type:'HI', owner:'G'}; b[1][7] = {type:'KA', owner:'G'};
-    b[7][1] = {type:'KA', owner:'S'}; b[7][7] = {type:'HI', owner:'S'};
     setup(2,'G',Array(9).fill('FU'));
     setup(6,'S',Array(9).fill('FU'));
+    b[7][1] = {type:'KA', owner:'S'}; b[7][7] = {type:'HI', owner:'S'};
+    setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
     state = { board: b, handS: [], handG: [], turn: 'S' };
     render(); sync();
   }
@@ -142,36 +145,44 @@
     if (state.turn !== mySide) return;
     const p = state.board[y][x];
 
+    // 持ち駒を打つ
     if (selH) {
       if (!p) {
-        if (selH.type==='FU' && state.board.some(r => r[x]?.type==='FU' && r[x]?.owner===mySide)) { alert("二歩"); return; }
+        if (selH.type==='FU' && state.board.some(r => r[x]?.type==='FU' && r[x]?.owner===mySide)) return;
         state.board[y][x] = {type: selH.type, owner: mySide};
         if (mySide==='S') state.handS.splice(selH.idx,1); else state.handG.splice(selH.idx,1);
-        state.turn = (mySide==='S'?'G':'S'); render(); sync();
-      }
-      selH = null; render(); return;
+        state.turn = (mySide==='S'?'G':'S'); selH = null; render(); sync();
+      } else { selH = null; render(); }
+      return;
     }
 
+    // 自分の駒を選択
     if (p && p.owner === mySide) {
-      sel = {x, y};
-      possibleMoves = getRawMoves(x, y, state.board, mySide).filter(m => isSafeMove(x, y, m.x, m.y, state.board, mySide));
+      if (sel?.x === x && sel?.y === y) { sel = null; possibleMoves = []; }
+      else {
+        sel = {x, y};
+        possibleMoves = getRawMoves(x, y, state.board, mySide).filter(m => isSafeMove(x, y, m.x, m.y, state.board, mySide));
+      }
       render();
-    } else if (sel && possibleMoves.some(m => m.x===x && m.y===y)) {
+    } 
+    // 駒を移動（敵の駒を取る処理を含む）
+    else if (sel && possibleMoves.some(m => m.x===x && m.y===y)) {
       const fromP = state.board[sel.y][sel.x];
-      // 駒を取る処理を確実に実行
+      // 駒を取るロジック
       if (p && p.owner !== mySide) {
-        const unp = (t) => ({TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'}[t]||t);
-        if (mySide==='S') state.handS.push(unp(p.type)); else state.handG.push(unp(p.type));
+        const capturedType = UNPROMOTE_MAP[p.type] || p.type;
+        if (mySide === 'S') state.handS.push(capturedType); else state.handG.push(capturedType);
       }
+      // 成りの判定
       let type = fromP.type;
-      if (['FU','KY','KE','GI','KA','HI'].includes(type) && ((mySide==='S'?y<=2:y>=6) || (mySide==='S'?sel.y<=2:sel.y>=6))) {
-        if (confirm("成りますか？")) type = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'}[type];
-      }
+      const isPromotable = PROMOTE_MAP[type] && ((mySide==='S' && (y<=2 || sel.y<=2)) || (mySide==='G' && (y>=6 || sel.y>=6)));
+      if (isPromotable && confirm("成りますか？")) type = PROMOTE_MAP[type];
+      
       state.board[y][x] = {type, owner: mySide};
-      state.board[sel.y][sel.x] = null; // 元の場所を空にする
+      state.board[sel.y][sel.x] = null;
       state.turn = (mySide==='S'?'G':'S');
       sel = null; possibleMoves = [];
-      render(); sync(); // 先に描画、後で通信
+      render(); sync();
     } else { sel = null; possibleMoves = []; render(); }
   }
 
@@ -183,7 +194,7 @@
         c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''} ${possibleMoves.some(m=>m.x===x&&m.y===y)?'valid-dest':''}`;
         if (p) {
           const d = document.createElement('div');
-          d.className = `piece ${p.owner!=='S'?'opposite':''} ${['TO','NY','NK','NG','UM','RY'].includes(p.type)?'promoted':''}`;
+          d.className = `piece ${p.owner!=='S'?'opposite':''} ${UNPROMOTE_MAP[p.type]?'promoted':''}`;
           d.textContent = SYMBOLS[p.type];
           c.appendChild(d);
         }
@@ -193,7 +204,7 @@
     });
     const drawH = (id, list, owner) => {
       const el = document.getElementById(id); el.innerHTML = '';
-      (list||[]).forEach((t, i) => {
+      (list||[]).sort().forEach((t, i) => {
         const s = document.createElement('span'); s.textContent = SYMBOLS[t];
         if (selH?.idx === i && selH?.owner === owner) s.style.background = '#ffea00';
         s.onclick = (e) => { e.stopPropagation(); if (state.turn===mySide && owner===mySide) { selH={type:t,owner,idx:i}; sel=null; possibleMoves=[]; render(); } };
@@ -202,7 +213,7 @@
     };
     drawH('handS', state.handS, 'S'); drawH('handG', state.handG, 'G');
     const badge = document.getElementById('status-badge');
-    badge.textContent = `手番: ${state.turn==='S'?'先手':'後手'} ${state.turn===mySide?'(あなたの番)':''}`;
+    badge.textContent = `手番: ${state.turn==='S'?'▲先手':'△後手'}`;
     badge.className = state.turn===mySide ? 'your-turn' : '';
   }
 
