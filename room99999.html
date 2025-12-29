@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>遠タメ将棋 Online (Corrected)</title>
+  <title>遠タメ将棋 Online (Fixed v3)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root { --ui-font: 14px; }
@@ -100,22 +100,18 @@
   };
 
   const isSafeMove = (fx, fy, tx, ty, currentBoard, owner) => {
-    // 盤面を完全にコピーしてシミュレート
     const tempBoard = JSON.parse(JSON.stringify(currentBoard));
     tempBoard[ty][tx] = tempBoard[fy][fx];
     tempBoard[fy][fx] = null;
-    
     let kx = -1, ky = -1;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) {
       if(tempBoard[y][x]?.type==='OU' && tempBoard[y][x]?.owner===owner) { kx=x; ky=y; break; }
     }
     if (kx === -1) return true;
-
     const enemy = (owner === 'S' ? 'G' : 'S');
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) {
       if(tempBoard[y][x]?.owner === enemy) {
-        const moves = getRawMoves(x, y, tempBoard, enemy);
-        if(moves.some(m => m.x===kx && m.y===ky)) return false;
+        if(getRawMoves(x, y, tempBoard, enemy).some(m => m.x===kx && m.y===ky)) return false;
       }
     }
     return true;
@@ -124,7 +120,7 @@
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
-    state = { ...data, board: JSON.parse(data.board) };
+    state = { ...data, board: JSON.parse(data.board), handS: data.handS || [], handG: data.handG || [] };
     render();
   });
 
@@ -152,7 +148,9 @@
       if (!p) {
         if (selH.type==='FU' && state.board.some(r => r[x]?.type==='FU' && r[x]?.owner===mySide)) return;
         state.board[y][x] = {type: selH.type, owner: mySide};
-        if (mySide==='S') state.handS.splice(selH.idx,1); else state.handG.splice(selH.idx,1);
+        const newHand = [...(mySide==='S'?state.handS:state.handG)];
+        newHand.splice(selH.idx, 1);
+        if (mySide==='S') state.handS = newHand; else state.handG = newHand;
         state.turn = (mySide==='S'?'G':'S'); selH = null; render(); sync();
       } else { selH = null; render(); }
       return;
@@ -167,27 +165,28 @@
       render();
     } else if (sel && possibleMoves.some(m => m.x===x && m.y===y)) {
       const fromP = state.board[sel.y][sel.x];
+      
+      // 【重要】駒を取る処理
       if (p && p.owner !== mySide) {
-        state[mySide==='S'?'handS':'handG'].push(UNPROMOTE_MAP[p.type] || p.type);
+        const captured = UNPROMOTE_MAP[p.type] || p.type;
+        if (mySide === 'S') state.handS = [...state.handS, captured];
+        else state.handG = [...state.handG, captured];
       }
       
       let type = fromP.type;
       const isLast = (mySide==='S' ? y===0 : y===8);
       const isKE_Last = (mySide==='S' ? y<=1 : y>=7);
       
-      // 強制成りの判定
       if ((type==='FU' || type==='KY') && isLast) type = PROMOTE_MAP[type];
       else if (type==='KE' && isKE_Last) type = PROMOTE_MAP[type];
-      // 選択成りの判定
-      else if (PROMOTE_MAP[type] && ((mySide==='S'?(y<=2||sel.y<=2):(y>=6||sel.y>=6)))) {
+      else if (PROMOTE_MAP[type] && (mySide==='S'?(y<=2||sel.y<=2):(y>=6||sel.y>=6))) {
         if (confirm("成りますか？")) type = PROMOTE_MAP[type];
       }
 
       state.board[y][x] = {type, owner: mySide};
       state.board[sel.y][sel.x] = null;
       state.turn = (mySide==='S'?'G':'S');
-      sel = null; possibleMoves = [];
-      render(); sync();
+      sel = null; possibleMoves = []; render(); sync();
     } else { sel = null; possibleMoves = []; render(); }
   }
 
@@ -209,7 +208,7 @@
     });
     const drawH = (id, list, owner) => {
       const el = document.getElementById(id); el.innerHTML = '';
-      (list||[]).sort().forEach((t, i) => {
+      (list||[]).forEach((t, i) => {
         const s = document.createElement('span'); s.textContent = SYMBOLS[t];
         if (selH?.idx === i && selH?.owner === owner) s.style.background = '#ffea00';
         s.onclick = (e) => { e.stopPropagation(); if (state.turn===mySide && owner===mySide) { selH={type:t,owner,idx:i}; sel=null; possibleMoves=[]; render(); } };
