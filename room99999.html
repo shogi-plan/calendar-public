@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>遠タメ将棋 Online (Lightweight)</title>
+  <title>遠タメ将棋 Online (Responsive)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root { --ui-font: 14px; }
@@ -11,10 +11,11 @@
     #status-badge { background: #795548; color: #fff; padding: 4px 15px; border-radius: 20px; margin-bottom: 8px; font-size: 12px; font-weight: bold; }
     .your-turn { background: #d32f2f !important; }
     
-    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 94vmin; height: 94vmin; background: #f5deb3; transition: transform 0.3s; }
-    .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 4.5vmin, 32px); cursor: pointer; font-weight: bold; user-select: none; }
+    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 94vmin; height: 94vmin; background: #f5deb3; transition: transform 0.2s; }
+    .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 4.5vmin, 32px); cursor: pointer; font-weight: bold; user-select: none; position: relative; }
     .selected { background: rgba(255, 245, 166, 0.9) !important; box-shadow: inset 0 0 0 3px orange; }
     .valid-dest { background: rgba(255, 165, 0, 0.2); }
+    .piece { transition: all 0.1s; }
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: #d32f2f; }
 
@@ -64,7 +65,7 @@
   const gameRef = ref(db, `${roomName}/shogiData`);
 
   const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'成香',NK:'成桂',NG:'成銀',UM:'馬',RY:'龍'};
-  let state = { board: [], handS: [], handG: [], turn: 'S', history: [] };
+  let state = { board: [], handS: [], handG: [], turn: 'S' };
   let mySide = 'S', sel = null, selH = null, possibleMoves = [];
 
   const getRawMoves = (x, y, board, owner) => {
@@ -81,7 +82,6 @@
         moves.push({x:tx, y:ty}); tx += vx; ty += vy;
       }
     };
-
     const t = p.type;
     if (['KI','TO','NY','NK','NG'].includes(t)) [[-1,f],[0,f],[1,f],[-1,0],[1,0],[0,-f]].forEach(([vx,vy])=>add(x+vx,y+vy));
     else if (t==='FU') add(x, y+f);
@@ -106,8 +106,7 @@
     let safe = true;
     outer: for(let y=0; y<9; y++) for(let x=0; x<9; x++) {
       if(board[y][x]?.owner === enemy) {
-        const moves = getRawMoves(x, y, board, enemy);
-        if(moves.some(m => m.x===kx && m.y===ky)) { safe = false; break outer; }
+        if(getRawMoves(x, y, board, enemy).some(m => m.x===kx && m.y===ky)) { safe = false; break outer; }
       }
     }
     board[fy][fx] = piece; board[ty][tx] = originalTarget;
@@ -121,31 +120,22 @@
     render();
   });
 
-  async function sync() {
-    await set(gameRef, { ...state, board: JSON.stringify(state.board) });
+  function sync() {
+    set(gameRef, { ...state, board: JSON.stringify(state.board) });
   }
 
   function resetGame() {
     if (!confirm("初期化しますか？")) return;
     const b = Array(9).fill(null).map(()=>Array(9).fill(null));
     const setup = (y,o,ps) => ps.forEach((p,x)=>{if(p)b[y][x]={type:p,owner:o}});
-    
-    // 1・9段目
     setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
     setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
-
-    // 2・8段目 (先手: 左から2番目(x=1)が角、右から2番目(x=7)が飛車)
-    b[1][1] = {type:'HI', owner:'G'}; // 後手飛車
-    b[1][7] = {type:'KA', owner:'G'}; // 後手角
-    b[7][1] = {type:'KA', owner:'S'}; // 先手角
-    b[7][7] = {type:'HI', owner:'S'}; // 先手飛車
-
-    // 3・7段目
+    b[1][1] = {type:'HI', owner:'G'}; b[1][7] = {type:'KA', owner:'G'};
+    b[7][1] = {type:'KA', owner:'S'}; b[7][7] = {type:'HI', owner:'S'};
     setup(2,'G',Array(9).fill('FU'));
     setup(6,'S',Array(9).fill('FU'));
-
-    state = { board: b, handS: [], handG: [], turn: 'S', history: [] };
-    sync();
+    state = { board: b, handS: [], handG: [], turn: 'S' };
+    render(); sync();
   }
 
   function handleCellClick(x, y) {
@@ -157,7 +147,7 @@
         if (selH.type==='FU' && state.board.some(r => r[x]?.type==='FU' && r[x]?.owner===mySide)) { alert("二歩"); return; }
         state.board[y][x] = {type: selH.type, owner: mySide};
         if (mySide==='S') state.handS.splice(selH.idx,1); else state.handG.splice(selH.idx,1);
-        state.turn = mySide==='S'?'G':'S'; sync();
+        state.turn = (mySide==='S'?'G':'S'); render(); sync();
       }
       selH = null; render(); return;
     }
@@ -168,7 +158,8 @@
       render();
     } else if (sel && possibleMoves.some(m => m.x===x && m.y===y)) {
       const fromP = state.board[sel.y][sel.x];
-      if (p) {
+      // 駒を取る処理を確実に実行
+      if (p && p.owner !== mySide) {
         const unp = (t) => ({TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'}[t]||t);
         if (mySide==='S') state.handS.push(unp(p.type)); else state.handG.push(unp(p.type));
       }
@@ -176,8 +167,11 @@
       if (['FU','KY','KE','GI','KA','HI'].includes(type) && ((mySide==='S'?y<=2:y>=6) || (mySide==='S'?sel.y<=2:sel.y>=6))) {
         if (confirm("成りますか？")) type = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'}[type];
       }
-      state.board[y][x] = {type, owner: mySide}; state.board[sel.y][sel.x] = null;
-      sel = null; possibleMoves = []; state.turn = mySide==='S'?'G':'S'; sync();
+      state.board[y][x] = {type, owner: mySide};
+      state.board[sel.y][sel.x] = null; // 元の場所を空にする
+      state.turn = (mySide==='S'?'G':'S');
+      sel = null; possibleMoves = [];
+      render(); sync(); // 先に描画、後で通信
     } else { sel = null; possibleMoves = []; render(); }
   }
 
@@ -212,18 +206,15 @@
     badge.className = state.turn===mySide ? 'your-turn' : '';
   }
 
-  // --- 修正箇所：mySideの同期処理を追加 ---
   document.getElementById('mySideSelect').onchange = (e) => {
     mySide = e.target.value;
-    const boardEl = document.getElementById('board');
-    boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)';
+    document.getElementById('board').style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)';
     render();
   };
-
   document.getElementById('btnReset').onclick = resetGame;
   document.getElementById('btnFlip').onclick = () => {
     const b = document.getElementById('board');
-    b.style.transform = (b.style.transform==='rotate(180deg)')?'rotate(0deg)':'rotate(180deg)';
+    b.style.transform = b.style.transform === 'rotate(180deg)' ? 'rotate(0deg)' : 'rotate(180deg)';
   };
 </script>
 </body>
