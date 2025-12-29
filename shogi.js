@@ -1,3 +1,5 @@
+// shogi.js の冒頭にこれを追加（exportsエラーを防ぐ）
+var exports = {};
 "use strict";
 exports.__esModule = true;
 exports.colorToString = exports.kindToString = exports.Piece = exports.Color = exports.Shogi = void 0;
@@ -463,3 +465,5 @@ var Shogi = /** @class */ (function () {
     return Shogi;
 }());
 exports.Shogi = Shogi;
+// shogi.js の一番最後にこれを追加（Shogiを外から使えるようにする）
+window.Shogi = exports.Shogi || Shogi;
