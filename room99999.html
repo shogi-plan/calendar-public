@@ -5,7 +5,12 @@
   <title>遠タメ将棋 Online</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
   <style>
-    :root { --board-color: #edc9af; --primary-btn: #2196f3; --danger-btn: #d32f2f; }
+    :root { 
+      --board-color: #edc9af; 
+      --primary-btn: #2196f3; 
+      --danger-btn: #d32f2f; 
+      --select-color: #ff9800; /* 選択色を統一 */
+    }
     body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #eee; margin: 0; padding: 2px; overflow-x: hidden; touch-action: manipulation; }
     h1 { font-size: 0.9rem; margin: 2px 0; }
     
@@ -13,8 +18,10 @@
 
     #board-container { position: relative; width: 78vw; max-width: 400px; aspect-ratio: 1 / 1; }
     #board { display: grid; grid-template-columns: repeat(9, 11.1111%); grid-template-rows: repeat(9, 11.1111%); border: 1px solid #222; width: 100%; height: 100%; background: var(--board-color); box-sizing: border-box; }
+    
     .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid rgba(0,0,0,0.2); box-sizing: border-box; width: 100%; height: 100%; }
-    .selected { background: rgba(255, 215, 0, 0.6) !important; }
+    /* 盤上の選択色を更新 */
+    .selected { background: var(--select-color) !important; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
     
     .piece-font { font-weight: bold; font-size: 6.5vw; line-height: 1; }
     @media (min-width: 500px) { .piece-font { font-size: 32px; } }
@@ -44,7 +51,9 @@
     #hands-container { display: flex; width: 100vw; max-width: 500px; gap: 4px; margin-top: 6px; align-items: flex-start; }
     .hand { flex: 1; border: 1px solid #999; background: #fff; display: flex; flex-wrap: wrap; padding: 16px 2px 4px 2px; gap: 4px; border-radius: 3px; position: relative; min-height: 8vw; box-sizing: border-box; }
     .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 3px; font-size: 10px; color: #333; font-weight: bold; }
-    .hand span { border: 1px solid #777; padding: 2px 4px; background: #f0f0f0; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; }
+    /* 持ち駒の選択スタイルを更新 */
+    .hand span { border: 1px solid #777; padding: 2px 4px; background: #f0f0f0; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
 
     #promote-dialog { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 10px; border: 3px solid #5d4037; z-index: 2000; text-align: center; border-radius: 8px; }
   </style>
@@ -55,11 +64,12 @@
 
 <div class="controls">
   <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
-    <input type="number" id="cfgMain" value="10" style="width:25px">分/<input type="number" id="cfgByo" value="30" style="width:25px">秒
+    <input type="number" id="cfgMain" value="10" style="width:35px">分/<input type="number" id="cfgByo" value="30" style="width:35px">秒
     <button id="btnReset">初期化</button>
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
     <button id="btnResign">投了</button>
+    <button id="btnKif" style="background:#4caf50; color:white;">KIF</button>
   </div>
   <select id="mySideSelect" style="font-size:10px;"><option value="S">先手▲</option><option value="G">後手△</option></select>
   <div id="status-txt" style="font-size:11px; font-weight:bold; margin-left:10px;">接続待ち...</div>
@@ -116,6 +126,7 @@
   const gameRef = ref(db, `${roomName}/shogiData`);
 
   const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
+  const KIF_SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'成香',NK:'成桂',NG:'成銀',UM:'馬',RY:'龍'};
   const PROMOTE_MAP = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'};
   const UNPROMOTE_MAP = {TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'};
   const KANJI_NUM = ["","一","二","三","四","五","六","七","八","九"];
@@ -123,6 +134,8 @@
   let state = { board: "[]", handS: [], handG: [], turn: 'S', timers: {S: 600, G: 600}, config: {main: 600, byo: 30}, lastTick: 0, history: [], winner: null };
   let mySide = 'S', sel = null, selH = null, possibleMoves = [], pendingProm = null;
   let isReviewMode = false, viewIdx = -1;
+  // 感想戦用のローカル盤面保持
+  let reviewBoard = null, reviewHandS = [], reviewHandG = [], reviewTurn = 'S';
 
   const boardEl = document.getElementById('board');
   const cells = [];
@@ -176,6 +189,7 @@
       document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
       viewIdx = state.history.length - 1;
+      syncReviewState();
       render();
       updateKifuList();
     }, 100);
@@ -196,13 +210,21 @@
     set(gameRef, { ...state, board: JSON.stringify(state.board) });
   }
 
-  // 初期化：感想戦モードも強制解除
+  // 感想戦用の状態同期
+  function syncReviewState() {
+    if (viewIdx < 0 || !state.history[viewIdx]) return;
+    const h = state.history[viewIdx];
+    reviewBoard = JSON.parse(h.board);
+    reviewHandS = [...(h.handS || [])];
+    reviewHandG = [...(h.handG || [])];
+    reviewTurn = h.side === 'S' ? 'G' : 'S'; 
+  }
+
   document.getElementById('btnReset').onclick = () => {
     if(!confirm("初期化しますか？")) return;
     isReviewMode = false;
     document.getElementById('btnToggleReview').textContent = "感想戦";
     document.getElementById('review-panel').style.display = 'none';
-    
     const m = (parseInt(document.getElementById('cfgMain').value) || 10) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
     const board = Array(9).fill(null).map(() => Array(9).fill(null));
     const setup = (y, o, ps) => ps.forEach((p, x) => { if (p) board[y][x] = { type: p, owner: o } });
@@ -226,89 +248,119 @@
     if (data) {
       const oldWinner = state.winner;
       state = data; state.board = JSON.parse(data.board); state.history = data.history || [];
-      
-      // 感想戦ボタンのグレーアウト制御
-      const revBtn = document.getElementById('btnToggleReview');
-      revBtn.disabled = !state.winner;
-
+      document.getElementById('btnToggleReview').disabled = !state.winner;
       if (!oldWinner && state.winner) { showGameOverPopup(state.winner); }
-      if (!isReviewMode) {
-        viewIdx = state.history.length - 1;
-        document.getElementById('review-panel').style.display = 'none';
-        revBtn.textContent = "感想戦";
+      if (!isReviewMode) { 
+        viewIdx = state.history.length - 1; 
       }
       render(); updateKifuList();
     }
   });
 
   function handleCellClick(x, y) {
-    if (isReviewMode || state.winner || state.turn !== mySide || pendingProm) return;
-    const target = state.board[y][x];
+    if (pendingProm) return;
+    // 感想戦と通常対局の分岐
+    const curBoard = isReviewMode ? reviewBoard : state.board;
+    const curHandS = isReviewMode ? reviewHandS : state.handS;
+    const curHandG = isReviewMode ? reviewHandG : state.handG;
+    const curTurn = isReviewMode ? reviewTurn : state.turn;
+
+    if (!isReviewMode && (state.winner || curTurn !== mySide)) return;
+
+    const target = curBoard[y][x];
+
+    if (sel && sel.x === x && sel.y === y) {
+      sel = null; possibleMoves = []; render(); return;
+    }
+
     if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
-      const fromP = state.board[sel.y][sel.x];
-      if (target && target.owner !== mySide) {
-        const h = (mySide === 'S' ? state.handS : state.handG) || [];
+      const fromP = curBoard[sel.y][sel.x];
+      const moveOwner = isReviewMode ? fromP.owner : mySide;
+      
+      if (target && target.owner !== moveOwner) {
+        const h = (moveOwner === 'S' ? curHandS : curHandG);
         h.push(UNPROMOTE_MAP[target.type] || target.type);
-        if (mySide === 'S') state.handS = h; else state.handG = h;
       }
-      const moveData = { side: mySide, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
-      state.board[y][x] = { type: fromP.type, owner: mySide }; state.board[sel.y][sel.x] = null;
-      const promLine = (mySide === 'S') ? [0,1,2] : [6,7,8];
+      
+      const moveData = { side: moveOwner, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
+      curBoard[y][x] = { type: fromP.type, owner: moveOwner }; curBoard[sel.y][sel.x] = null;
+      
+      const promLine = (moveOwner === 'S') ? [0,1,2] : [6,7,8];
       if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
-        const deadLine = (mySide === 'S') ? 0 : 8;
-        if (((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine) || (fromP.type === 'KE' && (mySide==='S' ? y<=1 : y>=7))) {
-          state.board[y][x].type = PROMOTE_MAP[fromP.type]; moveData.type = PROMOTE_MAP[fromP.type]; moveData.isPromoted = true; finish(moveData);
-        } else { pendingProm = { x, y, moveData }; document.getElementById('promote-dialog').style.display = 'block'; render(); }
-      } else { finish(moveData); }
+        const deadLine = (moveOwner === 'S') ? 0 : 8;
+        if (((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine) || (fromP.type === 'KE' && (moveOwner==='S' ? y<=1 : y>=7))) {
+          curBoard[y][x].type = PROMOTE_MAP[fromP.type]; moveData.type = PROMOTE_MAP[fromP.type]; moveData.isPromoted = true; 
+          isReviewMode ? finishReview(moveOwner) : finish(moveData);
+        } else { 
+          pendingProm = { x, y, moveData, owner: moveOwner }; 
+          document.getElementById('promote-dialog').style.display = 'block'; 
+          render(); 
+        }
+      } else { 
+        isReviewMode ? finishReview(moveOwner) : finish(moveData);
+      }
       return;
     }
     if (selH) {
       if (!target) {
-        if (selH.type === 'FU' && state.board.some(r => r[x]?.type === 'FU' && r[x]?.owner === mySide)) return;
-        state.board[y][x] = { type: selH.type, owner: mySide }; (mySide === 'S' ? state.handS : state.handG).splice(selH.idx, 1);
-        finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true });
+        const moveOwner = isReviewMode ? selH.owner : mySide;
+        if (selH.type === 'FU' && curBoard.some(r => r[x]?.type === 'FU' && r[x]?.owner === moveOwner)) return;
+        curBoard[y][x] = { type: selH.type, owner: moveOwner }; 
+        (moveOwner === 'S' ? curHandS : curHandG).splice(selH.idx, 1);
+        isReviewMode ? finishReview(moveOwner) : finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true });
       } else { selH = null; render(); }
       return;
     }
-    if (target && target.owner === mySide) {
+    if (target && (isReviewMode || target.owner === mySide)) {
       sel = { x, y }; selH = null;
-      possibleMoves = getRawMoves(x, y, state.board, mySide).filter(m => {
-          const tb = JSON.parse(JSON.stringify(state.board)); tb[m.y][m.x] = tb[y][x]; tb[y][x] = null;
-          return !isChecked(tb, mySide);
+      possibleMoves = getRawMoves(x, y, curBoard, target.owner).filter(m => {
+          const tb = JSON.parse(JSON.stringify(curBoard)); tb[m.y][m.x] = tb[y][x]; tb[y][x] = null;
+          return !isChecked(tb, target.owner);
       });
       render();
     }
   }
 
+  function finishReview(lastMoveOwner) {
+    reviewTurn = lastMoveOwner === 'S' ? 'G' : 'S';
+    sel = null; selH = null; possibleMoves = [];
+    render();
+  }
+
   function render() {
-    const viewData = (isReviewMode && viewIdx >= 0) ? state.history[viewIdx] : state;
-    const b = (typeof viewData.board === 'string') ? JSON.parse(viewData.board) : viewData.board;
+    const isReviewing = isReviewMode;
+    const b = isReviewing ? reviewBoard : state.board;
+    const hS = isReviewing ? reviewHandS : state.handS;
+    const hG = isReviewing ? reviewHandG : state.handG;
+
     for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) {
         const c = cells[y][x]; const p = b[y][x];
-        c.className = `cell ${!isReviewMode && sel?.x===x && sel?.y===y ? 'selected' : ''}`;
+        c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
         c.innerHTML = p ? `<div class="piece piece-font ${p.owner!=='S'?'opposite':''} ${UNPROMOTE_MAP[p.type]?'promoted':''}">${SYMBOLS[p.type]}</div>` : '';
     }
     const drawH = (id, list, owner) => {
       const el = document.getElementById(id); el.innerHTML = '';
       (list || []).forEach((t, i) => {
         const s = document.createElement('span'); s.className = "piece-font"; s.textContent = SYMBOLS[t];
-        if (!isReviewMode && selH?.idx === i && selH?.owner === owner) s.style.background = 'orange';
+        if (selH?.idx === i && selH?.owner === owner) s.classList.add('selected-piece');
         s.onclick = (e) => {
-          e.stopPropagation(); if (isReviewMode || state.winner || state.turn !== mySide || owner !== mySide) return;
-          if (selH?.idx === i) selH = null; else { selH = { type: t, owner, idx: i }; sel = null; possibleMoves = []; }
+          e.stopPropagation(); 
+          if (!isReviewing && (state.winner || state.turn !== mySide || owner !== mySide)) return;
+          if (selH?.idx === i) { selH = null; } 
+          else { selH = { type: t, owner, idx: i }; sel = null; possibleMoves = []; }
           render();
         };
         el.appendChild(s);
       });
     };
-    drawH('handS', viewData.handS, 'S'); drawH('handG', viewData.handG, 'G');
+    drawH('handS', hS, 'S'); drawH('handG', hG, 'G');
     const st = document.getElementById('status-txt');
-    if (state.winner) { st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`; st.style.color = "red"; }
-    else if (isReviewMode) { st.textContent = "感想戦"; st.style.color = "orange"; }
+    if (!isReviewing && state.winner) { st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`; st.style.color = "red"; }
+    else if (isReviewing) { st.textContent = "感想戦(自由移動可)"; st.style.color = "orange"; }
     else { st.textContent = state.turn === mySide ? "手番" : "待機"; st.style.color = "black"; }
-    document.getElementById('nav-pos').textContent = `${isReviewMode ? viewIdx : state.history.length-1}/${state.history.length-1}`;
-    document.getElementById('timer-S').className = `timer ${state.turn==='S'?'your-turn':''}`;
-    document.getElementById('timer-G').className = `timer ${state.turn==='G'?'your-turn':''}`;
+    document.getElementById('nav-pos').textContent = `${isReviewing ? viewIdx : state.history.length-1}/${state.history.length-1}`;
+    document.getElementById('timer-S').className = `timer ${!isReviewing && state.turn==='S'?'your-turn':''}`;
+    document.getElementById('timer-G').className = `timer ${!isReviewing && state.turn==='G'?'your-turn':''}`;
     updateTimerDisplay();
   }
 
@@ -317,7 +369,7 @@
     state.history.forEach((h, i) => {
       const div = document.createElement('div'); div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
       div.textContent = formatKifuText(h, i);
-      div.onclick = () => { isReviewMode = true; viewIdx = i; document.getElementById('review-panel').style.display='flex'; document.getElementById('btnToggleReview').textContent = "戻る"; render(); updateKifuList(); };
+      div.onclick = () => { isReviewMode = true; viewIdx = i; document.getElementById('review-panel').style.display='flex'; document.getElementById('btnToggleReview').textContent = "戻る"; syncReviewState(); render(); updateKifuList(); };
       container.appendChild(div);
       if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
@@ -331,20 +383,50 @@
     return `${idx}.${side}${isSame ? "同" : x+y}${type}`;
   }
 
+  // KIFコピー機能
+  document.getElementById('btnKif').onclick = () => {
+    if (!state.history || state.history.length <= 1) return;
+    let k = "# KIF generated by 遠タメ将棋\n手合割：平手\n先手：先手\n後手：後手\n手数----指手----消費時間--\n";
+    state.history.forEach((h, i) => {
+      if (i === 0) return;
+      const x = 9 - h.toX, y = h.toY + 1;
+      const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY);
+      let type = KIF_SYMBOLS[h.type] || SYMBOLS[h.type];
+      if (h.isDrop) type += "打";
+      const from = h.isDrop ? "" : `(${9-h.fromX}${h.fromY+1})`;
+      k += `${String(i).padStart(4, " ")} ${isSame ? "同　" : x + KANJI_NUM[y]}${type}${from} ( 0:00/00:00:00)\n`;
+    });
+    navigator.clipboard.writeText(k).then(() => alert("KIF形式棋譜をコピーしました"));
+  };
+
   document.getElementById('btnToggleReview').onclick = function() {
     isReviewMode = !isReviewMode; this.textContent = isReviewMode ? "戻る" : "感想戦";
     document.getElementById('review-panel').style.display = isReviewMode ? 'flex' : 'none';
-    viewIdx = state.history.length - 1; render(); updateKifuList();
+    viewIdx = state.history.length - 1; 
+    syncReviewState();
+    render(); updateKifuList();
   };
   
-  document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; render(); updateKifuList(); } };
-  document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; render(); updateKifuList(); } };
-  document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; render(); updateKifuList(); } };
-  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; render(); updateKifuList(); } };
+  document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewState(); render(); updateKifuList(); } };
+  document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewState(); render(); updateKifuList(); } };
+  document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewState(); render(); updateKifuList(); } };
+  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewState(); render(); updateKifuList(); } };
   
-  document.getElementById('btn-prom-yes').onclick = () => { pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; pendingProm.moveData.isPromoted = true; state.board[pendingProm.y][pendingProm.x].type = pendingProm.moveData.type; endProm(); };
+  document.getElementById('btn-prom-yes').onclick = () => { 
+    const curBoard = isReviewMode ? reviewBoard : state.board;
+    pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; 
+    pendingProm.moveData.isPromoted = true; 
+    curBoard[pendingProm.y][pendingProm.x].type = pendingProm.moveData.type; 
+    endProm(); 
+  };
   document.getElementById('btn-prom-no').onclick = () => endProm();
-  function endProm() { const d = pendingProm.moveData; pendingProm = null; document.getElementById('promote-dialog').style.display = 'none'; finish(d); }
+  function endProm() { 
+    const d = pendingProm.moveData; 
+    const owner = pendingProm.owner;
+    pendingProm = null; 
+    document.getElementById('promote-dialog').style.display = 'none'; 
+    isReviewMode ? finishReview(owner) : finish(d); 
+  }
 
   const getRawMoves = (x, y, board, owner) => {
     const moves = []; const p = board[y][x]; if (!p) return moves;
