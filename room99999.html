@@ -2,30 +2,29 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>遠タメ将棋 Online (Official Rules)</title>
+  <title>遠タメ将棋 Online (Lightweight)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root { --ui-font: 14px; }
     body { font-family: "Yu Gothic", sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; padding: 10px; margin: 0; }
     h1 { font-size: 1.1rem; color: #5d4037; margin: 5px 0; }
-    #status-badge { background: #795548; color: #fff; padding: 4px 15px; border-radius: 20px; margin-bottom: 8px; font-size: 12px; font-weight: bold; transition: 0.3s; }
-    .your-turn { background: #d32f2f !important; box-shadow: 0 0 10px rgba(211,47,47,0.5); }
+    #status-badge { background: #795548; color: #fff; padding: 4px 15px; border-radius: 20px; margin-bottom: 8px; font-size: 12px; font-weight: bold; }
+    .your-turn { background: #d32f2f !important; }
     
-    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 94vmin; height: 94vmin; background: #f5deb3; position: relative; }
+    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 94vmin; height: 94vmin; background: #f5deb3; }
     .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 4.5vmin, 32px); cursor: pointer; font-weight: bold; user-select: none; }
-    .selected { background: rgba(255, 245, 166, 0.9) !important; box-shadow: inset 0 0 0 3px orange; z-index: 5; }
+    .selected { background: rgba(255, 245, 166, 0.9) !important; box-shadow: inset 0 0 0 3px orange; }
     .valid-dest { background: rgba(255, 165, 0, 0.2); }
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: #d32f2f; }
 
-    .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 8px; width: 100%; }
+    .controls { display: flex; gap: 8px; justify-content: center; margin-bottom: 8px; width: 100%; }
     button { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; color: white; background: #8d6e63; font-size: 12px; }
     
-    #hands { display: flex; justify-content: space-around; width: 100%; margin: 5px 0; max-width: 500px; }
+    #hands { display: flex; justify-content: space-around; width: 100%; max-width: 500px; }
     .hand-block { width: 48%; text-align: center; font-size: 11px; }
-    .hand { min-height: 40px; border: 1px solid #d7ccc8; background: #fff; padding: 4px; display: flex; gap: 4px; border-radius: 4px; flex-wrap: wrap; }
+    .hand { min-height: 40px; border: 1px solid #d7ccc8; background: #fff; display: flex; gap: 4px; border-radius: 4px; flex-wrap: wrap; padding: 4px; }
     .hand span { border: 1px solid #aaa; padding: 1px 5px; border-radius: 3px; cursor: pointer; background: #eee; font-size: 14px; }
-    .hand span.selected { background: #ffea00 !important; outline: 2px solid orange; }
   </style>
 </head>
 <body>
@@ -35,7 +34,7 @@
 
 <div class="controls">
   <select id="mySideSelect"><option value="S">先手(▲)</option><option value="G">後手(△)</option></select>
-  <button id="btnReset" style="background:#d32f2f;">同期初期化</button>
+  <button id="btnReset" style="background:#d32f2f;">初期化</button>
   <button id="btnFlip">盤反転</button>
 </div>
 
@@ -59,111 +58,89 @@
       messagingSenderId: "368704703397",
       appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
-
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   const roomName = location.pathname.split('/').pop().replace('.html', '') || "shogi_room";
   const gameRef = ref(db, `${roomName}/shogiData`);
 
   const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'成香',NK:'成桂',NG:'成銀',UM:'馬',RY:'龍'};
-  const PROMOTABLES = ['FU','KY','KE','GI','KA','HI'];
-  
   let state = { board: [], handS: [], handG: [], turn: 'S', history: [] };
   let mySide = 'S', sel = null, selH = null, possibleMoves = [];
 
-  // --- 将棋ロジック強化版 ---
-
-  function getValidMoves(x, y, board, owner, ignoreCheck = false) {
+  // 動きの定義を軽量化（スライド処理の共通化）
+  const getRawMoves = (x, y, board, owner) => {
     const moves = [];
     const p = board[y][x];
-    if (!p) return moves;
     const f = (owner === 'S') ? -1 : 1;
-
-    const canMove = (tx, ty) => {
-      if (tx < 0 || tx > 8 || ty < 0 || ty > 8) return false;
-      const target = board[ty][tx];
-      return !(target && target.owner === owner);
+    const add = (tx, ty) => {
+      if (tx>=0 && tx<9 && ty>=0 && ty<9 && board[ty][tx]?.owner !== owner) moves.push({x:tx, y:ty});
     };
-
-    const add = (tx, ty) => { if (canMove(tx, ty)) moves.push({x: tx, y: ty}); };
     const slide = (vx, vy) => {
       let tx = x + vx, ty = y + vy;
-      while (tx >= 0 && tx <= 8 && ty >= 0 && ty <= 8) {
-        if (board[ty][tx]) { if (board[ty][tx].owner !== owner) moves.push({x: tx, y: ty}); break; }
-        moves.push({x: tx, y: ty}); tx += vx; ty += vy;
+      while (tx>=0 && tx<9 && ty>=0 && ty<9) {
+        if (board[ty][tx]) { if (board[ty][tx].owner !== owner) moves.push({x:tx, y:ty}); break; }
+        moves.push({x:tx, y:ty}); tx += vx; ty += vy;
       }
     };
 
-    const type = p.type;
-    if (['KI','TO','NY','NK','NG'].includes(type)) {
-      [[-1,f],[0,f],[1,f],[-1,0],[1,0],[0,-f]].forEach(([vx,vy]) => add(x+vx, y+vy));
-    } else if (type === 'FU') { add(x, y+f); }
-    else if (type === 'KY') { slide(0, f); }
-    else if (type === 'KE') { add(x-1, y+f*2); add(x+1, y+f*2); }
-    else if (type === 'GI') { [[-1,f],[0,f],[1,f],[-1,-f],[1,-f]].forEach(([vx,vy]) => add(x+vx, y+vy)); }
-    else if (type === 'KA') { [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy]) => slide(vx, vy)); }
-    else if (type === 'HI') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy]) => slide(vx, vy)); }
-    else if (type === 'OU') { [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([vx,vy]) => add(x+vx, y+vy)); }
-    else if (type === 'UM') { [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy]) => slide(vx, vy)); [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy]) => add(x+vx, y+vy)); }
-    else if (type === 'RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy]) => slide(vx, vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy]) => add(x+vx, y+vy)); }
-
-    // 王手放置・自殺手チェック（シミュレーション）
-    if (!ignoreCheck) {
-      return moves.filter(m => !isKingExposed(x, y, m.x, m.y, board, owner));
-    }
+    const t = p.type;
+    if (['KI','TO','NY','NK','NG'].includes(t)) [[-1,f],[0,f],[1,f],[-1,0],[1,0],[0,-f]].forEach(([vx,vy])=>add(x+vx,y+vy));
+    else if (t==='FU') add(x, y+f);
+    else if (t==='KY') slide(0, f);
+    else if (t==='KE') { add(x-1,y+f*2); add(x+1,y+f*2); }
+    else if (t==='GI') [[-1,f],[0,f],[1,f],[-1,-f],[1,-f]].forEach(([vx,vy])=>add(x+vx,y+vy));
+    else if (t==='KA') [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>slide(vx,vy));
+    else if (t==='HI') [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy));
+    else if (t==='OU') [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([vx,vy])=>add(x+vx,y+vy));
+    else if (t==='UM') { [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>slide(vx,vy)); [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
+    else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
-  }
+  };
 
-  function isKingExposed(fx, fy, tx, ty, board, owner) {
-    const nextBoard = JSON.parse(JSON.stringify(board));
-    nextBoard[ty][tx] = nextBoard[fy][fx];
-    nextBoard[fy][fx] = null;
-    return isCheck(nextBoard, owner);
-  }
-
-  function isCheck(board, owner) {
+  // 王手放置チェックの高速化
+  const isSafeMove = (fx, fy, tx, ty, board, owner) => {
+    const originalTarget = board[ty][tx];
+    const piece = board[fy][fx];
+    board[ty][tx] = piece; board[fy][fx] = null;
+    
+    // 王の位置を特定
     let kx, ky;
-    board.forEach((r,y)=>r.forEach((p,x)=>{ if(p?.type==='OU' && p?.owner===owner) {kx=x; ky=y;} }));
-    const enemy = owner === 'S' ? 'G' : 'S';
-    for(let y=0; y<9; y++) {
-      for(let x=0; x<9; x++) {
-        if(board[y][x]?.owner === enemy) {
-          const moves = getValidMoves(x, y, board, enemy, true);
-          if(moves.some(m => m.x === kx && m.y === ky)) return true;
-        }
+    for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) {kx=x; ky=y; break;}
+    
+    const enemy = owner==='S'?'G':'S';
+    let safe = true;
+    // 敵の駒が王を取れるか確認
+    outer: for(let y=0; y<9; y++) for(let x=0; x<9; x++) {
+      if(board[y][x]?.owner === enemy) {
+        const moves = getRawMoves(x, y, board, enemy);
+        if(moves.some(m => m.x===kx && m.y===ky)) { safe = false; break outer; }
       }
     }
-    return false;
-  }
+    board[fy][fx] = piece; board[ty][tx] = originalTarget; // 元に戻す
+    return safe;
+  };
 
-  // --- イベント処理 ---
-  onValue(gameRef, (snapshot) => {
-    const data = snapshot.val();
+  onValue(gameRef, (snap) => {
+    const data = snap.val();
     if (!data) return;
-    state = { ...data, board: JSON.parse(data.board), history: data.history || [] };
+    state = { ...data, board: JSON.parse(data.board) };
     render();
   });
 
   async function sync() {
-    const boardStr = JSON.stringify(state.board);
-    const newHistory = [...(state.history || []), boardStr];
-    
-    // 千日手チェック
-    const sameCount = newHistory.filter(h => h === boardStr).length;
-    if (sameCount >= 4) { alert("千日手です（同一局面が4回出現しました）"); }
-
-    await set(gameRef, { ...state, board: boardStr, history: newHistory.slice(-50) });
+    await set(gameRef, { ...state, board: JSON.stringify(state.board) });
   }
 
   function resetGame() {
-    if (!confirm("初期配置にリセットしますか？")) return;
+    if (!confirm("初期化しますか？")) return;
     const b = Array(9).fill(null).map(()=>Array(9).fill(null));
     const setup = (y,o,ps) => ps.forEach((p,x)=>{if(p)b[y][x]={type:p,owner:o}});
+    // 飛車・角の配置修正（先手右飛車、後手右飛車）
     setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
-    setup(1,'G',[null,'KA',null,null,null,null,null,'HI',null]);
+    setup(1,'G',[null,'HI',null,null,null,null,null,'KA',null]);
     setup(2,'G',Array(9).fill('FU'));
     setup(6,'S',Array(9).fill('FU'));
-    setup(7,'S',[null,'HI',null,null,null,null,null,'KA',null]);
+    setup(7,'S',[null,'KA',null,null,null,null,null,'HI',null]);
     setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
     state = { board: b, handS: [], handG: [], turn: 'S', history: [] };
     sync();
@@ -173,73 +150,33 @@
     if (state.turn !== mySide) return;
     const p = state.board[y][x];
 
-    // 持ち駒を打つ
-    if (selH) {
+    if (selH) { // 持ち駒を打つ
       if (!p) {
-        // 二歩チェック
-        if (selH.type === 'FU' && state.board.some(row => row[x]?.type === 'FU' && row[x]?.owner === mySide)) {
-          alert("二歩は反則です"); return;
-        }
-        // 行き所のない駒
-        if ((selH.type==='FU'||selH.type==='KY') && (mySide==='S'?y===0:y===8)) { alert("行き所のない場所に打てません"); return; }
-        if (selH.type==='KE' && (mySide==='S'?y<=1:y>=7)) { alert("行き所のない場所に打てません"); return; }
-
-        // 打ち歩詰めチェック
-        const tempBoard = JSON.parse(JSON.stringify(state.board));
-        tempBoard[y][x] = {type: selH.type, owner: mySide};
-        if (selH.type === 'FU' && isCheckmate(tempBoard, mySide === 'S' ? 'G' : 'S')) {
-           alert("打ち歩詰めは反則です"); return;
-        }
-
+        if (selH.type==='FU' && state.board.some(r => r[x]?.type==='FU' && r[x]?.owner===mySide)) { alert("二歩"); return; }
         state.board[y][x] = {type: selH.type, owner: mySide};
-        if (mySide === 'S') state.handS.splice(selH.idx, 1); else state.handG.splice(selH.idx, 1);
-        completeMove();
+        if (mySide==='S') state.handS.splice(selH.idx,1); else state.handG.splice(selH.idx,1);
+        state.turn = mySide==='S'?'G':'S'; sync();
       }
       selH = null; render(); return;
     }
 
-    // 駒選択
     if (p && p.owner === mySide) {
-      sel = {x, y}; possibleMoves = getValidMoves(x, y, state.board, mySide);
+      sel = {x, y};
+      possibleMoves = getRawMoves(x, y, state.board, mySide).filter(m => isSafeMove(x, y, m.x, m.y, state.board, mySide));
       render();
-    } 
-    // 移動実行
-    else if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
+    } else if (sel && possibleMoves.some(m => m.x===x && m.y===y)) {
       const fromP = state.board[sel.y][sel.x];
       if (p) {
         const unp = (t) => ({TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'}[t]||t);
-        if (mySide === 'S') (state.handS = state.handS || []).push(unp(p.type)); 
-        else (state.handG = state.handG || []).push(unp(p.type));
+        if (mySide==='S') state.handS.push(unp(p.type)); else state.handG.push(unp(p.type));
       }
       let type = fromP.type;
-      const isPromZone = (o, row) => o === 'S' ? row <= 2 : row >= 6;
-      if (PROMOTABLES.includes(type) && (isPromZone(mySide, y) || isPromZone(mySide, sel.y))) {
-        // 強制成りの判定（歩・香は1段目、桂は1・2段目）
-        const forced = (type==='FU'||type==='KY') && (mySide==='S'?y===0:y===8) || (type==='KE' && (mySide==='S'?y<=1:y>=7));
-        if (forced || confirm("成りますか？")) type = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'}[type];
+      if (['FU','KY','KE','GI','KA','HI'].includes(type) && ((mySide==='S'?y<=2:y>=6) || (mySide==='S'?sel.y<=2:sel.y>=6))) {
+        if (confirm("成りますか？")) type = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'}[type];
       }
-      state.board[y][x] = {type, owner: mySide};
-      state.board[sel.y][sel.x] = null;
-      sel = null; completeMove();
+      state.board[y][x] = {type, owner: mySide}; state.board[sel.y][sel.x] = null;
+      sel = null; possibleMoves = []; state.turn = mySide==='S'?'G':'S'; sync();
     } else { sel = null; possibleMoves = []; render(); }
-  }
-
-  function isCheckmate(board, owner) {
-    if (!isCheck(board, owner)) return false;
-    for (let y = 0; y < 9; y++) {
-      for (let x = 0; x < 9; x++) {
-        if (board[y][x]?.owner === owner) {
-          const moves = getValidMoves(x, y, board, owner);
-          if (moves.length > 0) return false;
-        }
-      }
-    }
-    return true; // 逃げ場なし
-  }
-
-  function completeMove() {
-    state.turn = (state.turn === 'S') ? 'G' : 'S';
-    sync();
   }
 
   function render() {
@@ -247,8 +184,7 @@
     state.board.forEach((row, y) => {
       row.forEach((p, x) => {
         const c = document.createElement('div');
-        const isPossible = possibleMoves.some(m => m.x === x && m.y === y);
-        c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''} ${isPossible ? 'valid-dest' : ''}`;
+        c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''} ${possibleMoves.some(m=>m.x===x&&m.y===y)?'valid-dest':''}`;
         if (p) {
           const d = document.createElement('div');
           d.className = `piece ${p.owner!=='S'?'opposite':''} ${['TO','NY','NK','NG','UM','RY'].includes(p.type)?'promoted':''}`;
@@ -259,37 +195,25 @@
         bEl.appendChild(c);
       });
     });
-
     const drawH = (id, list, owner) => {
       const el = document.getElementById(id); el.innerHTML = '';
-      (list || []).forEach((t, i) => {
+      (list||[]).forEach((t, i) => {
         const s = document.createElement('span'); s.textContent = SYMBOLS[t];
-        if (selH?.idx === i && selH?.owner === owner) s.className = 'selected';
-        s.onclick = (e) => {
-          e.stopPropagation();
-          if (state.turn === mySide && owner === mySide) {
-            selH = (selH?.idx === i) ? null : {type:t, owner, idx:i};
-            sel = null; possibleMoves = []; render();
-          }
-        };
+        if (selH?.idx === i && selH?.owner === owner) s.style.background = '#ffea00';
+        s.onclick = (e) => { e.stopPropagation(); if (state.turn===mySide && owner===mySide) { selH={type:t,owner,idx:i}; sel=null; possibleMoves=[]; render(); } };
         el.appendChild(s);
       });
     };
     drawH('handS', state.handS, 'S'); drawH('handG', state.handG, 'G');
     const badge = document.getElementById('status-badge');
-    badge.textContent = `手番: ${state.turn==='S'?'先手(▲)':'後手(△)'} ${state.turn===mySide?'【あなたの番】':''}`;
-    badge.className = state.turn === mySide ? 'your-turn' : '';
+    badge.textContent = `手番: ${state.turn==='S'?'先手':'後手'} ${state.turn===mySide?'(あなたの番)':''}`;
+    badge.className = state.turn===mySide ? 'your-turn' : '';
   }
 
   document.getElementById('btnReset').onclick = resetGame;
   document.getElementById('btnFlip').onclick = () => {
     const b = document.getElementById('board');
     b.style.transform = (b.style.transform==='rotate(180deg)')?'rotate(0deg)':'rotate(180deg)';
-  };
-  document.getElementById('mySideSelect').onchange = (e) => {
-    mySide = e.target.value;
-    document.getElementById('board').style.transform = (mySide==='G')?'rotate(180deg)':'rotate(0deg)';
-    render();
   };
 </script>
 </body>
