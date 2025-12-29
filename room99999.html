@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>遠タメ将棋 Online (High-Speed)</title>
+  <title>遠タメ将棋 Online (Corrected)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root { --ui-font: 14px; }
@@ -10,12 +10,12 @@
     h1 { font-size: 1rem; color: #5d4037; margin: 5px 0; }
     #status-badge { background: #795548; color: #fff; padding: 4px 15px; border-radius: 20px; margin-bottom: 5px; font-size: 12px; font-weight: bold; }
     .your-turn { background: #d32f2f !important; }
-    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 92vmin; height: 92vmin; background: #f5deb3; position: relative; }
+    #board { display: grid; grid-template-columns: repeat(9,1fr); grid-template-rows: repeat(9,1fr); border: 2px solid #333; width: 92vmin; height: 92vmin; background: #f5deb3; }
     .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid #999; font-size: clamp(16px, 5vmin, 32px); cursor: pointer; user-select: none; }
     .selected { background: rgba(255, 245, 166, 0.9) !important; box-shadow: inset 0 0 0 3px orange; }
     .valid-dest { position: relative; }
-    .valid-dest::after { content: ""; position: absolute; width: 30%; height: 30%; background: rgba(0, 0, 0, 0.1); border-radius: 50%; }
-    .piece { font-weight: bold; transition: transform 0.1s; z-index: 2; }
+    .valid-dest::after { content: ""; position: absolute; width: 25%; height: 25%; background: rgba(0, 0, 0, 0.15); border-radius: 50%; }
+    .piece { font-weight: bold; }
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: #d32f2f; }
     .controls { display: flex; gap: 5px; margin-bottom: 5px; }
@@ -72,6 +72,7 @@
   const getRawMoves = (x, y, board, owner) => {
     const moves = [];
     const p = board[y][x];
+    if (!p) return moves;
     const f = (owner === 'S') ? -1 : 1;
     const add = (tx, ty) => {
       if (tx>=0 && tx<9 && ty>=0 && ty<9 && board[ty][tx]?.owner !== owner) moves.push({x:tx, y:ty});
@@ -98,31 +99,33 @@
     return moves;
   };
 
-  const isSafeMove = (fx, fy, tx, ty, board, owner) => {
-    const targetPiece = board[ty][tx];
-    const sourcePiece = board[fy][fx];
-    board[ty][tx] = sourcePiece; board[fy][fx] = null;
-    let kx, ky;
-    for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) {kx=x; ky=y; break;}
-    const enemy = owner==='S'?'G':'S';
-    let safe = true;
-    outer: for(let y=0; y<9; y++) for(let x=0; x<9; x++) {
-      if(board[y][x]?.owner === enemy) {
-        if(getRawMoves(x, y, board, enemy).some(m => m.x===kx && m.y===ky)) { safe = false; break outer; }
+  const isSafeMove = (fx, fy, tx, ty, currentBoard, owner) => {
+    // 盤面を完全にコピーしてシミュレート
+    const tempBoard = JSON.parse(JSON.stringify(currentBoard));
+    tempBoard[ty][tx] = tempBoard[fy][fx];
+    tempBoard[fy][fx] = null;
+    
+    let kx = -1, ky = -1;
+    for(let y=0; y<9; y++) for(let x=0; x<9; x++) {
+      if(tempBoard[y][x]?.type==='OU' && tempBoard[y][x]?.owner===owner) { kx=x; ky=y; break; }
+    }
+    if (kx === -1) return true;
+
+    const enemy = (owner === 'S' ? 'G' : 'S');
+    for(let y=0; y<9; y++) for(let x=0; x<9; x++) {
+      if(tempBoard[y][x]?.owner === enemy) {
+        const moves = getRawMoves(x, y, tempBoard, enemy);
+        if(moves.some(m => m.x===kx && m.y===ky)) return false;
       }
     }
-    board[fy][fx] = sourcePiece; board[ty][tx] = targetPiece;
-    return safe;
+    return true;
   };
 
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
-    const newBoard = JSON.parse(data.board);
-    if (JSON.stringify(newBoard) !== JSON.stringify(state.board) || data.turn !== state.turn) {
-      state = { ...data, board: newBoard };
-      render();
-    }
+    state = { ...data, board: JSON.parse(data.board) };
+    render();
   });
 
   function sync() { set(gameRef, { ...state, board: JSON.stringify(state.board) }); }
@@ -145,7 +148,6 @@
     if (state.turn !== mySide) return;
     const p = state.board[y][x];
 
-    // 持ち駒を打つ
     if (selH) {
       if (!p) {
         if (selH.type==='FU' && state.board.some(r => r[x]?.type==='FU' && r[x]?.owner===mySide)) return;
@@ -156,7 +158,6 @@
       return;
     }
 
-    // 自分の駒を選択
     if (p && p.owner === mySide) {
       if (sel?.x === x && sel?.y === y) { sel = null; possibleMoves = []; }
       else {
@@ -164,20 +165,24 @@
         possibleMoves = getRawMoves(x, y, state.board, mySide).filter(m => isSafeMove(x, y, m.x, m.y, state.board, mySide));
       }
       render();
-    } 
-    // 駒を移動（敵の駒を取る処理を含む）
-    else if (sel && possibleMoves.some(m => m.x===x && m.y===y)) {
+    } else if (sel && possibleMoves.some(m => m.x===x && m.y===y)) {
       const fromP = state.board[sel.y][sel.x];
-      // 駒を取るロジック
       if (p && p.owner !== mySide) {
-        const capturedType = UNPROMOTE_MAP[p.type] || p.type;
-        if (mySide === 'S') state.handS.push(capturedType); else state.handG.push(capturedType);
+        state[mySide==='S'?'handS':'handG'].push(UNPROMOTE_MAP[p.type] || p.type);
       }
-      // 成りの判定
-      let type = fromP.type;
-      const isPromotable = PROMOTE_MAP[type] && ((mySide==='S' && (y<=2 || sel.y<=2)) || (mySide==='G' && (y>=6 || sel.y>=6)));
-      if (isPromotable && confirm("成りますか？")) type = PROMOTE_MAP[type];
       
+      let type = fromP.type;
+      const isLast = (mySide==='S' ? y===0 : y===8);
+      const isKE_Last = (mySide==='S' ? y<=1 : y>=7);
+      
+      // 強制成りの判定
+      if ((type==='FU' || type==='KY') && isLast) type = PROMOTE_MAP[type];
+      else if (type==='KE' && isKE_Last) type = PROMOTE_MAP[type];
+      // 選択成りの判定
+      else if (PROMOTE_MAP[type] && ((mySide==='S'?(y<=2||sel.y<=2):(y>=6||sel.y>=6)))) {
+        if (confirm("成りますか？")) type = PROMOTE_MAP[type];
+      }
+
       state.board[y][x] = {type, owner: mySide};
       state.board[sel.y][sel.x] = null;
       state.turn = (mySide==='S'?'G':'S');
@@ -213,7 +218,7 @@
     };
     drawH('handS', state.handS, 'S'); drawH('handG', state.handG, 'G');
     const badge = document.getElementById('status-badge');
-    badge.textContent = `手番: ${state.turn==='S'?'▲先手':'△後手'}`;
+    badge.textContent = `手番: ${state.turn==='S'?'▲先手':'△後手'} ${state.turn===mySide?'(あなたの番)':''}`;
     badge.className = state.turn===mySide ? 'your-turn' : '';
   }
 
