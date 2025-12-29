@@ -11,32 +11,9 @@
     
     #game-main { display: flex; flex-direction: row; justify-content: center; align-items: flex-start; width: 100vw; max-width: 600px; gap: 2px; }
 
-    /* 盤面のサイズ調整：等寸を保証 */
-    #board-container { 
-      position: relative; 
-      width: 78vw; 
-      max-width: 400px;
-      aspect-ratio: 1 / 1; 
-    }
-    #board { 
-      display: grid; 
-      grid-template-columns: repeat(9, 11.1111%); 
-      grid-template-rows: repeat(9, 11.1111%); 
-      border: 1px solid #222; 
-      width: 100%; 
-      height: 100%; 
-      background: var(--board-color);
-      box-sizing: border-box;
-    }
-    .cell { 
-      display: flex; 
-      align-items: center; 
-      justify-content: center; 
-      border: 0.5px solid rgba(0,0,0,0.2); 
-      box-sizing: border-box;
-      width: 100%;
-      height: 100%;
-    }
+    #board-container { position: relative; width: 78vw; max-width: 400px; aspect-ratio: 1 / 1; }
+    #board { display: grid; grid-template-columns: repeat(9, 11.1111%); grid-template-rows: repeat(9, 11.1111%); border: 1px solid #222; width: 100%; height: 100%; background: var(--board-color); box-sizing: border-box; }
+    .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid rgba(0,0,0,0.2); box-sizing: border-box; width: 100%; height: 100%; }
     .selected { background: rgba(255, 215, 0, 0.6) !important; }
     
     .piece-font { font-weight: bold; font-size: 6.5vw; line-height: 1; }
@@ -45,19 +22,18 @@
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: var(--danger-btn); }
 
-    /* 棋譜リストパネル */
     #review-panel { display: none; width: 21vw; max-width: 90px; height: 78vw; max-height: 400px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; }
     .kifu-list { flex-grow: 1; overflow-y: scroll; background: #fafafa; font-size: 9px; padding: 0; margin: 0; -webkit-overflow-scrolling: touch; }
     .kifu-item { padding: 5px 1px; cursor: pointer; border-bottom: 1px solid #eee; text-align: center; white-space: nowrap; }
     .kifu-item.active { background: var(--primary-btn); color: white; }
     
-    /* ナビゲーションボタン：配置とラベルの修正 */
     .nav-controls { display: grid; grid-template-columns: 1fr 1fr; background: #ddd; gap: 1px; padding: 1px; }
     .nav-btn { font-size: 9px; padding: 7px 0; border: 1px solid #bbb; background: #fff; cursor: pointer; font-weight: bold; letter-spacing: -0.5px; }
     #nav-pos { grid-column: span 2; font-size: 9px; text-align: center; background: #eee; padding: 2px 0; font-family: monospace; border-bottom: 1px solid #ccc; }
 
     .controls { display: flex; gap: 2px; margin-bottom: 4px; flex-wrap: wrap; justify-content: center; background: #ddd; padding: 4px; border-radius: 4px; width: 98%; box-sizing: border-box; }
     button { cursor: pointer; border: none; border-radius: 3px; font-weight: bold; padding: 5px 6px; font-size: 11px; }
+    button:disabled { background: #bbb !important; opacity: 0.6; cursor: not-allowed; }
     #btnReset { background: var(--danger-btn); color: white; }
     #btnToggleReview { background: var(--primary-btn); color: white; }
     
@@ -66,7 +42,7 @@
     .your-turn { border-color: var(--danger-btn); background: #ffebee; }
 
     #hands-container { display: flex; width: 100vw; max-width: 500px; gap: 4px; margin-top: 6px; align-items: flex-start; }
-    .hand { flex: 1; border: 1px solid #999; background: #fff; display: flex; flex-wrap: wrap; padding: 16px 2px 4px 2px; gap: 4px; border-radius: 3px; position: relative; min-height: 8vw; }
+    .hand { flex: 1; border: 1px solid #999; background: #fff; display: flex; flex-wrap: wrap; padding: 16px 2px 4px 2px; gap: 4px; border-radius: 3px; position: relative; min-height: 8vw; box-sizing: border-box; }
     .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 3px; font-size: 10px; color: #333; font-weight: bold; }
     .hand span { border: 1px solid #777; padding: 2px 4px; background: #f0f0f0; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; }
 
@@ -212,12 +188,7 @@
     }
     state.lastTick = Date.now();
     const nextTurn = (state.turn === 'S' ? 'G' : 'S');
-    
-    if (isCheckmate(state.board, nextTurn, state.handS, state.handG)) {
-      state.winner = state.turn;
-      showGameOverPopup(state.winner);
-    }
-    
+    if (isCheckmate(state.board, nextTurn, state.handS, state.handG)) { state.winner = state.turn; showGameOverPopup(state.winner); }
     state.turn = nextTurn;
     sel = null; selH = null; possibleMoves = [];
     if (!state.history) state.history = [{ board: JSON.stringify(state.board), handS: [], handG: [], type: '開始' }];
@@ -225,8 +196,13 @@
     set(gameRef, { ...state, board: JSON.stringify(state.board) });
   }
 
+  // 初期化：感想戦モードも強制解除
   document.getElementById('btnReset').onclick = () => {
     if(!confirm("初期化しますか？")) return;
+    isReviewMode = false;
+    document.getElementById('btnToggleReview').textContent = "感想戦";
+    document.getElementById('review-panel').style.display = 'none';
+    
     const m = (parseInt(document.getElementById('cfgMain').value) || 10) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
     const board = Array(9).fill(null).map(() => Array(9).fill(null));
     const setup = (y, o, ps) => ps.forEach((p, x) => { if (p) board[y][x] = { type: p, owner: o } });
@@ -250,10 +226,17 @@
     if (data) {
       const oldWinner = state.winner;
       state = data; state.board = JSON.parse(data.board); state.history = data.history || [];
-      document.getElementById('btnToggleReview').disabled = !state.winner;
-      // 相手が投了した場合などの検知
+      
+      // 感想戦ボタンのグレーアウト制御
+      const revBtn = document.getElementById('btnToggleReview');
+      revBtn.disabled = !state.winner;
+
       if (!oldWinner && state.winner) { showGameOverPopup(state.winner); }
-      if (!isReviewMode) viewIdx = state.history.length - 1;
+      if (!isReviewMode) {
+        viewIdx = state.history.length - 1;
+        document.getElementById('review-panel').style.display = 'none';
+        revBtn.textContent = "感想戦";
+      }
       render(); updateKifuList();
     }
   });
@@ -334,7 +317,7 @@
     state.history.forEach((h, i) => {
       const div = document.createElement('div'); div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
       div.textContent = formatKifuText(h, i);
-      div.onclick = () => { isReviewMode = true; viewIdx = i; document.getElementById('review-panel').style.display='flex'; render(); updateKifuList(); };
+      div.onclick = () => { isReviewMode = true; viewIdx = i; document.getElementById('review-panel').style.display='flex'; document.getElementById('btnToggleReview').textContent = "戻る"; render(); updateKifuList(); };
       container.appendChild(div);
       if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
