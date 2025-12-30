@@ -134,6 +134,8 @@
   const db = getDatabase(app);
   const roomName = location.pathname.split('/').pop().replace('.html', '') || "shogi_room";
   const gameRef = ref(db, `${roomName}/shogiData`);
+  // 【新設】感想戦の盤面同期用パス
+  const reviewRef = ref(db, `${roomName}/reviewData`);
   
   const callStatusRef = ref(db, `${roomName}/callStatus`);
   const signalingRef = ref(db, `${roomName}/signaling`);
@@ -174,18 +176,16 @@
       await silenceAudio.play();
     } catch (err) {}
   }
-
   function stopKeepAlive() {
     if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
     if (silenceAudio) { silenceAudio.pause(); }
   }
 
-  // --- Firebase監視 (同期の核心部分) ---
+  // --- Firebase監視 ---
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
     
-    // 【同期リセットの追加】初期化（winnerがnull）された場合、全員を対局モードに強制同期
     if (!data.winner) {
         isReviewMode = false;
         sessionStorage.setItem(`isReview_${roomName}`, "false");
@@ -208,23 +208,42 @@
     state.history = data.history || [];
 
     if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
+    
+    // 対局モード中のみ自動で最新手に追従
     if (!isReviewMode) { 
         viewIdx = state.history.length - 1; 
-    } else if (viewIdx === -1) { 
-        viewIdx = state.history.length - 1; 
+        syncReviewStateLocally(); // 検討用変数の同期（表示用）
     }
     
-    if(isReviewMode) syncReviewState();
     render(); 
     updateKifuList();
   });
 
-  // --- 将棋・表示ロジック ---
+  // 【追加】感想戦モード専用のFirebase同期監視
+  onValue(reviewRef, (snap) => {
+    if (!isReviewMode) return;
+    const data = snap.val();
+    if (data) {
+        viewIdx = data.viewIdx;
+        rvState = {
+            board: JSON.parse(data.board),
+            handS: data.handS || [],
+            handG: data.handG || []
+        };
+        render();
+        updateKifuList();
+    }
+  });
+
   function setReviewMode(bool) {
     isReviewMode = bool;
     sessionStorage.setItem(`isReview_${roomName}`, bool.toString());
     document.getElementById('btnToggleReview').textContent = bool ? "戻る" : "感想戦";
     document.getElementById('review-panel').style.display = bool ? 'flex' : 'none';
+    if (bool) {
+        // 感想戦開始時に現在の盤面状況をFirebaseに一度送る
+        pushReviewUpdate();
+    }
   }
 
   const cells = [];
@@ -237,6 +256,18 @@
       boardEl.appendChild(c);
       cells[y][x] = c;
     }
+  }
+
+  // --- 感想戦同期用関数 ---
+  function pushReviewUpdate() {
+    if (!isReviewMode) return;
+    set(reviewRef, {
+        viewIdx: viewIdx,
+        board: JSON.stringify(rvState.board),
+        handS: rvState.handS || [],
+        handG: rvState.handG || [],
+        timestamp: Date.now()
+    });
   }
 
   function finish(moveData) {
@@ -267,11 +298,10 @@
     set(gameRef, { board: JSON.stringify(state.board), handS: state.handS || [], handG: state.handG || [], turn: state.turn, timers: state.timers, config: state.config, lastTick: state.lastTick, winner: state.winner || null, winReason: state.winReason || "", history: state.history });
   }
 
-  // --- 通話機能（完全版） ---
+  // --- 通話機能（省略なし） ---
   let localStream = null, peerConnection = null, localCallStartPressed = false, isMuted = false;
   const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
   const btnCallStart = document.getElementById('btnCallStart'), btnCallEnd = document.getElementById('btnCallEnd'), btnMute = document.getElementById('btnMute'), callStatusDisplay = document.getElementById('callStatusDisplay'), volumeControl = document.getElementById('volume-control');
-
   volumeControl.addEventListener('input', () => { const ra = document.getElementById('remote-audio'); if (ra) ra.volume = parseFloat(volumeControl.value); });
   btnMute.onclick = () => { if (!localStream) return; isMuted = !isMuted; localStream.getAudioTracks().forEach(t => t.enabled = !isMuted); btnMute.textContent = isMuted ? '解除' : 'ミュート'; btnMute.style.background = isMuted ? "var(--danger-btn)" : "#757575"; };
   async function startLocalStream() { if (localStream) localStream.getTracks().forEach(t => t.stop()); localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); return localStream; }
@@ -294,7 +324,7 @@
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
-  // --- 将棋ロジックコア ---
+  // --- 将棋ロジック ---
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) { kx=x; ky=y; break; }
@@ -308,13 +338,15 @@
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "true");
     setReviewMode(true);
-    viewIdx = state.history.length - 1; syncReviewState(); render(); updateKifuList();
+    syncReviewStateLocally(); 
+    pushReviewUpdate(); // Firebaseに感想戦の初期盤面を同期
     setTimeout(() => { alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); }, 200);
   }
   document.getElementById('btnReset').onclick = () => {
     if(!confirm("初期化しますか？（対局モードに戻ります）")) return;
     Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); });
     setReviewMode(false);
+    remove(reviewRef); // 感想戦データも削除
     const m = (parseInt(document.getElementById('cfgMain').value) || 0) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
     const board = Array(9).fill(null).map(() => Array(9).fill(null));
     const setup = (y, o, ps) => ps.forEach((p, x) => { if (p) board[y][x] = { type: p, owner: o } });
@@ -323,8 +355,14 @@
     const bStr = JSON.stringify(board);
     set(gameRef, { board: bStr, handS: [], handG: [], turn: 'S', timers: {S: m, G: m}, config: {main: m, byo: b}, lastTick: 0, winner: null, winReason: "", history: [{ board: bStr, handS: [], handG: [], type: '開始' }] });
   };
-  document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
-  function syncReviewState() { if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; const hist = state.history[viewIdx]; rvState = { board: JSON.parse(hist.board), handS: [...(hist.handS || [])], handG: [...(hist.handG || [])] }; sel = null; selH = null; possibleMoves = []; }
+  
+  function syncReviewStateLocally() { 
+    if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; 
+    const hist = state.history[viewIdx]; 
+    rvState = { board: JSON.parse(hist.board), handS: [...(hist.handS || [])], handG: [...(hist.handG || [])] }; 
+    sel = null; selH = null; possibleMoves = []; 
+  }
+
   function handleCellClick(x, y) {
     if (isReviewMode) {
       const target = rvState.board[y][x];
@@ -335,12 +373,25 @@
         rvState.board[y][x] = { type: fromP.type, owner: fromP.owner }; rvState.board[sel.y][sel.x] = null;
         const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
         if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) if(confirm("成りますか？")) rvState.board[y][x].type = PROMOTE_MAP[fromP.type];
-        sel = null; possibleMoves = []; render(); return;
+        sel = null; possibleMoves = []; 
+        pushReviewUpdate(); // 盤面同期
+        render(); 
+        return;
       }
-      if (selH) { if (!target) { rvState.board[y][x] = { type: selH.type, owner: selH.owner }; (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); selH = null; render(); } else { selH = null; render(); } return; }
+      if (selH) { 
+        if (!target) { 
+            rvState.board[y][x] = { type: selH.type, owner: selH.owner }; 
+            (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); 
+            selH = null; 
+            pushReviewUpdate(); // 盤面同期
+            render(); 
+        } else { selH = null; render(); } 
+        return; 
+      }
       if (target) { sel = { x, y }; possibleMoves = getRawMoves(x, y, rvState.board, target.owner); render(); }
       return;
     }
+    // 以下、対局モードの処理（変更なし）
     if (state.winner || state.turn !== mySide || pendingProm) return;
     const target = state.board[y][x];
     if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
@@ -393,7 +444,14 @@
     state.history.forEach((h, i) => {
       const div = document.createElement('div'); div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
       div.textContent = formatKifuText(h, i);
-      div.onclick = () => { setReviewMode(true); viewIdx = i; syncReviewState(); render(); updateKifuList(); };
+      div.onclick = () => { 
+        if (!isReviewMode) setReviewMode(true); 
+        viewIdx = i; 
+        syncReviewStateLocally(); 
+        pushReviewUpdate(); // 棋譜選択時も同期
+        render(); 
+        updateKifuList(); 
+      };
       container.appendChild(div); if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
   }
@@ -426,11 +484,19 @@
   }
   setInterval(updateTimerDisplay, 1000);
 
-  document.getElementById('btnToggleReview').onclick = () => { setReviewMode(!isReviewMode); viewIdx = state.history.length - 1; if(isReviewMode) syncReviewState(); render(); updateKifuList(); };
-  document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewState(); render(); updateKifuList(); } };
-  document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewState(); render(); updateKifuList(); } };
-  document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewState(); render(); updateKifuList(); } };
-  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewState(); render(); updateKifuList(); } };
+  document.getElementById('btnToggleReview').onclick = () => { 
+    setReviewMode(!isReviewMode); 
+    if(isReviewMode) {
+        syncReviewStateLocally(); 
+        pushReviewUpdate();
+    }
+    render(); 
+    updateKifuList(); 
+  };
+  document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('btn-prom-yes').onclick = () => { pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; pendingProm.moveData.isPromoted = true; state.board[pendingProm.y][pendingProm.x].type = pendingProm.moveData.type; endProm(); };
   document.getElementById('btn-prom-no').onclick = () => endProm();
   function endProm() { const d = pendingProm.moveData; pendingProm = null; document.getElementById('promote-dialog').style.display = 'none'; finish(d); }
@@ -450,8 +516,8 @@
     else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
   };
-
   document.getElementById('btnFlip').onclick = () => { boardEl.style.transform = boardEl.style.transform === 'rotate(180deg)' ? 'rotate(0deg)' : 'rotate(180deg)'; };
+  document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
   document.getElementById('btnKif').onclick = () => {
     let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
     state.history.forEach((h, i) => { if (i === 0) return; const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY); let moveStr = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1]; let pieceStr = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")]; let fromStr = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")"; kif += String(i).padStart(4, " ") + " " + moveStr + pieceStr + fromStr + "( 0:00/00:00:00)\n"; });
