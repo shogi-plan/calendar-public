@@ -11,30 +11,12 @@
       --danger-btn: #d32f2f; 
       --select-color: #ff9800;
       --call-btn: #4caf50;
-      --hand-bg: #d2b48c; 
     }
     body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #eee; margin: 0; padding: 2px; overflow-x: hidden; touch-action: manipulation; }
     h1 { font-size: 0.9rem; margin: 2px 0; }
-
-    #main-layout {
-      display: flex;
-      flex-direction: row;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
-      margin-top: 5px;
-      width: 100vw;
-      max-width: 800px;
-    }
-
-    /* 駒台の基本位置（orderで動的に入れ替え） */
-    #handG { order: 1; }
-    #game-main { order: 2; display: flex; flex-direction: row; justify-content: center; align-items: flex-start; gap: 5px; }
-    #handS { order: 3; }
-
-    #board-container { position: relative; width: 70vw; max-width: 400px; aspect-ratio: 1 / 1; }
-    #board { display: grid; grid-template-columns: repeat(9, 11.1111%); grid-template-rows: repeat(9, 11.1111%); border: 1.5px solid #222; width: 100%; height: 100%; background: var(--board-color); box-sizing: border-box; transition: transform 0.5s; }
-    
+    #game-main { display: flex; flex-direction: row; justify-content: center; align-items: flex-start; width: 100vw; max-width: 600px; gap: 2px; }
+    #board-container { position: relative; width: 78vw; max-width: 400px; aspect-ratio: 1 / 1; }
+    #board { display: grid; grid-template-columns: repeat(9, 11.1111%); grid-template-rows: repeat(9, 11.1111%); border: 1px solid #222; width: 100%; height: 100%; background: var(--board-color); box-sizing: border-box; }
     .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid rgba(0,0,0,0.2); box-sizing: border-box; width: 100%; height: 100%; }
     .selected { background: var(--select-color) !important; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
     .piece-font { font-weight: bold; font-size: 6.5vw; line-height: 1; }
@@ -42,66 +24,27 @@
     .piece { z-index: 10; pointer-events: none; }
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: var(--danger-btn); }
-
-    .hand {
-      width: 55px;
-      height: 320px;
-      background: var(--hand-bg);
-      border: 1.5px solid #8b4513;
-      border-radius: 2px;
-      display: flex;
-      flex-direction: column;
-      flex-wrap: wrap; 
-      align-content: center;
-      padding: 18px 2px 4px 2px;
-      position: relative;
-      box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
-      box-sizing: border-box;
-    }
-    .hand::before { 
-      content: attr(data-label); 
-      position: absolute; 
-      top: 1px; 
-      left: 0; 
-      width: 100%;
-      text-align: center;
-      font-size: 10px; 
-      color: #333; 
-      font-weight: bold; 
-      background: rgba(255,255,255,0.2);
-    }
-    .hand span { 
-      border: 1px solid transparent;
-      padding: 0;
-      margin-bottom: -10px;
-      display: inline-flex;
-      cursor: pointer;
-    }
-    
-    /* 後手の駒は常に180度回転。ただし、駒台のlabelは回転させない */
-    #handG span { transform: rotate(180deg); }
-
-    .hand span.selected-piece { color: var(--select-color); filter: drop-shadow(0 0 2px #000); }
-
-    #review-panel { display: none; width: 80px; height: 70vw; max-height: 400px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; }
+    #review-panel { display: none; width: 21vw; max-width: 90px; height: 78vw; max-height: 400px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; }
     .kifu-list { flex-grow: 1; overflow-y: scroll; background: #fafafa; font-size: 9px; padding: 0; margin: 0; -webkit-overflow-scrolling: touch; }
     .kifu-item { padding: 5px 1px; cursor: pointer; border-bottom: 1px solid #eee; text-align: center; white-space: nowrap; }
     .kifu-item.active { background: var(--primary-btn); color: white; }
     .nav-controls { display: grid; grid-template-columns: 1fr 1fr; background: #ddd; gap: 1px; padding: 1px; }
     .nav-btn { font-size: 9px; padding: 7px 0; border: 1px solid #bbb; background: #fff; cursor: pointer; font-weight: bold; letter-spacing: -0.5px; }
     #nav-pos { grid-column: span 2; font-size: 9px; text-align: center; background: #eee; padding: 2px 0; font-family: monospace; border-bottom: solid 1px #ccc; }
-
     .controls { display: flex; gap: 2px; margin-bottom: 4px; flex-wrap: wrap; justify-content: center; background: #ddd; padding: 4px; border-radius: 4px; width: 98%; box-sizing: border-box; }
     button { cursor: pointer; border: none; border-radius: 3px; font-weight: bold; padding: 5px 6px; font-size: 11px; }
     button:disabled { background: #bbb !important; opacity: 0.6; cursor: not-allowed; }
     #btnReset { background: var(--danger-btn); color: white; }
     #btnToggleReview { background: var(--primary-btn); color: white; }
-    
     .status-area { display: flex; gap: 4px; margin-bottom: 4px; width: 100%; justify-content: center; }
     .timer { font-family: monospace; font-size: 14px; font-weight: bold; background: #fff; padding: 2px 4px; border: 1px solid #555; border-radius: 3px; min-width: 70px; text-align: center; }
     .your-turn { border-color: var(--danger-btn); background: #ffebee; }
     .timer-alert { color: var(--danger-btn) !important; }
-
+    #hands-container { display: flex; width: 100vw; max-width: 500px; gap: 4px; margin-top: 6px; align-items: flex-start; }
+    .hand { flex: 1; border: 1px solid #999; background: #fff; display: flex; flex-wrap: wrap; padding: 16px 2px 4px 2px; gap: 4px; border-radius: 3px; position: relative; min-height: 8vw; box-sizing: border-box; }
+    .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 3px; font-size: 10px; color: #333; font-weight: bold; }
+    .hand span { border: 1px solid #777; padding: 2px 4px; background: #f0f0f0; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
     #promote-dialog { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 10px; border: 3px solid #5d4037; z-index: 2000; text-align: center; border-radius: 8px; }
 
     .call-area { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; background: #fff; padding: 5px; border-radius: 5px; border: 1px solid #ccc; align-items: center; justify-content: center; width: 98%; box-sizing: border-box; }
@@ -110,11 +53,6 @@
     #btnCallEnd { background: var(--danger-btn); color: white; }
     #callStatusDisplay { font-size: 10px; color: #333; font-weight: bold; }
     .vol-ctrl { font-size: 10px; display: flex; align-items: center; gap: 2px; }
-
-    @media (max-width: 500px) {
-      .hand { width: 42px; height: 70vw; padding-top: 15px; }
-      #main-layout { gap: 4px; }
-    }
   </style>
 </head>
 <body>
@@ -149,28 +87,31 @@
   <div id="timer-G" class="timer">△ --:--</div>
 </div>
 
-<div id="main-layout">
-  <div class="hand" id="handG" data-label="△後手"></div>
-  <div id="game-main">
-    <div id="board-container">
-      <div id="board"></div>
-      <div id="promote-dialog">
-        <div style="margin-bottom:8px; font-weight:bold; font-size:12px;">成りますか？</div>
-        <button id="btn-prom-yes" style="background:var(--danger-btn); color:white;">成</button>
-        <button id="btn-prom-no" style="background:#757575; color:white;">不</button>
-      </div>
-    </div>
-    <div id="review-panel">
-      <div id="nav-pos">0/0</div>
-      <div id="kifu-container" class="kifu-list"></div>
-      <div class="nav-controls">
-        <button id="nav-prev" class="nav-btn">＜</button>
-        <button id="nav-next" class="nav-btn">＞</button>
-        <button id="btnKif" class="nav-btn" style="grid-column: span 2; background: #4caf50; color: white;">KIF</button>
-      </div>
+<div id="game-main">
+  <div id="board-container">
+    <div id="board"></div>
+    <div id="promote-dialog">
+      <div style="margin-bottom:8px; font-weight:bold; font-size:12px;">成りますか？</div>
+      <button id="btn-prom-yes" style="background:var(--danger-btn); color:white;">成</button>
+      <button id="btn-prom-no" style="background:#757575; color:white;">不</button>
     </div>
   </div>
+  <div id="review-panel">
+    <div id="nav-pos">0/0</div>
+    <div id="kifu-container" class="kifu-list"></div>
+    <div class="nav-controls">
+      <button id="nav-prev" class="nav-btn">＜ 前</button>
+      <button id="nav-next" class="nav-btn">次 ＞</button>
+      <button id="nav-first" class="nav-btn">《 最初</button>
+      <button id="nav-last" class="nav-btn">最後 》</button>
+      <button id="btnKif" class="nav-btn" style="grid-column: span 2; background: #4caf50; color: white;">KIF</button>
+    </div>
+  </div>
+</div>
+
+<div id="hands-container">
   <div class="hand" id="handS" data-label="▲先手"></div>
+  <div class="hand" id="handG" data-label="△後手"></div>
 </div>
 
 <audio id="remote-audio" autoplay></audio>
@@ -191,10 +132,13 @@
   };
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+  // URLの「?room=〇〇」の部分を読み取る
   const params = new URLSearchParams(location.search);
   const roomName = params.get('room') || "default_room";
   const gameRef = ref(db, `${roomName}/shogiData`);
+  // 【新設】感想戦の盤面同期用パス
   const reviewRef = ref(db, `${roomName}/reviewData`);
+  
   const callStatusRef = ref(db, `${roomName}/callStatus`);
   const signalingRef = ref(db, `${roomName}/signaling`);
 
@@ -212,39 +156,17 @@
   let mySide = sessionStorage.getItem(`mySide_${roomName}`) || 'S';
   const mySideSelect = document.getElementById('mySideSelect');
   const boardEl = document.getElementById('board');
-  const handS = document.getElementById('handS');
-  const handG = document.getElementById('handG');
-
   mySideSelect.value = mySide;
-  
-  // 反転状態に合わせて駒台の左右を入れ替える関数
-  function applyFlipLayout(isFlipped) {
-    boardEl.style.transform = isFlipped ? 'rotate(180deg)' : 'rotate(0deg)';
-    if (isFlipped) {
-      handG.style.order = "3"; // 右
-      handS.style.order = "1"; // 左
-    } else {
-      handG.style.order = "1"; // 左
-      handS.style.order = "3"; // 右
-    }
-  }
-
-  // 初期配置の適用
-  applyFlipLayout(mySide === 'G');
+  boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)';
 
   mySideSelect.onchange = (e) => { 
     mySide = e.target.value; 
     sessionStorage.setItem(`mySide_${roomName}`, mySide);
-    applyFlipLayout(mySide === 'G');
+    boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)'; 
     window.location.reload();
   };
 
-  // 反転ボタンの処理（デザイン変更のみ）
-  document.getElementById('btnFlip').onclick = () => {
-    const isCurrentlyFlipped = boardEl.style.transform === 'rotate(180deg)';
-    applyFlipLayout(!isCurrentlyFlipped);
-  };
-
+  // --- 通話維持用 ---
   let wakeLock = null;
   let silenceAudio = null;
   const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAP8A/w==";
@@ -261,9 +183,11 @@
     if (silenceAudio) { silenceAudio.pause(); }
   }
 
+  // --- Firebase監視 ---
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
+    
     if (!data.winner) {
         isReviewMode = false;
         sessionStorage.setItem(`isReview_${roomName}`, "false");
@@ -273,6 +197,7 @@
     } else {
         document.getElementById('btnToggleReview').disabled = false;
     }
+
     state.board = JSON.parse(data.board);
     state.handS = data.handS || [];
     state.handG = data.handG || [];
@@ -283,18 +208,30 @@
     state.winner = data.winner || null;
     state.winReason = data.winReason || "";
     state.history = data.history || [];
+
     if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
-    if (!isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); }
+    
+    // 対局モード中のみ自動で最新手に追従
+    if (!isReviewMode) { 
+        viewIdx = state.history.length - 1; 
+        syncReviewStateLocally(); // 検討用変数の同期（表示用）
+    }
+    
     render(); 
     updateKifuList();
   });
 
+  // 【追加】感想戦モード専用のFirebase同期監視
   onValue(reviewRef, (snap) => {
     if (!isReviewMode) return;
     const data = snap.val();
     if (data) {
         viewIdx = data.viewIdx;
-        rvState = { board: JSON.parse(data.board), handS: data.handS || [], handG: data.handG || [] };
+        rvState = {
+            board: JSON.parse(data.board),
+            handS: data.handS || [],
+            handG: data.handG || []
+        };
         render();
         updateKifuList();
     }
@@ -305,7 +242,10 @@
     sessionStorage.setItem(`isReview_${roomName}`, bool.toString());
     document.getElementById('btnToggleReview').textContent = bool ? "戻る" : "感想戦";
     document.getElementById('review-panel').style.display = bool ? 'flex' : 'none';
-    if (bool) pushReviewUpdate();
+    if (bool) {
+        // 感想戦開始時に現在の盤面状況をFirebaseに一度送る
+        pushReviewUpdate();
+    }
   }
 
   const cells = [];
@@ -320,9 +260,16 @@
     }
   }
 
+  // --- 感想戦同期用関数 ---
   function pushReviewUpdate() {
     if (!isReviewMode) return;
-    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: Date.now() });
+    set(reviewRef, {
+        viewIdx: viewIdx,
+        board: JSON.stringify(rvState.board),
+        handS: rvState.handS || [],
+        handG: rvState.handG || [],
+        timestamp: Date.now()
+    });
   }
 
   function finish(moveData) {
@@ -353,6 +300,7 @@
     set(gameRef, { board: JSON.stringify(state.board), handS: state.handS || [], handG: state.handG || [], turn: state.turn, timers: state.timers, config: state.config, lastTick: state.lastTick, winner: state.winner || null, winReason: state.winReason || "", history: state.history });
   }
 
+  // --- 通話機能（省略なし） ---
   let localStream = null, peerConnection = null, localCallStartPressed = false, isMuted = false;
   const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
   const btnCallStart = document.getElementById('btnCallStart'), btnCallEnd = document.getElementById('btnCallEnd'), btnMute = document.getElementById('btnMute'), callStatusDisplay = document.getElementById('callStatusDisplay'), volumeControl = document.getElementById('volume-control');
@@ -378,6 +326,7 @@
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
+  // --- 将棋ロジック ---
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) { kx=x; ky=y; break; }
@@ -392,14 +341,14 @@
     sessionStorage.setItem(key, "true");
     setReviewMode(true);
     syncReviewStateLocally(); 
-    pushReviewUpdate();
+    pushReviewUpdate(); // Firebaseに感想戦の初期盤面を同期
     setTimeout(() => { alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); }, 200);
   }
   document.getElementById('btnReset').onclick = () => {
-    if(!confirm("初期化しますか？")) return;
+    if(!confirm("初期化しますか？（対局モードに戻ります）")) return;
     Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); });
     setReviewMode(false);
-    remove(reviewRef);
+    remove(reviewRef); // 感想戦データも削除
     const m = (parseInt(document.getElementById('cfgMain').value) || 0) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
     const board = Array(9).fill(null).map(() => Array(9).fill(null));
     const setup = (y, o, ps) => ps.forEach((p, x) => { if (p) board[y][x] = { type: p, owner: o } });
@@ -427,15 +376,24 @@
         const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
         if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) if(confirm("成りますか？")) rvState.board[y][x].type = PROMOTE_MAP[fromP.type];
         sel = null; possibleMoves = []; 
-        pushReviewUpdate(); render(); return;
+        pushReviewUpdate(); // 盤面同期
+        render(); 
+        return;
       }
       if (selH) { 
-        if (!target) { rvState.board[y][x] = { type: selH.type, owner: selH.owner }; (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); selH = null; pushReviewUpdate(); render(); } 
-        else { selH = null; render(); } return; 
+        if (!target) { 
+            rvState.board[y][x] = { type: selH.type, owner: selH.owner }; 
+            (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); 
+            selH = null; 
+            pushReviewUpdate(); // 盤面同期
+            render(); 
+        } else { selH = null; render(); } 
+        return; 
       }
       if (target) { sel = { x, y }; possibleMoves = getRawMoves(x, y, rvState.board, target.owner); render(); }
       return;
     }
+    // 以下、対局モードの処理（変更なし）
     if (state.winner || state.turn !== mySide || pendingProm) return;
     const target = state.board[y][x];
     if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
@@ -488,7 +446,14 @@
     state.history.forEach((h, i) => {
       const div = document.createElement('div'); div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
       div.textContent = formatKifuText(h, i);
-      div.onclick = () => { if (!isReviewMode) setReviewMode(true); viewIdx = i; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); };
+      div.onclick = () => { 
+        if (!isReviewMode) setReviewMode(true); 
+        viewIdx = i; 
+        syncReviewStateLocally(); 
+        pushReviewUpdate(); // 棋譜選択時も同期
+        render(); 
+        updateKifuList(); 
+      };
       container.appendChild(div); if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
   }
@@ -521,9 +486,19 @@
   }
   setInterval(updateTimerDisplay, 1000);
 
-  document.getElementById('btnToggleReview').onclick = () => { setReviewMode(!isReviewMode); if(isReviewMode) { syncReviewStateLocally(); pushReviewUpdate(); } render(); updateKifuList(); };
+  document.getElementById('btnToggleReview').onclick = () => { 
+    setReviewMode(!isReviewMode); 
+    if(isReviewMode) {
+        syncReviewStateLocally(); 
+        pushReviewUpdate();
+    }
+    render(); 
+    updateKifuList(); 
+  };
   document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('btn-prom-yes').onclick = () => { pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; pendingProm.moveData.isPromoted = true; state.board[pendingProm.y][pendingProm.x].type = pendingProm.moveData.type; endProm(); };
   document.getElementById('btn-prom-no').onclick = () => endProm();
   function endProm() { const d = pendingProm.moveData; pendingProm = null; document.getElementById('promote-dialog').style.display = 'none'; finish(d); }
@@ -543,6 +518,7 @@
     else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
   };
+  document.getElementById('btnFlip').onclick = () => { boardEl.style.transform = boardEl.style.transform === 'rotate(180deg)' ? 'rotate(0deg)' : 'rotate(180deg)'; };
   document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
   document.getElementById('btnKif').onclick = () => {
     let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
