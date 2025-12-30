@@ -456,35 +456,51 @@
 
   // --- KIF形式コピーの修正 ---
   document.getElementById('btnKif').onclick = () => {
-    let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
-    state.history.forEach((h, i) => {
-      if (i === 0) return;
-      const tx = ZEN_NUM[9 - h.toX];
-      const ty = KANJI_NUM[h.toY + 1];
-      const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY);
-      
-      let moveStr = isSame ? "同　" : tx + ty;
-      let pieceStr = SYMBOLS[h.type.replace("(反則)","")];
-      if (h.isPromoted) pieceStr += "成";
-      
-      let fromStr = h.isDrop ? "打" : `(${9 - h.fromX}${h.fromY + 1})`;
-      
-      kif += `${String(i).padStart(4, " ")} ${moveStr}${pieceStr}${fromStr}( 0:00/00:00:00)\n`;
-    });
+  let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
+  
+  state.history.forEach((h, i) => {
+    if (i === 0) return;
     
-    // 強制的にクリップボードへコピーするための隠しテキストエリア
-    const area = document.createElement("textarea");
-    area.value = kif;
-    document.body.appendChild(area);
-    area.select();
-    try {
-      document.execCommand("copy");
-      alert("KIF形式で棋譜をコピーしました。");
-    } catch (err) {
-      alert("コピーに失敗しました。");
+    const prevH = state.history[i-1];
+    const isSame = (i > 1 && h.toX === prevH.toX && h.toY === prevH.toY);
+    
+    // 1. 手数 (4桁右詰め)
+    let line = String(i).padStart(4, " ");
+    
+    // 2. 指手座標
+    let moveStr = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1];
+    
+    // 3. 駒名称 (成駒の判定を厳密化)
+    let pieceStr = "";
+    if (h.isPromoted) {
+      // 成った瞬間は「元の駒名＋成」
+      const originType = h.isDrop ? "" : (UNPROMOTE_MAP[h.type] || h.type);
+      pieceStr = SYMBOLS[originType] + "成";
+    } else {
+      // 既に成っている駒が動く場合は、そのままの名称（と、龍、馬など）
+      pieceStr = SYMBOLS[h.type.replace("(反則)","")];
     }
-    document.body.removeChild(area);
-  };
+    
+    // 4. 移動元 (打なら「打」、移動なら「(xy)」スペースなし)
+    let fromStr = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")";
+    
+    // 連結 (指手と移動元の間にはスペースを入れないのがKIFの標準)
+    line += " " + moveStr + pieceStr + fromStr + "( 0:00/00:00:00)\n";
+    kif += line;
+  });
+  
+  const area = document.createElement("textarea");
+  area.value = kif;
+  document.body.appendChild(area);
+  area.select();
+  try {
+    document.execCommand("copy");
+    alert("KIF形式を厳密に修正してコピーしました。");
+  } catch (err) {
+    alert("コピーに失敗しました。");
+  }
+  document.body.removeChild(area);
+};
 </script>
 </body>
 </html>
