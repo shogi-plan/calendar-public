@@ -39,6 +39,7 @@
     .status-area { display: flex; gap: 4px; margin-bottom: 4px; width: 100%; justify-content: center; }
     .timer { font-family: monospace; font-size: 14px; font-weight: bold; background: #fff; padding: 2px 4px; border: 1px solid #555; border-radius: 3px; min-width: 70px; text-align: center; }
     .your-turn { border-color: var(--danger-btn); background: #ffebee; }
+    .timer-alert { color: var(--danger-btn) !important; }
     #hands-container { display: flex; width: 100vw; max-width: 500px; gap: 4px; margin-top: 6px; align-items: flex-start; }
     .hand { flex: 1; border: 1px solid #999; background: #fff; display: flex; flex-wrap: wrap; padding: 16px 2px 4px 2px; gap: 4px; border-radius: 3px; position: relative; min-height: 8vw; box-sizing: border-box; }
     .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 3px; font-size: 10px; color: #333; font-weight: bold; }
@@ -46,7 +47,6 @@
     .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
     #promote-dialog { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 10px; border: 3px solid #5d4037; z-index: 2000; text-align: center; border-radius: 8px; }
 
-    /* 通話UI用スタイル */
     .call-area { display: flex; gap: 5px; margin-top: 5px; background: #fff; padding: 5px; border-radius: 5px; border: 1px solid #ccc; align-items: center; }
     #btnCall { background: var(--call-btn); color: white; }
     #btnMute { background: #757575; color: white; }
@@ -60,7 +60,8 @@
 
 <div class="controls">
   <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
-    <input type="number" id="cfgMain" value="10" style="width:35px">分/<input type="number" id="cfgByo" value="30" style="width:35px">秒
+    持時:<select id="cfgMain" style="font-size:10px;"><option value="0">0分</option><option value="10" selected>10分</option><option value="15">15分</option><option value="30">30分</option></select>
+    / 秒読:<select id="cfgByo" style="font-size:10px;"><option value="30" selected>30秒</option><option value="60">60秒</option></select>
     <button id="btnReset">初期化</button>
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
@@ -137,11 +138,9 @@
 
   let state = { board: "[]", handS: [], handG: [], turn: 'S', timers: {S: 600, G: 600}, config: {main: 600, byo: 30}, lastTick: 0, history: [], winner: null, winReason: "" };
   let mySide = 'S', sel = null, selH = null, possibleMoves = [], pendingProm = null;
-  // リロード時にsessionStorageから感想戦モードの状態を復元
   let isReviewMode = sessionStorage.getItem(`isReview_${roomName}`) === "true";
   let viewIdx = -1, rvState = null;
 
-  // --- 通話用変数 ---
   let pc, localStream, isMuted = false;
   const iceConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
@@ -158,7 +157,6 @@
     }
   }
 
-  // --- 通話機能 ---
   async function startCall() {
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -195,16 +193,13 @@
   async function hangup() {
     if (pc) { pc.close(); pc = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    // 自分が切断ボタンを押した時だけデータを消去（相手側はonValueで検知する）
     await remove(callRef);
     document.getElementById('btnCall').disabled = false;
     document.getElementById('btnHangup').disabled = true;
     document.getElementById('btnMute').disabled = true;
     document.getElementById('call-status').textContent = "オフライン";
-    // 試行錯誤の結果、確実な初期化のためにリロードを実行
     location.reload();
   }
-  // 相手が切断した（callDataが消えた）ことを検知して自分もリロード
   onValue(callRef, snap => { if (!snap.exists() && pc) hangup(); });
 
   document.getElementById('btnMute').onclick = () => {
@@ -218,7 +213,6 @@
   document.getElementById('btnCall').onclick = startCall;
   document.getElementById('btnHangup').onclick = hangup;
 
-  // --- 将棋ロジック ---
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) { kx=x; ky=y; break; }
@@ -232,10 +226,8 @@
     const key = `shown_${roomName}_${state.history.length}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "true");
-
     const winnerName = winner === 'S' ? '先手▲' : '後手△';
     const message = reason ? `${reason}により、${winnerName}の勝ちです！` : `${winnerName}の勝ちです！`;
-    
     setReviewMode(true);
     viewIdx = state.history.length - 1;
     syncReviewState(); render(); updateKifuList();
@@ -283,13 +275,10 @@
     if (!data) return;
     state = data; state.board = JSON.parse(data.board); state.history = data.history || [];
     document.getElementById('btnToggleReview').disabled = !state.winner;
-    
     setReviewMode(isReviewMode);
-    
     if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
     if (!isReviewMode) viewIdx = state.history.length - 1;
     else if (viewIdx === -1) viewIdx = state.history.length - 1;
-
     if(isReviewMode) syncReviewState();
     render(); updateKifuList();
   });
@@ -298,7 +287,7 @@
     if(!confirm("初期化しますか？")) return;
     Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); });
     setReviewMode(false);
-    const m = (parseInt(document.getElementById('cfgMain').value) || 10) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
+    const m = (parseInt(document.getElementById('cfgMain').value) || 0) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
     const board = Array(9).fill(null).map(() => Array(9).fill(null));
     const setup = (y, o, ps) => ps.forEach((p, x) => { if (p) board[y][x] = { type: p, owner: o } });
     setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']); board[1][1]={type:'HI',owner:'G'}; board[1][7]={type:'KA',owner:'G'}; setup(2,'G',Array(9).fill('FU'));
@@ -421,19 +410,37 @@
     const now = Date.now();
     const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
     ['S', 'G'].forEach(s => {
-      let remMain = state.timers[s]; let displayStr = "";
+      let remMain = state.timers[s]; 
+      let displayStr = "";
+      let isByoAlert = false;
+      const el = document.getElementById(`timer-${s}`);
+
       if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
         if (remMain > 0) {
           const currentRem = Math.max(0, remMain - elapsed);
-          if (currentRem > 0) displayStr = `${s==='S'?'▲':'△'} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
-          else displayStr = `${s==='S'?'▲':'△'} 秒:${Math.max(0, (state.config.byo || 30) - (elapsed - remMain))}`;
-        } else displayStr = `${s==='S'?'▲':'△'} 秒:${Math.max(0, (state.config.byo || 30) - elapsed)}`;
-        if (displayStr.includes("秒:0") && !state.winner) { state.winner = (s === 'S' ? 'G' : 'S'); state.winReason = "時間切れ"; set(gameRef, { ...state, board: JSON.stringify(state.board) }); }
+          if (currentRem > 0) {
+            displayStr = `${s==='S'?'▲':'△'} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
+          } else {
+            const byoRem = Math.max(0, (state.config.byo || 30) - (elapsed - remMain));
+            displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`;
+            if (byoRem <= 5) isByoAlert = true;
+          }
+        } else {
+          const byoRem = Math.max(0, (state.config.byo || 30) - elapsed);
+          displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`;
+          if (byoRem <= 5) isByoAlert = true;
+        }
+        if (displayStr.includes("秒:0") && !state.winner) { 
+          state.winner = (s === 'S' ? 'G' : 'S'); 
+          state.winReason = "時間切れ"; 
+          set(gameRef, { ...state, board: JSON.stringify(state.board) }); 
+        }
       } else {
         if (remMain > 0) displayStr = `${s==='S'?'▲':'△'} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
         else displayStr = `${s==='S'?'▲':'△'} 秒:${state.config.byo || 30}`;
       }
-      document.getElementById(`timer-${s}`).textContent = displayStr;
+      el.textContent = displayStr;
+      if (isByoAlert) el.classList.add('timer-alert'); else el.classList.remove('timer-alert');
     });
   }
   setInterval(updateTimerDisplay, 1000);
