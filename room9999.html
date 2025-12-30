@@ -183,14 +183,13 @@
   }
 
   function stopKeepAlive() {
-    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
     if (silenceAudio) { silenceAudio.pause(); }
   }
 
-  // 再帰的なWakeLock取得（画面復帰時）
   document.addEventListener('visibilitychange', async () => {
     if (wakeLock !== null && document.visibilityState === 'visible') {
-      wakeLock = await navigator.wakeLock.request('screen');
+      try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
     }
   });
 
@@ -265,7 +264,6 @@
   }
 
   // --- 通話機能ロジック ---
-
   const btnCallStart = document.getElementById('btnCallStart');
   const btnCallEnd = document.getElementById('btnCallEnd');
   const btnMute = document.getElementById('btnMute');
@@ -294,22 +292,18 @@
   function createPeerConnection() {
     if (peerConnection && peerConnection.signalingState !== 'closed') return;
     peerConnection = new RTCPeerConnection(configuration);
-    
     peerConnection.ontrack = e => {
       const remoteAudio = document.getElementById('remote-audio');
       if (remoteAudio) remoteAudio.srcObject = e.streams[0];
     };
-
     if (localStream) {
       localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
     }
-
     peerConnection.onicecandidate = e => {
       if (e.candidate) {
         push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() });
       }
     };
-
     peerConnection.oniceconnectionstatechange = () => {
       if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
         handleCallEndInternal();
@@ -338,29 +332,24 @@
   btnCallStart.onclick = async () => {
     btnCallStart.disabled = true;
     try {
-      // バックグラウンド維持開始
       await startKeepAlive();
-      
       await startLocalStream();
       createPeerConnection();
       const snap = await get(callStatusRef);
       const callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } };
       if (!callData.users) callData.users = { S: false, G: false };
-      
       callData.users[mySide] = true;
       let newStatus = 'waiting';
-      
       if (callData.users.S && callData.users.G) {
         newStatus = 'started';
         await sendOffer();
       }
-      
       await update(callStatusRef, { status: newStatus, users: callData.users, timestamp: new Date().toISOString() });
       localCallStartPressed = true;
       updateCallUI();
     } catch (e) {
       console.error(e);
-      alert("マイクの使用が許可されていないか、エラーが発生しました。");
+      alert("エラーが発生しました。");
       stopKeepAlive();
       btnCallStart.disabled = false;
     }
@@ -373,7 +362,7 @@
 
   function handleCallEndInternal() {
     localCallStartPressed = false;
-    stopKeepAlive(); // バックグラウンド維持終了
+    stopKeepAlive();
     if (peerConnection) { peerConnection.close(); peerConnection = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     remove(signalingRef);
@@ -390,7 +379,6 @@
     btnMute.disabled = !localCallStartPressed;
   }
 
-  // --- シグナリング監視 ---
   onValue(callStatusRef, (snap) => {
     const data = snap.val();
     if (!data) return;
@@ -401,42 +389,27 @@
     const iPressed = !!data.users?.[mySide];
     localCallStartPressed = iPressed;
     updateCallUI();
-
-    if (data.status === 'started') {
-      callStatusDisplay.textContent = "通話中";
-    } else if (data.status === 'waiting') {
-      callStatusDisplay.textContent = iPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます";
-    } else {
-      callStatusDisplay.textContent = "オフライン";
-      sessionStorage.removeItem(`reloaded_${roomName}`);
-    }
+    if (data.status === 'started') { callStatusDisplay.textContent = "通話中"; } 
+    else if (data.status === 'waiting') { callStatusDisplay.textContent = iPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; } 
+    else { callStatusDisplay.textContent = "オフライン"; sessionStorage.removeItem(`reloaded_${roomName}`); }
   });
 
   onValue(ref(db, `${roomName}/signaling/offer`), snap => {
     const offer = snap.val();
     if (offer && offer.from !== mySide) sendAnswer();
   });
-
   onValue(ref(db, `${roomName}/signaling/answer`), async snap => {
     const answer = snap.val();
-    if (answer && answer.from !== mySide && peerConnection) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    }
+    if (answer && answer.from !== mySide && peerConnection) { await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); }
   });
-
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => {
-    if (mySide === 'G' && peerConnection && snap.exists()) {
-      Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)));
-    }
+    if (mySide === 'G' && peerConnection && snap.exists()) { Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); }
   });
-
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => {
-    if (mySide === 'S' && peerConnection && snap.exists()) {
-      Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)));
-    }
+    if (mySide === 'S' && peerConnection && snap.exists()) { Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); }
   });
 
-  // --- 将棋ロジック ---
+  // --- 将棋ロジック & 棋譜修正 ---
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) { kx=x; ky=y; break; }
@@ -579,8 +552,13 @@
     });
   }
 
+  // 棋譜表示の修正（投了・時間切れ対応）
   function formatKifuText(move, idx) {
     if (idx === 0) return "開始";
+    if (move.type === "投了" || move.type === "時間切れ") {
+      const side = move.side === 'S' ? "▲" : "△";
+      return `${idx}.${side}${move.type}`;
+    }
     const side = move.side === 'S' ? "▲" : "△", x = 9 - move.toX, y = KANJI_NUM[move.toY + 1];
     const isSame = (idx > 1 && move.toX === state.history[idx-1].toX && move.toY === state.history[idx-1].toY);
     let type = SYMBOLS[move.type.replace("(反則)","")];
