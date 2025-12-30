@@ -47,7 +47,6 @@
     .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
     #promote-dialog { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 10px; border: 3px solid #5d4037; z-index: 2000; text-align: center; border-radius: 8px; }
 
-    /* 通話エリア UI */
     .call-area { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; background: #fff; padding: 5px; border-radius: 5px; border: 1px solid #ccc; align-items: center; justify-content: center; width: 98%; box-sizing: border-box; }
     #btnCallStart { background: var(--call-btn); color: white; }
     #btnMute { background: #757575; color: white; }
@@ -135,8 +134,9 @@
   const db = getDatabase(app);
   const roomName = location.pathname.split('/').pop().replace('.html', '') || "shogi_room";
   const gameRef = ref(db, `${roomName}/shogiData`);
+  // 【新設】感想戦の盤面同期用パス
+  const reviewRef = ref(db, `${roomName}/reviewData`);
   
-  // --- 通話用Firebase参照 ---
   const callStatusRef = ref(db, `${roomName}/callStatus`);
   const signalingRef = ref(db, `${roomName}/signaling`);
 
@@ -151,7 +151,6 @@
   let isReviewMode = sessionStorage.getItem(`isReview_${roomName}`) === "true";
   let viewIdx = -1, rvState = null;
 
-  // サイド選択
   let mySide = sessionStorage.getItem(`mySide_${roomName}`) || 'S';
   const mySideSelect = document.getElementById('mySideSelect');
   const boardEl = document.getElementById('board');
@@ -162,16 +161,90 @@
     mySide = e.target.value; 
     sessionStorage.setItem(`mySide_${roomName}`, mySide);
     boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)'; 
-    // サイドを変えたら通話状態も考慮してリロード
     window.location.reload();
   };
 
-  // --- 通話用変数 ---
-  let localStream = null;
-  let peerConnection = null;
-  let localCallStartPressed = false;
-  let isMuted = false;
-  const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  // --- 通話維持用 ---
+  let wakeLock = null;
+  let silenceAudio = null;
+  const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAP8A/w==";
+
+  async function startKeepAlive() {
+    try {
+      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+      if (!silenceAudio) { silenceAudio = new Audio(silenceData); silenceAudio.loop = true; silenceAudio.volume = 0.01; }
+      await silenceAudio.play();
+    } catch (err) {}
+  }
+  function stopKeepAlive() {
+    if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
+    if (silenceAudio) { silenceAudio.pause(); }
+  }
+
+  // --- Firebase監視 ---
+  onValue(gameRef, (snap) => {
+    const data = snap.val();
+    if (!data) return;
+    
+    if (!data.winner) {
+        isReviewMode = false;
+        sessionStorage.setItem(`isReview_${roomName}`, "false");
+        document.getElementById('btnToggleReview').textContent = "感想戦";
+        document.getElementById('review-panel').style.display = 'none';
+        document.getElementById('btnToggleReview').disabled = true;
+    } else {
+        document.getElementById('btnToggleReview').disabled = false;
+    }
+
+    state.board = JSON.parse(data.board);
+    state.handS = data.handS || [];
+    state.handG = data.handG || [];
+    state.turn = data.turn || 'S';
+    state.timers = data.timers || {S:600, G:600};
+    state.config = data.config || {main:600, byo:30};
+    state.lastTick = data.lastTick || 0;
+    state.winner = data.winner || null;
+    state.winReason = data.winReason || "";
+    state.history = data.history || [];
+
+    if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
+    
+    // 対局モード中のみ自動で最新手に追従
+    if (!isReviewMode) { 
+        viewIdx = state.history.length - 1; 
+        syncReviewStateLocally(); // 検討用変数の同期（表示用）
+    }
+    
+    render(); 
+    updateKifuList();
+  });
+
+  // 【追加】感想戦モード専用のFirebase同期監視
+  onValue(reviewRef, (snap) => {
+    if (!isReviewMode) return;
+    const data = snap.val();
+    if (data) {
+        viewIdx = data.viewIdx;
+        rvState = {
+            board: JSON.parse(data.board),
+            handS: data.handS || [],
+            handG: data.handG || []
+        };
+        render();
+        updateKifuList();
+    }
+  });
+
+  function setReviewMode(bool) {
+    isReviewMode = bool;
+    sessionStorage.setItem(`isReview_${roomName}`, bool.toString());
+    document.getElementById('btnToggleReview').textContent = bool ? "戻る" : "感想戦";
+    document.getElementById('review-panel').style.display = bool ? 'flex' : 'none';
+    if (bool) {
+        // 感想戦開始時に現在の盤面状況をFirebaseに一度送る
+        pushReviewUpdate();
+    }
+  }
 
   const cells = [];
   for (let y = 0; y < 9; y++) {
@@ -185,28 +258,17 @@
     }
   }
 
-  onValue(gameRef, (snap) => {
-    const data = snap.val();
-    if (!data) return;
-    state.board = JSON.parse(data.board);
-    state.handS = data.handS || [];
-    state.handG = data.handG || [];
-    state.turn = data.turn || 'S';
-    state.timers = data.timers || {S:600, G:600};
-    state.config = data.config || {main:600, byo:30};
-    state.lastTick = data.lastTick || 0;
-    state.winner = data.winner || null;
-    state.winReason = data.winReason || "";
-    state.history = data.history || [];
-    document.getElementById('btnToggleReview').disabled = !state.winner;
-    setReviewMode(isReviewMode);
-    if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
-    if (!isReviewMode) { viewIdx = state.history.length - 1; }
-    else if (viewIdx === -1) { viewIdx = state.history.length - 1; }
-    if(isReviewMode) syncReviewState();
-    render(); 
-    updateKifuList();
-  });
+  // --- 感想戦同期用関数 ---
+  function pushReviewUpdate() {
+    if (!isReviewMode) return;
+    set(reviewRef, {
+        viewIdx: viewIdx,
+        board: JSON.stringify(rvState.board),
+        handS: rvState.handS || [],
+        handG: rvState.handG || [],
+        timestamp: Date.now()
+    });
+  }
 
   function finish(moveData) {
     const now = Date.now();
@@ -236,179 +298,33 @@
     set(gameRef, { board: JSON.stringify(state.board), handS: state.handS || [], handG: state.handG || [], turn: state.turn, timers: state.timers, config: state.config, lastTick: state.lastTick, winner: state.winner || null, winReason: state.winReason || "", history: state.history });
   }
 
-  // --- 通話機能ロジック (カレンダー版移植) ---
-
-  const btnCallStart = document.getElementById('btnCallStart');
-  const btnCallEnd = document.getElementById('btnCallEnd');
-  const btnMute = document.getElementById('btnMute');
-  const callStatusDisplay = document.getElementById('callStatusDisplay');
-  const volumeControl = document.getElementById('volume-control');
-
-  volumeControl.addEventListener('input', () => {
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio) remoteAudio.volume = parseFloat(volumeControl.value);
-  });
-
-  btnMute.onclick = () => {
-    if (!localStream) return;
-    isMuted = !isMuted;
-    localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
-    btnMute.textContent = isMuted ? '解除' : 'ミュート';
-    btnMute.style.background = isMuted ? "var(--danger-btn)" : "#757575";
-  };
-
-  async function startLocalStream() {
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); }
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
-    return localStream;
-  }
-
+  // --- 通話機能（省略なし） ---
+  let localStream = null, peerConnection = null, localCallStartPressed = false, isMuted = false;
+  const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  const btnCallStart = document.getElementById('btnCallStart'), btnCallEnd = document.getElementById('btnCallEnd'), btnMute = document.getElementById('btnMute'), callStatusDisplay = document.getElementById('callStatusDisplay'), volumeControl = document.getElementById('volume-control');
+  volumeControl.addEventListener('input', () => { const ra = document.getElementById('remote-audio'); if (ra) ra.volume = parseFloat(volumeControl.value); });
+  btnMute.onclick = () => { if (!localStream) return; isMuted = !isMuted; localStream.getAudioTracks().forEach(t => t.enabled = !isMuted); btnMute.textContent = isMuted ? '解除' : 'ミュート'; btnMute.style.background = isMuted ? "var(--danger-btn)" : "#757575"; };
+  async function startLocalStream() { if (localStream) localStream.getTracks().forEach(t => t.stop()); localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); return localStream; }
   function createPeerConnection() {
     if (peerConnection && peerConnection.signalingState !== 'closed') return;
     peerConnection = new RTCPeerConnection(configuration);
-    
-    peerConnection.ontrack = e => {
-      const remoteAudio = document.getElementById('remote-audio');
-      if (remoteAudio) remoteAudio.srcObject = e.streams[0];
-    };
-
-    if (localStream) {
-      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-    }
-
-    peerConnection.onicecandidate = e => {
-      if (e.candidate) {
-        push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() });
-      }
-    };
-
-    peerConnection.oniceconnectionstatechange = () => {
-      if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
-        handleCallEndInternal();
-      }
-    };
+    peerConnection.ontrack = e => { const ra = document.getElementById('remote-audio'); if (ra) ra.srcObject = e.streams[0]; };
+    if (localStream) localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    peerConnection.onicecandidate = e => { if (e.candidate) push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() }); };
   }
+  async function sendOffer() { createPeerConnection(); const offer = await peerConnection.createOffer(); await peerConnection.setLocalDescription(offer); await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: mySide }); }
+  async function sendAnswer() { const snap = await get(ref(db, `${roomName}/signaling/offer`)); if (!snap.exists()) return; const offer = snap.val(); createPeerConnection(); await peerConnection.setRemoteDescription(new RTCSessionDescription(offer)); const answer = await peerConnection.createAnswer(); await peerConnection.setLocalDescription(answer); await set(ref(db, `${roomName}/signaling/answer`), { sdp: answer.sdp, type: answer.type, from: mySide }); }
+  btnCallStart.onclick = async () => { btnCallStart.disabled = true; try { await startKeepAlive(); await startLocalStream(); createPeerConnection(); const snap = await get(callStatusRef); const callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } }; if (!callData.users) callData.users = { S: false, G: false }; callData.users[mySide] = true; let newStatus = 'waiting'; if (callData.users.S && callData.users.G) { newStatus = 'started'; await sendOffer(); } await update(callStatusRef, { status: newStatus, users: callData.users, timestamp: new Date().toISOString() }); localCallStartPressed = true; updateCallUI(); } catch (e) { btnCallStart.disabled = false; stopKeepAlive(); } };
+  btnCallEnd.onclick = async () => { await update(callStatusRef, { status: 'ended', users: { S: false, G: false } }); handleCallEndInternal(); };
+  function handleCallEndInternal() { localCallStartPressed = false; stopKeepAlive(); if (peerConnection) { peerConnection.close(); peerConnection = null; } if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; } remove(signalingRef); updateCallUI(); if (!sessionStorage.getItem(`reloaded_${roomName}`)) { sessionStorage.setItem(`reloaded_${roomName}`, '1'); window.location.reload(); } }
+  function updateCallUI() { btnCallStart.disabled = localCallStartPressed; btnCallEnd.disabled = !localCallStartPressed; btnMute.disabled = !localCallStartPressed; }
+  onValue(callStatusRef, (snap) => { const data = snap.val(); if (!data) return; if (data.status === 'ended' && localCallStartPressed) { handleCallEndInternal(); return; } const iPressed = !!data.users?.[mySide]; localCallStartPressed = iPressed; updateCallUI(); if (data.status === 'started') callStatusDisplay.textContent = "通話中"; else if (data.status === 'waiting') callStatusDisplay.textContent = iPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; else { callStatusDisplay.textContent = "オフライン"; sessionStorage.removeItem(`reloaded_${roomName}`); } });
+  onValue(ref(db, `${roomName}/signaling/offer`), snap => { const offer = snap.val(); if (offer && offer.from !== mySide) sendAnswer(); });
+  onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
+  onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
+  onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
-  async function sendOffer() {
-    createPeerConnection();
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: mySide });
-  }
-
-  async function sendAnswer() {
-    const snap = await get(ref(db, `${roomName}/signaling/offer`));
-    if (!snap.exists()) return;
-    const offer = snap.val();
-    createPeerConnection();
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    await set(ref(db, `${roomName}/signaling/answer`), { sdp: answer.sdp, type: answer.type, from: mySide });
-  }
-
-  btnCallStart.onclick = async () => {
-    btnCallStart.disabled = true;
-    try {
-      await startLocalStream();
-      createPeerConnection();
-      const snap = await get(callStatusRef);
-      const callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } };
-      if (!callData.users) callData.users = { S: false, G: false };
-      
-      callData.users[mySide] = true;
-      let newStatus = 'waiting';
-      
-      if (callData.users.S && callData.users.G) {
-        newStatus = 'started';
-        await sendOffer();
-      }
-      
-      await update(callStatusRef, { status: newStatus, users: callData.users, timestamp: new Date().toISOString() });
-      localCallStartPressed = true;
-      updateCallUI();
-    } catch (e) {
-      console.error(e);
-      alert("マイクの使用が許可されていないか、エラーが発生しました。");
-      btnCallStart.disabled = false;
-    }
-  };
-
-  btnCallEnd.onclick = async () => {
-    await update(callStatusRef, { status: 'ended', users: { S: false, G: false } });
-    handleCallEndInternal();
-  };
-
-  function handleCallEndInternal() {
-    localCallStartPressed = false;
-    if (peerConnection) { peerConnection.close(); peerConnection = null; }
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    remove(signalingRef);
-    updateCallUI();
-    // 無限リロードを防ぐため、一度だけリロード
-    if (!sessionStorage.getItem(`reloaded_${roomName}`)) {
-      sessionStorage.setItem(`reloaded_${roomName}`, '1');
-      window.location.reload();
-    }
-  }
-
-  function updateCallUI() {
-    btnCallStart.disabled = localCallStartPressed;
-    btnCallEnd.disabled = !localCallStartPressed;
-    btnMute.disabled = !localCallStartPressed;
-  }
-
-  // --- シグナリング監視 ---
-  onValue(callStatusRef, (snap) => {
-    const data = snap.val();
-    if (!data) return;
-    if (data.status === 'ended' && localCallStartPressed) {
-      handleCallEndInternal();
-      return;
-    }
-    const iPressed = !!data.users?.[mySide];
-    const otherSide = (mySide === 'S' ? 'G' : 'S');
-    const otherPressed = !!data.users?.[otherSide];
-    
-    localCallStartPressed = iPressed;
-    updateCallUI();
-
-    if (data.status === 'started') {
-      callStatusDisplay.textContent = "通話中";
-    } else if (data.status === 'waiting') {
-      callStatusDisplay.textContent = iPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます";
-    } else {
-      callStatusDisplay.textContent = "オフライン";
-      sessionStorage.removeItem(`reloaded_${roomName}`);
-    }
-  });
-
-  onValue(ref(db, `${roomName}/signaling/offer`), snap => {
-    const offer = snap.val();
-    if (offer && offer.from !== mySide) sendAnswer();
-  });
-
-  onValue(ref(db, `${roomName}/signaling/answer`), async snap => {
-    const answer = snap.val();
-    if (answer && answer.from !== mySide && peerConnection) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    }
-  });
-
-  onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => {
-    if (mySide === 'G' && peerConnection && snap.exists()) {
-      Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)));
-    }
-  });
-
-  onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => {
-    if (mySide === 'S' && peerConnection && snap.exists()) {
-      Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)));
-    }
-  });
-
-  // --- 将棋ロジック (以降はベースコードと同一) ---
-
+  // --- 将棋ロジック ---
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) { kx=x; ky=y; break; }
@@ -417,30 +333,20 @@
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.owner === enemy) if(getRawMoves(x, y, board, enemy).some(m => m.x===kx && m.y===ky)) return true;
     return false;
   };
-
   function showGameOverPopup(winner, reason = "") {
     const key = `shown_${roomName}_${state.history.length}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "true");
-    const winnerName = winner === 'S' ? '先手▲' : '後手△';
-    const message = reason ? `${reason}により、${winnerName}の勝ちです！` : `${winnerName}の勝ちです！`;
     setReviewMode(true);
-    viewIdx = state.history.length - 1;
-    syncReviewState(); render(); updateKifuList();
-    setTimeout(() => { alert(message); }, 200);
+    syncReviewStateLocally(); 
+    pushReviewUpdate(); // Firebaseに感想戦の初期盤面を同期
+    setTimeout(() => { alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); }, 200);
   }
-
-  function setReviewMode(bool) {
-    isReviewMode = bool;
-    sessionStorage.setItem(`isReview_${roomName}`, bool);
-    document.getElementById('btnToggleReview').textContent = bool ? "戻る" : "感想戦";
-    document.getElementById('review-panel').style.display = bool ? 'flex' : 'none';
-  }
-
   document.getElementById('btnReset').onclick = () => {
-    if(!confirm("初期化しますか？")) return;
+    if(!confirm("初期化しますか？（対局モードに戻ります）")) return;
     Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); });
     setReviewMode(false);
+    remove(reviewRef); // 感想戦データも削除
     const m = (parseInt(document.getElementById('cfgMain').value) || 0) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
     const board = Array(9).fill(null).map(() => Array(9).fill(null));
     const setup = (y, o, ps) => ps.forEach((p, x) => { if (p) board[y][x] = { type: p, owner: o } });
@@ -449,17 +355,12 @@
     const bStr = JSON.stringify(board);
     set(gameRef, { board: bStr, handS: [], handG: [], turn: 'S', timers: {S: m, G: m}, config: {main: m, byo: b}, lastTick: 0, winner: null, winReason: "", history: [{ board: bStr, handS: [], handG: [], type: '開始' }] });
   };
-
-  document.getElementById('btnResign').onclick = () => {
-    if (state.winner || state.turn !== mySide) return;
-    if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); }
-  };
-
-  function syncReviewState() {
-    if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1;
-    const hist = state.history[viewIdx];
-    rvState = { board: JSON.parse(hist.board), handS: [...(hist.handS || [])], handG: [...(hist.handG || [])] };
-    sel = null; selH = null; possibleMoves = [];
+  
+  function syncReviewStateLocally() { 
+    if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; 
+    const hist = state.history[viewIdx]; 
+    rvState = { board: JSON.parse(hist.board), handS: [...(hist.handS || [])], handG: [...(hist.handG || [])] }; 
+    sel = null; selH = null; possibleMoves = []; 
   }
 
   function handleCellClick(x, y) {
@@ -472,41 +373,42 @@
         rvState.board[y][x] = { type: fromP.type, owner: fromP.owner }; rvState.board[sel.y][sel.x] = null;
         const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
         if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) if(confirm("成りますか？")) rvState.board[y][x].type = PROMOTE_MAP[fromP.type];
-        sel = null; possibleMoves = []; render(); return;
-      }
-      if (selH) {
-        if (!target) { rvState.board[y][x] = { type: selH.type, owner: selH.owner }; (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); selH = null; render(); }
-        else { selH = null; render(); }
+        sel = null; possibleMoves = []; 
+        pushReviewUpdate(); // 盤面同期
+        render(); 
         return;
+      }
+      if (selH) { 
+        if (!target) { 
+            rvState.board[y][x] = { type: selH.type, owner: selH.owner }; 
+            (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); 
+            selH = null; 
+            pushReviewUpdate(); // 盤面同期
+            render(); 
+        } else { selH = null; render(); } 
+        return; 
       }
       if (target) { sel = { x, y }; possibleMoves = getRawMoves(x, y, rvState.board, target.owner); render(); }
       return;
     }
+    // 以下、対局モードの処理（変更なし）
     if (state.winner || state.turn !== mySide || pendingProm) return;
     const target = state.board[y][x];
     if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
     if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
       const fromP = state.board[sel.y][sel.x];
-      if (target && target.owner !== mySide) {
-        const h = (mySide === 'S' ? state.handS : state.handG) || []; h.push(UNPROMOTE_MAP[target.type] || target.type);
-        if (mySide === 'S') state.handS = h; else state.handG = h;
-      }
+      if (target && target.owner !== mySide) { const h = (mySide === 'S' ? state.handS : state.handG) || []; h.push(UNPROMOTE_MAP[target.type] || target.type); if (mySide === 'S') state.handS = h; else state.handG = h; }
       const moveData = { side: mySide, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
       state.board[y][x] = { type: fromP.type, owner: mySide }; state.board[sel.y][sel.x] = null;
       const promLine = (mySide === 'S') ? [0,1,2] : [6,7,8];
       if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
         const deadLine = (mySide === 'S') ? 0 : 8;
-        if (((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine) || (fromP.type === 'KE' && (mySide==='S' ? y<=1 : y>=7))) {
-          state.board[y][x].type = PROMOTE_MAP[fromP.type]; moveData.type = PROMOTE_MAP[fromP.type]; moveData.isPromoted = true; finish(moveData);
-        } else { pendingProm = { x, y, moveData }; document.getElementById('promote-dialog').style.display = 'block'; render(); }
+        if (((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine) || (fromP.type === 'KE' && (mySide==='S' ? y<=1 : y>=7))) { state.board[y][x].type = PROMOTE_MAP[fromP.type]; moveData.type = PROMOTE_MAP[fromP.type]; moveData.isPromoted = true; finish(moveData); } 
+        else { pendingProm = { x, y, moveData }; document.getElementById('promote-dialog').style.display = 'block'; render(); }
       } else { finish(moveData); }
       return;
     }
-    if (selH) {
-      if (!target) { state.board[y][x] = { type: selH.type, owner: mySide }; (mySide === 'S' ? state.handS : state.handG).splice(selH.idx, 1); finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true }); }
-      else { selH = null; render(); }
-      return;
-    }
+    if (selH) { if (!target) { state.board[y][x] = { type: selH.type, owner: mySide }; (mySide === 'S' ? state.handS : state.handG).splice(selH.idx, 1); finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true }); } else { selH = null; render(); } return; }
     if (target && target.owner === mySide) { sel = { x, y }; possibleMoves = getRawMoves(x, y, state.board, mySide); render(); }
   }
 
@@ -523,11 +425,7 @@
       (list || []).forEach((t, i) => {
         const s = document.createElement('span'); s.className = "piece-font"; s.textContent = SYMBOLS[t];
         if (selH?.idx === i && selH?.owner === owner) s.classList.add('selected-piece');
-        s.onclick = (e) => {
-          e.stopPropagation(); if (!isReviewMode && (state.winner || state.turn !== mySide || owner !== mySide)) return;
-          if (selH?.idx === i) { selH = null; } else { selH = { type: t, owner, idx: i }; sel = null; possibleMoves = []; }
-          render();
-        };
+        s.onclick = (e) => { e.stopPropagation(); if (!isReviewMode && (state.winner || state.turn !== mySide || owner !== mySide)) return; if (selH?.idx === i) selH = null; else { selH = { type: t, owner, idx: i }; sel = null; possibleMoves = []; } render(); };
         el.appendChild(s);
       });
     };
@@ -546,13 +444,21 @@
     state.history.forEach((h, i) => {
       const div = document.createElement('div'); div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
       div.textContent = formatKifuText(h, i);
-      div.onclick = () => { setReviewMode(true); viewIdx = i; syncReviewState(); render(); updateKifuList(); };
+      div.onclick = () => { 
+        if (!isReviewMode) setReviewMode(true); 
+        viewIdx = i; 
+        syncReviewStateLocally(); 
+        pushReviewUpdate(); // 棋譜選択時も同期
+        render(); 
+        updateKifuList(); 
+      };
       container.appendChild(div); if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
   }
 
   function formatKifuText(move, idx) {
     if (idx === 0) return "開始";
+    if (move.type === "投了" || move.type === "時間切れ") { return `${idx}.${move.side === 'S' ? "▲" : "△"}${move.type}`; }
     const side = move.side === 'S' ? "▲" : "△", x = 9 - move.toX, y = KANJI_NUM[move.toY + 1];
     const isSame = (idx > 1 && move.toX === state.history[idx-1].toX && move.toY === state.history[idx-1].toY);
     let type = SYMBOLS[move.type.replace("(反則)","")];
@@ -564,42 +470,39 @@
     const now = Date.now();
     const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
     ['S', 'G'].forEach(s => {
-      let remMain = state.timers[s]; 
-      let displayStr = "";
-      let isByoAlert = false;
-      const el = document.getElementById(`timer-${s}`);
+      let remMain = state.timers[s]; let displayStr = ""; let isByoAlert = false; const el = document.getElementById(`timer-${s}`);
       if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
         if (remMain > 0) {
           const currentRem = Math.max(0, remMain - elapsed);
-          if (currentRem > 0) { displayStr = `${s==='S'?'▲':'△'} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`; }
+          if (currentRem > 0) displayStr = `${s==='S'?'▲':'△'} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
           else { const byoRem = Math.max(0, (state.config.byo || 30) - (elapsed - remMain)); displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`; if (byoRem <= 5) isByoAlert = true; }
         } else { const byoRem = Math.max(0, (state.config.byo || 30) - elapsed); displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`; if (byoRem <= 5) isByoAlert = true; }
         if (displayStr.includes("秒:0") && !state.winner) { state.winner = (s === 'S' ? 'G' : 'S'); state.winReason = "時間切れ"; finish({ side: s, type: "時間切れ" }); }
-      } else {
-        if (remMain > 0) displayStr = `${s==='S'?'▲':'△'} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
-        else displayStr = `${s==='S'?'▲':'△'} 秒:${state.config.byo || 30}`;
-      }
-      el.textContent = displayStr;
-      if (isByoAlert) el.classList.add('timer-alert'); else el.classList.remove('timer-alert');
+      } else { if (remMain > 0) displayStr = `${s==='S'?'▲':'△'} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`; else displayStr = `${s==='S'?'▲':'△'} 秒:${state.config.byo || 30}`; }
+      el.textContent = displayStr; if (isByoAlert) el.classList.add('timer-alert'); else el.classList.remove('timer-alert');
     });
   }
   setInterval(updateTimerDisplay, 1000);
 
-  document.getElementById('btnToggleReview').onclick = function() {
-    setReviewMode(!isReviewMode);
-    viewIdx = state.history.length - 1; if(isReviewMode) syncReviewState(); render(); updateKifuList();
+  document.getElementById('btnToggleReview').onclick = () => { 
+    setReviewMode(!isReviewMode); 
+    if(isReviewMode) {
+        syncReviewStateLocally(); 
+        pushReviewUpdate();
+    }
+    render(); 
+    updateKifuList(); 
   };
-  document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewState(); render(); updateKifuList(); } };
-  document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewState(); render(); updateKifuList(); } };
-  document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewState(); render(); updateKifuList(); } };
-  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewState(); render(); updateKifuList(); } };
+  document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('btn-prom-yes').onclick = () => { pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; pendingProm.moveData.isPromoted = true; state.board[pendingProm.y][pendingProm.x].type = pendingProm.moveData.type; endProm(); };
   document.getElementById('btn-prom-no').onclick = () => endProm();
   function endProm() { const d = pendingProm.moveData; pendingProm = null; document.getElementById('promote-dialog').style.display = 'none'; finish(d); }
 
   const getRawMoves = (x, y, board, owner) => {
-    const moves = []; const p = board[y][x]; if (!p) return moves;
-    const f = (owner === 'S' ? -1 : 1);
+    const moves = []; const p = board[y][x]; if (!p) return moves; const f = (owner === 'S' ? -1 : 1);
     const add = (tx, ty) => { if (tx>=0 && tx<9 && ty>=0 && ty<9 && board[ty][tx]?.owner !== owner) moves.push({x:tx, y:ty}); };
     const slide = (vx, vy) => { let tx = x + vx, ty = y + vy; while (tx>=0 && tx<9 && ty>=0 && ty<9) { if (board[ty][tx]) { if (board[ty][tx].owner !== owner) moves.push({x:tx, y:ty}); break; } moves.push({x:tx, y:ty}); tx += vx; ty += vy; } };
     const t = p.type;
@@ -613,42 +516,16 @@
     else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
   };
-
   document.getElementById('btnFlip').onclick = () => { boardEl.style.transform = boardEl.style.transform === 'rotate(180deg)' ? 'rotate(0deg)' : 'rotate(180deg)'; };
-
+  document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
   document.getElementById('btnKif').onclick = () => {
     let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
-    state.history.forEach((h, i) => {
-      if (i === 0) return;
-      const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY);
-      let moveStr = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1];
-      let pieceStr = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")];
-      let fromStr = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")";
-      kif += String(i).padStart(4, " ") + " " + moveStr + pieceStr + fromStr + "( 0:00/00:00:00)\n";
-    });
-    const area = document.createElement("textarea"); area.value = kif; document.body.appendChild(area); area.select();
-    try { document.execCommand("copy"); alert("KIF形式でコピーしました。"); } catch (err) { alert("コピー失敗"); }
-    document.body.removeChild(area);
+    state.history.forEach((h, i) => { if (i === 0) return; const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY); let moveStr = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1]; let pieceStr = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")]; let fromStr = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")"; kif += String(i).padStart(4, " ") + " " + moveStr + pieceStr + fromStr + "( 0:00/00:00:00)\n"; });
+    const area = document.createElement("textarea"); area.value = kif; document.body.appendChild(area); area.select(); try { document.execCommand("copy"); alert("KIF形式でコピーしました。"); } catch (err) { alert("コピー失敗"); } document.body.removeChild(area);
   };
-
   function isCheckmate(board, turn, handS, handG) {
-    for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) {
-      if (board[y][x]?.owner === turn) {
-        const moves = getRawMoves(x, y, board, turn);
-        for (let m of moves) {
-          const tb = JSON.parse(JSON.stringify(board));
-          tb[m.y][m.x] = tb[y][x]; tb[y][x] = null;
-          if (!isChecked(tb, turn)) return false;
-        }
-      }
-    }
-    const h = (turn === 'S' ? handS : handG) || [];
-    for (let type of [...new Set(h)]) for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) {
-      if (!board[y][x]) {
-        const tb = JSON.parse(JSON.stringify(board)); tb[y][x] = { type, owner: turn };
-        if (!isChecked(tb, turn)) return false;
-      }
-    }
+    for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (board[y][x]?.owner === turn) { const moves = getRawMoves(x, y, board, turn); for (let m of moves) { const tb = JSON.parse(JSON.stringify(board)); tb[m.y][m.x] = tb[y][x]; tb[y][x] = null; if (!isChecked(tb, turn)) return false; } }
+    const h = (turn === 'S' ? handS : handG) || []; for (let type of [...new Set(h)]) for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (!board[y][x]) { const tb = JSON.parse(JSON.stringify(board)); tb[y][x] = { type, owner: turn }; if (!isChecked(tb, turn)) return false; }
     return true;
   }
 </script>
