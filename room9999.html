@@ -136,7 +136,6 @@
   const roomName = location.pathname.split('/').pop().replace('.html', '') || "shogi_room";
   const gameRef = ref(db, `${roomName}/shogiData`);
   
-  // --- 通話用Firebase参照 ---
   const callStatusRef = ref(db, `${roomName}/callStatus`);
   const signalingRef = ref(db, `${roomName}/signaling`);
 
@@ -151,7 +150,6 @@
   let isReviewMode = sessionStorage.getItem(`isReview_${roomName}`) === "true";
   let viewIdx = -1, rvState = null;
 
-  // サイド選択
   let mySide = sessionStorage.getItem(`mySide_${roomName}`) || 'S';
   const mySideSelect = document.getElementById('mySideSelect');
   const boardEl = document.getElementById('board');
@@ -162,9 +160,39 @@
     mySide = e.target.value; 
     sessionStorage.setItem(`mySide_${roomName}`, mySide);
     boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)'; 
-    // サイドを変えたら通話状態も考慮してリロード
     window.location.reload();
   };
+
+  // --- 通話維持用 (Wake Lock & 無音再生) ---
+  let wakeLock = null;
+  let silenceAudio = null;
+  const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAP8A/w==";
+
+  async function startKeepAlive() {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+      }
+      if (!silenceAudio) {
+        silenceAudio = new Audio(silenceData);
+        silenceAudio.loop = true;
+        silenceAudio.volume = 0.01;
+      }
+      await silenceAudio.play();
+    } catch (err) { console.error("KeepAlive Error:", err); }
+  }
+
+  function stopKeepAlive() {
+    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    if (silenceAudio) { silenceAudio.pause(); }
+  }
+
+  // 再帰的なWakeLock取得（画面復帰時）
+  document.addEventListener('visibilitychange', async () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  });
 
   // --- 通話用変数 ---
   let localStream = null;
@@ -236,7 +264,7 @@
     set(gameRef, { board: JSON.stringify(state.board), handS: state.handS || [], handG: state.handG || [], turn: state.turn, timers: state.timers, config: state.config, lastTick: state.lastTick, winner: state.winner || null, winReason: state.winReason || "", history: state.history });
   }
 
-  // --- 通話機能ロジック (カレンダー版移植) ---
+  // --- 通話機能ロジック ---
 
   const btnCallStart = document.getElementById('btnCallStart');
   const btnCallEnd = document.getElementById('btnCallEnd');
@@ -310,6 +338,9 @@
   btnCallStart.onclick = async () => {
     btnCallStart.disabled = true;
     try {
+      // バックグラウンド維持開始
+      await startKeepAlive();
+      
       await startLocalStream();
       createPeerConnection();
       const snap = await get(callStatusRef);
@@ -330,6 +361,7 @@
     } catch (e) {
       console.error(e);
       alert("マイクの使用が許可されていないか、エラーが発生しました。");
+      stopKeepAlive();
       btnCallStart.disabled = false;
     }
   };
@@ -341,11 +373,11 @@
 
   function handleCallEndInternal() {
     localCallStartPressed = false;
+    stopKeepAlive(); // バックグラウンド維持終了
     if (peerConnection) { peerConnection.close(); peerConnection = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     remove(signalingRef);
     updateCallUI();
-    // 無限リロードを防ぐため、一度だけリロード
     if (!sessionStorage.getItem(`reloaded_${roomName}`)) {
       sessionStorage.setItem(`reloaded_${roomName}`, '1');
       window.location.reload();
@@ -367,9 +399,6 @@
       return;
     }
     const iPressed = !!data.users?.[mySide];
-    const otherSide = (mySide === 'S' ? 'G' : 'S');
-    const otherPressed = !!data.users?.[otherSide];
-    
     localCallStartPressed = iPressed;
     updateCallUI();
 
@@ -407,8 +436,7 @@
     }
   });
 
-  // --- 将棋ロジック (以降はベースコードと同一) ---
-
+  // --- 将棋ロジック ---
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) { kx=x; ky=y; break; }
