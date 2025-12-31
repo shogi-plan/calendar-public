@@ -475,7 +475,21 @@
       state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
     }
     sel = null; selH = null; possibleMoves = [];
-    set(gameRef, { board: JSON.stringify(state.board), handS: state.handS || [], handG: state.handG || [], turn: state.turn, timers: state.timers, config: state.config, lastTick: state.lastTick, winner: state.winner || null, winReason: state.winReason || "", history: state.history });
+        sel = null; selH = null; possibleMoves = [];
+    // updateを使用し、タイムスタンプを付与することで同期の確実性を高めます
+    update(gameRef, { 
+      board: JSON.stringify(state.board), 
+      handS: state.handS || [], 
+      handG: state.handG || [], 
+      turn: state.turn, 
+      timers: state.timers, 
+      config: state.config, 
+      lastTick: state.lastTick, 
+      winner: state.winner || null, 
+      winReason: state.winReason || "", 
+      history: state.history,
+      updatedAt: Date.now() // 更新時間を混ぜることで強制的に同期を走らせる
+    });
   }
 
   const isChecked = (board, owner) => {
