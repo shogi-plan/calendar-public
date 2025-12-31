@@ -69,7 +69,7 @@
   <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
     持時:<select id="cfgMain" style="font-size:10px;"><option value="0">0分</option><option value="10" selected>10分</option><option value="15">15分</option><option value="30">30分</option></select>
     / 秒読:<select id="cfgByo" style="font-size:10px;"><option value="30" selected>30秒</option><option value="60">60秒</option></select>
-    <button id="btnReset">初期化</button>
+    <button id="btnReset">スタート</button>
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
     <button id="btnResign">投了</button>
@@ -96,10 +96,12 @@
 <div id="game-main">
   <div id="board-container">
     <div id="board"></div>
-    <div id="promote-dialog">
-      <div style="margin-bottom:8px; font-weight:bold; font-size:12px;">成りますか？</div>
-      <button id="btn-prom-yes" style="background:var(--danger-btn); color:white;">成</button>
-      <button id="btn-prom-no" style="background:#757575; color:white;">不</button>
+        <div id="promote-dialog" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px; border: 4px solid #5d4037; z-index: 2000; text-align: center; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); min-width: 160px;">
+      <div style="margin-bottom:15px; font-weight:bold; font-size:16px;">成りますか？</div>
+      <div style="display: flex; gap: 15px; justify-content: center;">
+        <button id="btn-prom-yes" style="background:var(--danger-btn); color:white; padding: 12px 20px; font-size: 16px; min-width: 70px;">成る</button>
+        <button id="btn-prom-no" style="background:#757575; color:white; padding: 12px 20px; font-size: 16px; min-width: 70px;">不成</button>
+      </div>
     </div>
   </div>
   <div id="review-panel">
