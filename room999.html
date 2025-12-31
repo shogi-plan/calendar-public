@@ -132,11 +132,11 @@
   };
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
-  const roomName = location.pathname.split('/').pop().replace('.html', '') || "shogi_room";
-  const gameRef = ref(db, `${roomName}/shogiData`);
-  // 【新設】感想戦の盤面同期用パス
-  const reviewRef = ref(db, `${roomName}/reviewData`);
   
+  const params = new URLSearchParams(location.search);
+  const roomName = params.get('room') || "default_room";
+  const gameRef = ref(db, `${roomName}/shogiData`);
+  const reviewRef = ref(db, `${roomName}/reviewData`);
   const callStatusRef = ref(db, `${roomName}/callStatus`);
   const signalingRef = ref(db, `${roomName}/signaling`);
 
@@ -164,28 +164,175 @@
     window.location.reload();
   };
 
-  // --- 通話維持用 ---
+  // --- 通話維持用（バックグラウンド対策強化版） ---
   let wakeLock = null;
   let silenceAudio = null;
-  const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAP8A/w==";
+  let audioCtx = null;
+  const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
   async function startKeepAlive() {
     try {
       if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
-      if (!silenceAudio) { silenceAudio = new Audio(silenceData); silenceAudio.loop = true; silenceAudio.volume = 0.01; }
+      
+      if (!silenceAudio) { 
+        silenceAudio = new Audio(silenceData); 
+        silenceAudio.loop = true; 
+        silenceAudio.volume = 0.01; 
+      }
       await silenceAudio.play();
-    } catch (err) {}
+
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        const buffer = audioCtx.createBuffer(1, 1, 22050);
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        source.connect(audioCtx.destination);
+        source.start();
+        audioCtx.onstatechange = () => {
+          if (audioCtx.state === 'suspended' && localCallStartPressed) audioCtx.resume();
+        };
+      }
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+    } catch (err) { console.warn("Keep-alive Error:", err); }
   }
+
   function stopKeepAlive() {
     if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
     if (silenceAudio) { silenceAudio.pause(); }
+    if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
   }
 
-  // --- Firebase監視 ---
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && localCallStartPressed) {
+      if ('wakeLock' in navigator && !wakeLock) {
+        try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    }
+  });
+
+  // --- WebRTC / 通話機能（ICE Restart統合） ---
+  let localStream = null, peerConnection = null, localCallStartPressed = false, isMuted = false;
+  const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  const btnCallStart = document.getElementById('btnCallStart'), btnCallEnd = document.getElementById('btnCallEnd'), btnMute = document.getElementById('btnMute'), callStatusDisplay = document.getElementById('callStatusDisplay'), volumeControl = document.getElementById('volume-control');
+
+  volumeControl.addEventListener('input', () => { const ra = document.getElementById('remote-audio'); if (ra) ra.volume = parseFloat(volumeControl.value); });
+  btnMute.onclick = () => { if (!localStream) return; isMuted = !isMuted; localStream.getAudioTracks().forEach(t => t.enabled = !isMuted); btnMute.textContent = isMuted ? '解除' : 'ミュート'; btnMute.style.background = isMuted ? "var(--danger-btn)" : "#757575"; };
+
+  async function startLocalStream() { 
+    if (localStream) localStream.getTracks().forEach(t => t.stop()); 
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); 
+    return localStream; 
+  }
+
+  function createPeerConnection() {
+    if (peerConnection && peerConnection.signalingState !== 'closed') return;
+    peerConnection = new RTCPeerConnection(configuration);
+    
+    // ICE接続状態の監視（自動再接続用）
+    peerConnection.oniceconnectionstatechange = () => {
+      const state = peerConnection.iceConnectionState;
+      console.log("ICE Connection:", state);
+      if (state === "failed" || state === "disconnected") handleIceRestart();
+    };
+
+    peerConnection.ontrack = e => { const ra = document.getElementById('remote-audio'); if (ra) ra.srcObject = e.streams[0]; };
+    if (localStream) localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    peerConnection.onicecandidate = e => { if (e.candidate) push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() }); };
+  }
+
+  async function sendOffer() { 
+    createPeerConnection(); 
+    const offer = await peerConnection.createOffer(); 
+    await peerConnection.setLocalDescription(offer); 
+    await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: mySide }); 
+  }
+
+  async function sendAnswer() { 
+    const snap = await get(ref(db, `${roomName}/signaling/offer`)); 
+    if (!snap.exists()) return; 
+    const offer = snap.val(); 
+    createPeerConnection(); 
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer)); 
+    const answer = await peerConnection.createAnswer(); 
+    await peerConnection.setLocalDescription(answer); 
+    await set(ref(db, `${roomName}/signaling/answer`), { sdp: answer.sdp, type: answer.type, from: mySide }); 
+  }
+
+  async function handleIceRestart() {
+    if (!peerConnection || peerConnection.signalingState === 'closed') return;
+    try {
+      const offer = await peerConnection.createOffer({ iceRestart: true });
+      await peerConnection.setLocalDescription(offer);
+      await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: mySide, isRestart: true });
+    } catch (e) { console.error("Restart ICE failed:", e); }
+  }
+
+  btnCallStart.onclick = async () => { 
+    btnCallStart.disabled = true; 
+    try { 
+      await startKeepAlive(); 
+      await startLocalStream(); 
+      createPeerConnection(); 
+      const snap = await get(callStatusRef); 
+      const callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } }; 
+      if (!callData.users) callData.users = { S: false, G: false }; 
+      callData.users[mySide] = true; 
+      let newStatus = 'waiting'; 
+      if (callData.users.S && callData.users.G) { newStatus = 'started'; await sendOffer(); } 
+      await update(callStatusRef, { status: newStatus, users: callData.users, timestamp: new Date().toISOString() }); 
+      localCallStartPressed = true; 
+      updateCallUI(); 
+    } catch (e) { btnCallStart.disabled = false; stopKeepAlive(); } 
+  };
+
+  btnCallEnd.onclick = async () => { 
+    await update(callStatusRef, { status: 'ended', users: { S: false, G: false } }); 
+    handleCallEndInternal(); 
+  };
+
+  function handleCallEndInternal() { 
+    localCallStartPressed = false; 
+    stopKeepAlive(); 
+    if (peerConnection) { peerConnection.close(); peerConnection = null; } 
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; } 
+    remove(signalingRef); 
+    updateCallUI(); 
+    if (!sessionStorage.getItem(`reloaded_${roomName}`)) { 
+      sessionStorage.setItem(`reloaded_${roomName}`, '1'); 
+      window.location.reload(); 
+    } 
+  }
+
+  function updateCallUI() { 
+    btnCallStart.disabled = localCallStartPressed; 
+    btnCallEnd.disabled = !localCallStartPressed; 
+    btnMute.disabled = !localCallStartPressed; 
+  }
+
+  onValue(callStatusRef, (snap) => { 
+    const data = snap.val(); 
+    if (!data) return; 
+    if (data.status === 'ended' && localCallStartPressed) { handleCallEndInternal(); return; } 
+    const iPressed = !!data.users?.[mySide]; 
+    localCallStartPressed = iPressed; 
+    updateCallUI(); 
+    if (data.status === 'started') callStatusDisplay.textContent = "通話中"; 
+    else if (data.status === 'waiting') callStatusDisplay.textContent = iPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
+    else { callStatusDisplay.textContent = "オフライン"; sessionStorage.removeItem(`reloaded_${roomName}`); } 
+  });
+
+  onValue(ref(db, `${roomName}/signaling/offer`), snap => { const offer = snap.val(); if (offer && offer.from !== mySide) sendAnswer(); });
+  onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
+  onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
+  onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
+
+  // --- Firebase 将棋データ監視 ---
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
-    
     if (!data.winner) {
         isReviewMode = false;
         sessionStorage.setItem(`isReview_${roomName}`, "false");
@@ -195,7 +342,6 @@
     } else {
         document.getElementById('btnToggleReview').disabled = false;
     }
-
     state.board = JSON.parse(data.board);
     state.handS = data.handS || [];
     state.handG = data.handG || [];
@@ -206,44 +352,33 @@
     state.winner = data.winner || null;
     state.winReason = data.winReason || "";
     state.history = data.history || [];
-
     if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
-    
-    // 対局モード中のみ自動で最新手に追従
     if (!isReviewMode) { 
         viewIdx = state.history.length - 1; 
-        syncReviewStateLocally(); // 検討用変数の同期（表示用）
+        syncReviewStateLocally(); 
     }
-    
     render(); 
     updateKifuList();
   });
 
-  // 【追加】感想戦モード専用のFirebase同期監視
   onValue(reviewRef, (snap) => {
     if (!isReviewMode) return;
     const data = snap.val();
     if (data) {
         viewIdx = data.viewIdx;
-        rvState = {
-            board: JSON.parse(data.board),
-            handS: data.handS || [],
-            handG: data.handG || []
-        };
+        rvState = { board: JSON.parse(data.board), handS: data.handS || [], handG: data.handG || [] };
         render();
         updateKifuList();
     }
   });
 
+  // --- 将棋 UI / ロジック ---
   function setReviewMode(bool) {
     isReviewMode = bool;
     sessionStorage.setItem(`isReview_${roomName}`, bool.toString());
     document.getElementById('btnToggleReview').textContent = bool ? "戻る" : "感想戦";
     document.getElementById('review-panel').style.display = bool ? 'flex' : 'none';
-    if (bool) {
-        // 感想戦開始時に現在の盤面状況をFirebaseに一度送る
-        pushReviewUpdate();
-    }
+    if (bool) pushReviewUpdate();
   }
 
   const cells = [];
@@ -258,16 +393,9 @@
     }
   }
 
-  // --- 感想戦同期用関数 ---
   function pushReviewUpdate() {
     if (!isReviewMode) return;
-    set(reviewRef, {
-        viewIdx: viewIdx,
-        board: JSON.stringify(rvState.board),
-        handS: rvState.handS || [],
-        handG: rvState.handG || [],
-        timestamp: Date.now()
-    });
+    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: Date.now() });
   }
 
   function finish(moveData) {
@@ -298,33 +426,6 @@
     set(gameRef, { board: JSON.stringify(state.board), handS: state.handS || [], handG: state.handG || [], turn: state.turn, timers: state.timers, config: state.config, lastTick: state.lastTick, winner: state.winner || null, winReason: state.winReason || "", history: state.history });
   }
 
-  // --- 通話機能（省略なし） ---
-  let localStream = null, peerConnection = null, localCallStartPressed = false, isMuted = false;
-  const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-  const btnCallStart = document.getElementById('btnCallStart'), btnCallEnd = document.getElementById('btnCallEnd'), btnMute = document.getElementById('btnMute'), callStatusDisplay = document.getElementById('callStatusDisplay'), volumeControl = document.getElementById('volume-control');
-  volumeControl.addEventListener('input', () => { const ra = document.getElementById('remote-audio'); if (ra) ra.volume = parseFloat(volumeControl.value); });
-  btnMute.onclick = () => { if (!localStream) return; isMuted = !isMuted; localStream.getAudioTracks().forEach(t => t.enabled = !isMuted); btnMute.textContent = isMuted ? '解除' : 'ミュート'; btnMute.style.background = isMuted ? "var(--danger-btn)" : "#757575"; };
-  async function startLocalStream() { if (localStream) localStream.getTracks().forEach(t => t.stop()); localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); return localStream; }
-  function createPeerConnection() {
-    if (peerConnection && peerConnection.signalingState !== 'closed') return;
-    peerConnection = new RTCPeerConnection(configuration);
-    peerConnection.ontrack = e => { const ra = document.getElementById('remote-audio'); if (ra) ra.srcObject = e.streams[0]; };
-    if (localStream) localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-    peerConnection.onicecandidate = e => { if (e.candidate) push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() }); };
-  }
-  async function sendOffer() { createPeerConnection(); const offer = await peerConnection.createOffer(); await peerConnection.setLocalDescription(offer); await set(ref(db, `${roomName}/signaling/offer`), { sdp: offer.sdp, type: offer.type, from: mySide }); }
-  async function sendAnswer() { const snap = await get(ref(db, `${roomName}/signaling/offer`)); if (!snap.exists()) return; const offer = snap.val(); createPeerConnection(); await peerConnection.setRemoteDescription(new RTCSessionDescription(offer)); const answer = await peerConnection.createAnswer(); await peerConnection.setLocalDescription(answer); await set(ref(db, `${roomName}/signaling/answer`), { sdp: answer.sdp, type: answer.type, from: mySide }); }
-  btnCallStart.onclick = async () => { btnCallStart.disabled = true; try { await startKeepAlive(); await startLocalStream(); createPeerConnection(); const snap = await get(callStatusRef); const callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } }; if (!callData.users) callData.users = { S: false, G: false }; callData.users[mySide] = true; let newStatus = 'waiting'; if (callData.users.S && callData.users.G) { newStatus = 'started'; await sendOffer(); } await update(callStatusRef, { status: newStatus, users: callData.users, timestamp: new Date().toISOString() }); localCallStartPressed = true; updateCallUI(); } catch (e) { btnCallStart.disabled = false; stopKeepAlive(); } };
-  btnCallEnd.onclick = async () => { await update(callStatusRef, { status: 'ended', users: { S: false, G: false } }); handleCallEndInternal(); };
-  function handleCallEndInternal() { localCallStartPressed = false; stopKeepAlive(); if (peerConnection) { peerConnection.close(); peerConnection = null; } if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; } remove(signalingRef); updateCallUI(); if (!sessionStorage.getItem(`reloaded_${roomName}`)) { sessionStorage.setItem(`reloaded_${roomName}`, '1'); window.location.reload(); } }
-  function updateCallUI() { btnCallStart.disabled = localCallStartPressed; btnCallEnd.disabled = !localCallStartPressed; btnMute.disabled = !localCallStartPressed; }
-  onValue(callStatusRef, (snap) => { const data = snap.val(); if (!data) return; if (data.status === 'ended' && localCallStartPressed) { handleCallEndInternal(); return; } const iPressed = !!data.users?.[mySide]; localCallStartPressed = iPressed; updateCallUI(); if (data.status === 'started') callStatusDisplay.textContent = "通話中"; else if (data.status === 'waiting') callStatusDisplay.textContent = iPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; else { callStatusDisplay.textContent = "オフライン"; sessionStorage.removeItem(`reloaded_${roomName}`); } });
-  onValue(ref(db, `${roomName}/signaling/offer`), snap => { const offer = snap.val(); if (offer && offer.from !== mySide) sendAnswer(); });
-  onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
-  onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
-  onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
-
-  // --- 将棋ロジック ---
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.type==='OU' && board[y][x]?.owner===owner) { kx=x; ky=y; break; }
@@ -333,20 +434,22 @@
     for(let y=0; y<9; y++) for(let x=0; x<9; x++) if(board[y][x]?.owner === enemy) if(getRawMoves(x, y, board, enemy).some(m => m.x===kx && m.y===ky)) return true;
     return false;
   };
+
   function showGameOverPopup(winner, reason = "") {
     const key = `shown_${roomName}_${state.history.length}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "true");
     setReviewMode(true);
     syncReviewStateLocally(); 
-    pushReviewUpdate(); // Firebaseに感想戦の初期盤面を同期
+    pushReviewUpdate();
     setTimeout(() => { alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); }, 200);
   }
+
   document.getElementById('btnReset').onclick = () => {
-    if(!confirm("初期化しますか？（対局モードに戻ります）")) return;
+    if(!confirm("初期化しますか？")) return;
     Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); });
     setReviewMode(false);
-    remove(reviewRef); // 感想戦データも削除
+    remove(reviewRef);
     const m = (parseInt(document.getElementById('cfgMain').value) || 0) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
     const board = Array(9).fill(null).map(() => Array(9).fill(null));
     const setup = (y, o, ps) => ps.forEach((p, x) => { if (p) board[y][x] = { type: p, owner: o } });
@@ -374,7 +477,7 @@
         const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
         if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) if(confirm("成りますか？")) rvState.board[y][x].type = PROMOTE_MAP[fromP.type];
         sel = null; possibleMoves = []; 
-        pushReviewUpdate(); // 盤面同期
+        pushReviewUpdate();
         render(); 
         return;
       }
@@ -382,16 +485,13 @@
         if (!target) { 
             rvState.board[y][x] = { type: selH.type, owner: selH.owner }; 
             (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); 
-            selH = null; 
-            pushReviewUpdate(); // 盤面同期
-            render(); 
+            selH = null; pushReviewUpdate(); render(); 
         } else { selH = null; render(); } 
         return; 
       }
       if (target) { sel = { x, y }; possibleMoves = getRawMoves(x, y, rvState.board, target.owner); render(); }
       return;
     }
-    // 以下、対局モードの処理（変更なし）
     if (state.winner || state.turn !== mySide || pendingProm) return;
     const target = state.board[y][x];
     if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
@@ -444,14 +544,7 @@
     state.history.forEach((h, i) => {
       const div = document.createElement('div'); div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
       div.textContent = formatKifuText(h, i);
-      div.onclick = () => { 
-        if (!isReviewMode) setReviewMode(true); 
-        viewIdx = i; 
-        syncReviewStateLocally(); 
-        pushReviewUpdate(); // 棋譜選択時も同期
-        render(); 
-        updateKifuList(); 
-      };
+      div.onclick = () => { if (!isReviewMode) setReviewMode(true); viewIdx = i; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); };
       container.appendChild(div); if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
   }
@@ -484,15 +577,7 @@
   }
   setInterval(updateTimerDisplay, 1000);
 
-  document.getElementById('btnToggleReview').onclick = () => { 
-    setReviewMode(!isReviewMode); 
-    if(isReviewMode) {
-        syncReviewStateLocally(); 
-        pushReviewUpdate();
-    }
-    render(); 
-    updateKifuList(); 
-  };
+  document.getElementById('btnToggleReview').onclick = () => { setReviewMode(!isReviewMode); if(isReviewMode) { syncReviewStateLocally(); pushReviewUpdate(); } render(); updateKifuList(); };
   document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
