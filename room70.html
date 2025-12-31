@@ -204,35 +204,49 @@ td.confirmed {
   const btnMute = document.getElementById('btn-mute');
   const volumeControl = document.getElementById('volume-control');
   
-  // --- 1. 変数定義のセクション ---
+    // --- 1. 変数定義とスリープ防止対策 ---
   let wakeLock = null;
   let silenceAudio = null;
-  const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAP8A/w==";
-  const audioObj = new Audio(silenceData);
-  audioObj.loop = true;
+  let audioCtx = null; // iOSバックグラウンド維持に必須
+  const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
-// ==========================================
-// ★ ここに「③ Wake Lockの再取得処理」を入れます
-// ==========================================
-async function requestWakeLock() {
-  try {
-    if ('wakeLock' in navigator) {
-      wakeLock = await navigator.wakeLock.request('screen');
-      console.log("Wake Lock is active");
+  async function startKeepAlive() {
+    try {
+      // 1. 画面スリープ防止
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+      }
+      // 2. 無音再生(Audioタグ)
+      if (!silenceAudio) {
+        silenceAudio = new Audio(silenceData);
+        silenceAudio.loop = true;
+        silenceAudio.volume = 0.01;
+      }
+      await silenceAudio.play();
+      // 3. 無音生成(AudioContext) - これがiOS/Safariの通信維持に最も強力
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        const buffer = audioCtx.createBuffer(1, 1, 22050);
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        source.connect(audioCtx.destination);
+        source.start();
+      }
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+    } catch (err) { console.warn("Keep-alive start failed:", err); }
+  }
+
+  // 画面が復帰（スリープ解除）した時のリカバリ
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && localCallStartPressed) {
+      if ('wakeLock' in navigator && wakeLock === null) {
+        try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     }
-  } catch (err) {
-    console.error(`${err.name}, ${err.message}`);
-  }
-}
-
-// 画面が復帰（タブに戻る、スリープ解除など）した時に自動で再取得
-document.addEventListener('visibilitychange', async () => {
-  // すでにWake Lockを一度取得している（通話中である）かつ、画面が表示された時
-  if (wakeLock !== null && document.visibilityState === 'visible') {
-    requestWakeLock();
-  }
-});
-// ==========================================
+  });
 
   volumeControl.addEventListener('input', () => {
   const remoteAudio = document.getElementById('remote-audio');
@@ -686,34 +700,26 @@ function createPeerConnection() {
     }
   }
 
-  peerConnection.oniceconnectionstatechange = () => {
+    peerConnection.oniceconnectionstatechange = () => {
     const state = peerConnection.iceConnectionState;
-    console.log('ICE connection state:', state);
-
-    if (state === 'failed' || state === 'closed') {
-      update(ref(db, `${roomName}/callStatus`), {
-        status: 'ended',
-        users: { A: false, B: false },
-        statusMessage: 'ICE: ' + state
-      }).catch(console.error);
-
-      endCallCleanup();
-      resetUI();
-    } else if (state === 'disconnected') {
-      setTimeout(() => {
-        if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
-          update(ref(db, `${roomName}/callStatus`), {
-            status: 'ended',
-            users: { A: false, B: false },
-            statusMessage: 'ICE: disconnected timeout'
-          }).catch(console.error);
-
-          endCallCleanup();
-          resetUI();
-        }
-      }, 5000);
+    console.log('ICE state:', state);
+    // 切断を検知したら、すぐに終了せず再試行(Restart)する
+    if (state === 'failed' || state === 'disconnected') {
+      console.log("切断検知。再接続(ICE Restart)を開始します...");
+      handleIceRestart();
     }
   };
+
+  async function handleIceRestart() {
+    if (!peerConnection || peerConnection.signalingState === 'closed') return;
+    try {
+      const offer = await peerConnection.createOffer({ iceRestart: true });
+      await peerConnection.setLocalDescription(offer);
+      await set(ref(db, `${roomName}/signaling/offer`), {
+        sdp: offer.sdp, type: offer.type, from: currentUser, isRestart: true
+      });
+    } catch (e) { console.error("ICE Restart failed:", e); }
+  }
 
   peerConnection.onicecandidate = event => {
     if (event.candidate) {
@@ -1238,13 +1244,11 @@ userBNameInput.addEventListener('input', async () => {
   let isCallStarting = false;
 
 btnCallStart.addEventListener('click', async () => {
-  // --- 強化ポイント: ユーザー操作をトリガーにスリープ防止開始 ---
-  try {
-    await audioObj.play();
-    requestWakeLock();
-  } catch (err) { console.error("スリープ防止再生失敗", err); }
+  // 修正：新しく定義したiOS対策関数を呼ぶ
+  await startKeepAlive();
+
+  if (!checkUserSelected()) return;
   
-if (!checkUserSelected()) return;
   if (isCallStarting) {
     return;
   }
@@ -1437,6 +1441,18 @@ await update(ref(db, `${roomName}/callStatus`), {
       await remove(ref(db, `${roomName}/signaling`));
     } catch (e) {
       console.error('signaling remove error:', e);
+    }
+
+    if (wakeLock) { 
+      try { await wakeLock.release(); } catch(e){} 
+      wakeLock = null; 
+    }
+    if (silenceAudio) {
+      silenceAudio.pause();
+    }
+    if (audioCtx) {
+      try { await audioCtx.close(); } catch(e){}
+      audioCtx = null;
     }
 
     callStatusDisplay.textContent = '通話は終了しました';
