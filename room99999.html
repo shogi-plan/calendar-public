@@ -823,13 +823,28 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
     });
   }
 
-  function formatKifuText(move, idx) {
+    function formatKifuText(move, idx) {
     if (idx === 0) return "開始";
-    if (move.type === "投了" || move.type === "時間切れ") { return `${idx}.${move.side === 'S' ? "▲" : "△"}${move.type}`; }
-    const side = move.side === 'S' ? "▲" : "△", x = 9 - move.toX, y = KANJI_NUM[move.toY + 1];
+    if (!move || !move.type) return `${idx}.不明`;
+    if (move.type === "投了" || move.type === "時間切れ") { 
+      return `${idx}.${move.side === 'S' ? "▲" : "△"}${move.type}`; 
+    }
+    
+    // 座標が数値でない場合のガード
+    if (typeof move.toX !== 'number' || typeof move.toY !== 'number') {
+      const typeStr = SYMBOLS[move.type.replace("(反則)","")] || move.type;
+      return `${idx}.${move.side === 'S' ? "▲" : "△"}${typeStr}(中断)`;
+    }
+
+    const side = move.side === 'S' ? "▲" : "△";
+    const x = 9 - move.toX;
+    const y = KANJI_NUM[move.toY + 1];
     const isSame = (idx > 1 && move.toX === state.history[idx-1].toX && move.toY === state.history[idx-1].toY);
-    let type = SYMBOLS[move.type.replace("(反則)","")];
-    if (move.isPromoted) type += "成"; else if (move.isDrop) type += "打";
+    
+    let type = SYMBOLS[move.type.replace("(反則)","")] || move.type;
+    if (move.isPromoted) type += "成"; 
+    else if (move.isDrop) type += "打";
+    
     return `${idx}.${side}${isSame ? "同" : x+y}${type}`;
   }
 
@@ -876,11 +891,34 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
     return moves;
   };
   document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
-  document.getElementById('btnKif').onclick = () => {
+    document.getElementById('btnKif').onclick = () => {
     let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
-    state.history.forEach((h, i) => { if (i === 0) return; const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY); let moveStr = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1]; let pieceStr = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")]; let fromStr = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")"; kif += String(i).padStart(4, " ") + " " + moveStr + pieceStr + fromStr + "( 0:00/00:00:00)\n"; });
-    const area = document.createElement("textarea"); area.value = kif; document.body.appendChild(area); area.select(); try { document.execCommand("copy"); alert("KIF形式でコピーしました。"); } catch (err) { alert("コピー失敗"); } document.body.removeChild(area);
+    state.history.forEach((h, i) => { 
+      if (i === 0) return; 
+      // 座標が数値でない場合は出力しないか、中断として扱う
+      if (typeof h.toX !== 'number' || typeof h.toY !== 'number') {
+        kif += String(i).padStart(4, " ") + " 中断\n";
+        return;
+      }
+      const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY); 
+      let moveStr = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1]; 
+      let pieceStr = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")]; 
+      let fromStr = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")"; 
+      kif += String(i).padStart(4, " ") + " " + moveStr + pieceStr + fromStr + "( 0:00/00:00:00)\n"; 
+    });
+    const area = document.createElement("textarea"); 
+    area.value = kif; 
+    document.body.appendChild(area); 
+    area.select(); 
+    try { 
+      document.execCommand("copy"); 
+      alert("KIF形式でコピーしました。"); 
+    } catch (err) { 
+      alert("コピー失敗"); 
+    } 
+    document.body.removeChild(area);
   };
+
   function isCheckmate(board, turn, handS, handG) {
     for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (board[y][x]?.owner === turn) { const moves = getRawMoves(x, y, board, turn); for (let m of moves) { const tb = JSON.parse(JSON.stringify(board)); tb[m.y][m.x] = tb[y][x]; tb[y][x] = null; if (!isChecked(tb, turn)) return false; } }
     const h = (turn === 'S' ? handS : handG) || []; for (let type of [...new Set(h)]) for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (!board[y][x]) { const tb = JSON.parse(JSON.stringify(board)); tb[y][x] = { type, owner: turn }; if (!isChecked(tb, turn)) return false; }
