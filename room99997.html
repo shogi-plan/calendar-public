@@ -128,22 +128,150 @@
   transform: rotate(180deg);
 }
 
+    /* 追加：設定ボタンとダイアログのスタイル */
+    :root { --setting-btn: #607d8b; }
+    #btnSetting { background: var(--setting-btn); color: white; }
+    #setting-dialog { 
+      display: none; 
+      position: fixed; 
+      top: 50%; 
+      left: 50%; 
+      transform: translate(-50%, -50%); 
+      background: white; 
+      padding: 20px; 
+      border-radius: 8px; 
+      box-shadow: 0 0 20px rgba(0,0,0,0.5); 
+      z-index: 3000; 
+      width: 280px; 
+    }
+    .setting-row { margin-bottom: 15px; }
+    .setting-row label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; }
+    .setting-row select { width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
+    
+        /* カウントダウンモーダル */
+    #countdown-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-weight: bold;
+      pointer-events: none;
+    }
+        #countdown-text {
+      font-size: 15vw; /* 画面幅に合わせる */
+      white-space: nowrap; /* 絶対に折り返さない */
+      text-shadow: 0 0 20px rgba(255,255,255,0.5);
+      transition: all 0.2s;
+      text-align: center;
+      width: 100%;
+    }
+    /* 準備完了ランプ */
+    .ready-area { display: flex; gap: 8px; align-items: center; justify-content: center; margin: 4px 0; }
+    .ready-lamp { width: 12px; height: 12px; border-radius: 50%; background: #ccc; border: 1px solid #999; }
+    .ready-lamp.on { background: #4caf50; box-shadow: 0 0 8px #4caf50; border-color: #fff; }
   </style>
 </head>
 <body>
-
+<div id="countdown-overlay"><div id="countdown-text">5</div></div>
 <h1>遠タメ将棋 Online</h1>
 
 <div class="controls">
   <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
-    持時:<select id="cfgMain" style="font-size:10px;"><option value="0">0分</option><option value="10" selected>10分</option><option value="15">15分</option><option value="30">30分</option></select>
-    / 秒読:<select id="cfgByo" style="font-size:10px;"><option value="30" selected>30秒</option><option value="60">60秒</option></select>
-    <button id="btnReset">初期化</button>
+    <button id="btnSetting">設定</button>
+
+<div id="setting-dialog">
+  <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">対局設定</h3>
+  
+  <div class="setting-row">
+    <label>持ち時間</label>
+    <select id="cfgMain">
+      <option value="0">0分（即秒読み）</option>
+      <option value="10" selected>10分</option>
+      <option value="15">15分</option>
+      <option value="30">30分</option>
+    </select>
+  </div>
+
+  <div class="setting-row">
+    <label>秒読み</label>
+    <select id="cfgByo">
+      <option value="30" selected>30秒</option>
+      <option value="60">60秒</option>
+    </select>
+  </div>
+
+  <div class="setting-row">
+    <label>手合割（駒落ち）</label>
+    <select id="cfgHandicap">
+      <option value="平手">平手</option>
+      <option value="香落ち">香落ち (上手：左香)</option>
+      <option value="角落ち">角落ち</option>
+      <option value="飛車落ち">飛車落ち</option>
+      <option value="飛香落ち">飛香落ち</option>
+      <option value="二枚落ち">二枚落ち (飛角)</option>
+      <option value="四枚落ち">四枚落ち (飛角香香)</option>
+      <option value="六枚落ち">六枚落ち (＋桂桂)</option>
+      <option value="八枚落ち">八枚落ち (＋銀銀)</option>
+    </select>
+  </div>
+  <div class="setting-row">
+    <label>上手（駒を落とす側）</label>
+    <select id="cfgUwateSide">
+      <option value="G">後手△が上手</option>
+      <option value="S">先手▲が上手</option>
+    </select>
+  </div>
+  <div style="display:flex; gap:10px;">
+    <button id="btnSettingSave" style="flex:1; background:var(--call-btn); color:white; padding:10px;">適用して初期化</button>
+    <button id="btnSettingCancel" style="flex:1; background:#ccc; padding:10px;">閉じる</button>
+  </div>
+</div>
+
+<div id="setting-dialog">
+  <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">対局設定</h3>
+  <div class="setting-row">
+    <label>手合割（駒落ち）</label>
+    <select id="cfgHandicap">
+      <option value="平手">平手</option>
+      <option value="香落ち">香落ち (上手：左香)</option>
+      <option value="角落ち">角落ち</option>
+      <option value="飛車落ち">飛車落ち</option>
+      <option value="飛香落ち">飛香落ち</option>
+      <option value="二枚落ち">二枚落ち (飛角)</option>
+      <option value="四枚落ち">四枚落ち (飛角香香)</option>
+      <option value="六枚落ち">六枚落ち (＋桂桂)</option>
+      <option value="八枚落ち">八枚落ち (＋銀銀)</option>
+    </select>
+  </div>
+  <div class="setting-row">
+    <label>上手（駒を落とす側）</label>
+    <select id="cfgUwateSide">
+      <option value="G">後手△が上手</option>
+      <option value="S">先手▲が上手</option>
+    </select>
+  </div>
+  <div style="display:flex; gap:10px;">
+    <button id="btnSettingSave" style="flex:1; background:var(--call-btn); color:white; padding:10px;">適用して初期化</button>
+    <button id="btnSettingCancel" style="flex:1; background:#ccc; padding:10px;">閉じる</button>
+  </div>
+</div>
+
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
-    <button id="btnResign">投了</button>
+        <button id="btnResign">投了</button>
   </div>
-  <select id="mySideSelect" style="font-size:10px;"><option value="S">先手▲</option><option value="G">後手△</option></select>
+  <div class="ready-area">
+    <select id="mySideSelect" style="font-size:10px;"><option value="S">先手▲</option><option value="G">後手△</option></select>
+    <button id="btnReady" style="background: #ff9800; color: white; padding: 4px 8px;">対局準備完了</button>
+    <div style="display: flex; gap: 4px; font-size: 10px; align-items: center; margin-left:5px;">
+      ▲<div id="lamp-S" class="ready-lamp"></div>
+      △<div id="lamp-G" class="ready-lamp"></div>
+    </div>
+  </div>
   <div id="status-txt" style="font-size:11px; font-weight:bold; margin-left:10px;">接続待ち...</div>
 </div>
 
@@ -238,9 +366,13 @@
   const gameRef = ref(db, `${roomName}/shogiData`);
   const reviewRef = ref(db, `${roomName}/reviewData`);
   const callStatusRef = ref(db, `${roomName}/callStatus`);
-  const signalingRef = ref(db, `${roomName}/signaling`);
+    const signalingRef = ref(db, `${roomName}/signaling`);
+  const readyRef = ref(db, `${roomName}/readyStatus`); // 追加
+
+  let isCountingDown = false; // 追加：カウントダウン中フラグ
 
   const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
+
   const PROMOTE_MAP = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'};
   const UNPROMOTE_MAP = {TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'};
   const KANJI_NUM = ["","一","二","三","四","五","六","七","八","九"];
@@ -533,7 +665,61 @@ onValue(callStatusRef, (snap) => {
     }
     render(); 
     updateKifuList();
+    updateTimerDisplay(); // データを取得した直後に表示を更新
   });
+  
+    // --- 準備完了ステータスの監視 ---
+  const btnReady = document.getElementById('btnReady');
+  btnReady.onclick = async () => {
+    const snap = await get(readyRef);
+    let readyData = snap.exists() ? snap.val() : { S: false, G: false };
+    readyData[mySide] = !readyData[mySide];
+    await set(readyRef, readyData);
+  };
+
+  onValue(readyRef, (snap) => {
+    const data = snap.val() || { S: false, G: false };
+    document.getElementById('lamp-S').className = `ready-lamp ${data.S ? 'on' : ''}`;
+    document.getElementById('lamp-G').className = `ready-lamp ${data.G ? 'on' : ''}`;
+    btnReady.textContent = data[mySide] ? "準備解除" : "対局準備完了";
+    btnReady.style.background = data[mySide] ? "#757575" : "#ff9800";
+
+    // 両者が準備完了し、まだ対局が始まっていない場合にカウントダウン開始
+    if (data.S && data.G && state.lastTick === 0 && !state.winner && !isCountingDown) {
+      startCountdown();
+    }
+  });
+
+    async function startCountdown() {
+    if (isCountingDown) return; // 二重起動防止
+    isCountingDown = true;
+    const overlay = document.getElementById('countdown-overlay');
+    const text = document.getElementById('countdown-text');
+    overlay.style.display = 'flex';
+    
+    for (let i = 5; i >= 0; i--) {
+      text.textContent = i === 0 ? "対局開始！" : i;
+      text.style.transform = "scale(1.1)";
+      await new Promise(r => setTimeout(r, 1000));
+      text.style.transform = "scale(1.0)";
+    }
+    
+    overlay.style.display = 'none';
+
+    // 先手が代表してFirebaseを更新。一括更新(update)にすることで同期のズレを防ぐ
+    if (mySide === 'S') {
+      const now = Date.now();
+      // ゲームデータと準備状態をほぼ同時に更新
+      await update(gameRef, { 
+        lastTick: now,
+        updatedAt: now 
+      });
+      await set(readyRef, { S: false, G: false });
+    }
+    
+    // フラグのリセットを少し遅らせて連打を防止
+    setTimeout(() => { isCountingDown = false; }, 2000);
+  }
 
   onValue(reviewRef, (snap) => {
     if (!isReviewMode) return;
@@ -679,18 +865,75 @@ onValue(callStatusRef, (snap) => {
     setTimeout(() => { alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); }, 200);
   }
 
-  document.getElementById('btnReset').onclick = () => {
-    if(!confirm("初期化しますか？")) return;
-    Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); });
-    setReviewMode(false);
-    remove(reviewRef);
-    const m = (parseInt(document.getElementById('cfgMain').value) || 0) * 60, b = (parseInt(document.getElementById('cfgByo').value) || 30);
+    // --- 駒落ち用初期配置生成関数 ---
+  function generateInitialBoard(handicapType, uwateSide) {
     const board = Array(9).fill(null).map(() => Array(9).fill(null));
     const setup = (y, o, ps) => ps.forEach((p, x) => { if (p) board[y][x] = { type: p, owner: o } });
-    setup(0,'G',['KY','KE','GI','KI','OU','KI','GI','KE','KY']); board[1][1]={type:'HI',owner:'G'}; board[1][7]={type:'KA',owner:'G'}; setup(2,'G',Array(9).fill('FU'));
-    setup(6,'S',Array(9).fill('FU')); board[7][1]={type:'KA',owner:'S'}; board[7][7]={type:'HI',owner:'S'}; setup(8,'S',['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
-    const bStr = JSON.stringify(board);
-    set(gameRef, { board: bStr, handS: [], handG: [], turn: 'S', timers: {S: m, G: m}, config: {main: m, byo: b}, lastTick: 0, winner: null, winReason: "", history: [{ board: bStr, handS: [], handG: [], type: '開始' }] });
+    // 平手配置
+    setup(0, 'G', ['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
+    board[1][1] = { type: 'HI', owner: 'G' }; board[1][7] = { type: 'KA', owner: 'G' };
+    setup(2, 'G', Array(9).fill('FU'));
+    setup(6, 'S', Array(9).fill('FU'));
+    board[7][1] = { type: 'KA', owner: 'S' }; board[7][7] = { type: 'HI', owner: 'S' };
+    setup(8, 'S', ['KY','KE','GI','KI','OU','KI','GI','KE','KY']);
+
+    // 駒落ち適用
+    const isUwateG = (uwateSide === 'G');
+    const uY0 = isUwateG ? 0 : 8; const uY1 = isUwateG ? 1 : 7;
+    const del = (y, x) => { board[y][x] = null; };
+    
+    if(handicapType === "香落ち") del(uY0, isUwateG ? 0 : 8);
+    else if(handicapType === "角落ち") del(uY1, isUwateG ? 7 : 1);
+    else if(handicapType === "飛車落ち") del(uY1, isUwateG ? 1 : 7);
+    else if(handicapType === "飛香落ち") { del(uY1, isUwateG ? 1 : 7); del(uY0, isUwateG ? 0 : 8); }
+    else if(handicapType === "二枚落ち") { del(uY1, 1); del(uY1, 7); }
+    else if(handicapType === "四枚落ち") { del(uY1, 1); del(uY1, 7); del(uY0, 0); del(uY0, 8); }
+    else if(handicapType === "六枚落ち") { del(uY1, 1); del(uY1, 7); del(uY0, 0); del(uY0, 8); del(uY0, 1); del(uY0, 7); }
+    else if(handicapType === "八枚落ち") { del(uY1, 1); del(uY1, 7); del(uY0, 0); del(uY0, 8); del(uY0, 1); del(uY0, 7); del(uY0, 2); del(uY0, 6); }
+    return board;
+  }
+
+  // 設定ダイアログの開閉
+  document.getElementById('btnSetting').onclick = () => { document.getElementById('setting-dialog').style.display = 'block'; };
+  document.getElementById('btnSettingCancel').onclick = () => { document.getElementById('setting-dialog').style.display = 'none'; };
+
+    // 設定適用ボタン
+  document.getElementById('btnSettingSave').onclick = () => {
+    if(!confirm("設定を適用して初期化しますか？")) return;
+    
+    const hType = document.getElementById('cfgHandicap').value;
+    const uSide = document.getElementById('cfgUwateSide').value;
+    const mainMin = parseInt(document.getElementById('cfgMain').value) || 0;
+    const byoSec = parseInt(document.getElementById('cfgByo').value) || 30;
+    
+    // 内部計算用に秒に変換
+    const m = mainMin * 60;
+    const b = byoSec;
+    const bStr = JSON.stringify(generateInitialBoard(hType, uSide));
+
+    set(gameRef, { 
+      board: bStr, 
+      handS: [], 
+      handG: [], 
+      turn: 'S', 
+      timers: {S: m, G: m}, 
+      config: {main: m, byo: b, handicap: hType}, 
+      lastTick: 0, 
+      winner: null, 
+      winReason: "", 
+      // 履歴の1手目にルール内容を明記
+      history: [{ board: bStr, handS: [], handG: [], type: `${hType} (${mainMin}分/${byoSec}秒)` }] 
+    });
+    set(readyRef, { S: false, G: false }); // 準備状態もリセット
+
+    document.getElementById('setting-dialog').style.display = 'none';
+    
+    // 感想戦モード等のリセット処理
+    setReviewMode(false);
+    remove(reviewRef);
+    Object.keys(sessionStorage).forEach(k => { 
+      if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); 
+    });
   };
   
   function syncReviewStateLocally() { 
@@ -708,11 +951,20 @@ onValue(callStatusRef, (snap) => {
         const fromP = rvState.board[sel.y][sel.x];
         if (target && target.owner !== fromP.owner) (fromP.owner === 'S' ? rvState.handS : rvState.handG).push(UNPROMOTE_MAP[target.type] || target.type);
         rvState.board[y][x] = { type: fromP.type, owner: fromP.owner }; rvState.board[sel.y][sel.x] = null;
-        const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
-        if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) if(confirm("成りますか？")) rvState.board[y][x].type = PROMOTE_MAP[fromP.type];
-        sel = null; possibleMoves = []; 
-        pushReviewUpdate();
-        render(); 
+                const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
+        // 移動データを一旦作成
+        const moveData = { side: fromP.owner, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
+
+        if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
+          // 感想戦でもダイアログを表示し、判定を endProm に委ねる
+          pendingProm = { x, y, moveData };
+          document.getElementById('promote-dialog').style.display = 'block';
+          render();
+        } else {
+          sel = null; possibleMoves = []; 
+          pushReviewUpdate();
+          render(); 
+        }
         return;
       }
       if (selH) { 
@@ -939,9 +1191,34 @@ function updateTimerDisplay() {
   document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
-  document.getElementById('btn-prom-yes').onclick = () => { pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; pendingProm.moveData.isPromoted = true; state.board[pendingProm.y][pendingProm.x].type = pendingProm.moveData.type; endProm(); };
+    document.getElementById('btn-prom-yes').onclick = () => { 
+    pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; 
+    pendingProm.moveData.isPromoted = true; 
+    // ※ state.board への直接代入を削除（endProm内でモード別に処理するため）
+    endProm(); 
+  };
   document.getElementById('btn-prom-no').onclick = () => endProm();
-  function endProm() { const d = pendingProm.moveData; pendingProm = null; document.getElementById('promote-dialog').style.display = 'none'; finish(d); }
+    function endProm() { 
+    const d = pendingProm.moveData; 
+    const tx = pendingProm.x;
+    const ty = pendingProm.y;
+
+    if (isReviewMode) {
+      // 感想戦モードの場合はローカルの検討状態(rvState)を更新
+      rvState.board[ty][tx].type = d.type;
+      sel = null; 
+      possibleMoves = [];
+      pushReviewUpdate();
+    } else {
+      // 対局モードの場合は通常通りFirebaseへ送信
+      state.board[ty][tx].type = d.type;
+      finish(d); 
+    }
+
+    pendingProm = null; 
+    document.getElementById('promote-dialog').style.display = 'none'; 
+    render(); 
+  }
 
   const getRawMoves = (x, y, board, owner) => {
     const moves = []; const p = board[y][x]; if (!p) return moves; const f = (owner === 'S' ? -1 : 1);
