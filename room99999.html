@@ -411,23 +411,34 @@
     } catch (e) { console.error("Restart ICE failed:", e); }
   }
 
-  btnCallStart.onclick = async () => { 
-    btnCallStart.disabled = true; 
-    try { 
-      await startKeepAlive(); 
-      await startLocalStream(); 
-      createPeerConnection(); 
-      const snap = await get(callStatusRef); 
-      const callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } }; 
-      if (!callData.users) callData.users = { S: false, G: false }; 
-      callData.users[mySide] = true; 
-      let newStatus = 'waiting'; 
-      if (callData.users.S && callData.users.G) { newStatus = 'started'; await sendOffer(); } 
-      await update(callStatusRef, { status: newStatus, users: callData.users, timestamp: new Date().toISOString() }); 
-      localCallStartPressed = true; 
-      updateCallUI(); 
-    } catch (e) { btnCallStart.disabled = false; stopKeepAlive(); } 
-  };
+  // 修正後
+btnCallStart.onclick = async () => { 
+  if (localCallStartPressed) return; // 二重押し防止
+  try { 
+    await startKeepAlive(); 
+    await startLocalStream(); 
+    
+    // 1. まず「自分が押した」という状態を確定させる
+    localCallStartPressed = true; 
+    updateCallUI(); 
+
+    const snap = await get(callStatusRef); 
+    let callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } }; 
+    if (!callData.users) callData.users = { S: false, G: false }; 
+    
+    // 2. 自分のサイドのフラグだけを立ててFirebaseを更新
+    callData.users[mySide] = true; 
+    let newStatus = (callData.users.S && callData.users.G) ? 'started' : 'waiting'; 
+    if (newStatus === 'started') await sendOffer(); 
+
+    await update(callStatusRef, { status: newStatus, users: callData.users, timestamp: new Date().toISOString() }); 
+  } catch (e) { 
+    // エラー時はボタンを再度押せるように戻す
+    localCallStartPressed = false; 
+    updateCallUI(); 
+    stopKeepAlive(); 
+  } 
+};
 
   btnCallEnd.onclick = async () => { 
     await update(callStatusRef, { status: 'ended', users: { S: false, G: false } }); 
@@ -448,22 +459,44 @@
   }
 
   function updateCallUI() { 
-    btnCallStart.disabled = localCallStartPressed; 
-    btnCallEnd.disabled = !localCallStartPressed; 
-    btnMute.disabled = !localCallStartPressed; 
+  // localCallStartPressed が true（＝自分が開始済み）なら
+  // 「通話開始」ボタンを無効にし、「終了」「ミュート」を有効にする
+  btnCallStart.disabled = localCallStartPressed; 
+  btnCallEnd.disabled = !localCallStartPressed; 
+  btnMute.disabled = !localCallStartPressed; 
+}
+
+  // 修正後
+onValue(callStatusRef, (snap) => { 
+  const data = snap.val(); 
+  if (!data) return; 
+  
+  if (data.status === 'ended' && localCallStartPressed) { 
+    handleCallEndInternal(); 
+    return; 
+  } 
+  
+  // 修正の要：Firebase上で「自分が」登録されているかだけを厳密にチェック
+  const iAmRegisteredOnFirebase = !!(data.users && data.users[mySide]);
+  
+  // 自分がボタンを押した、あるいはFirebase上で既に自分が通話参加中なら
+  // ローカルのフラグをtrueに固定する（これでボタンが無効化される）
+  if (iAmRegisteredOnFirebase) {
+    localCallStartPressed = true;
   }
 
-  onValue(callStatusRef, (snap) => { 
-    const data = snap.val(); 
-    if (!data) return; 
-    if (data.status === 'ended' && localCallStartPressed) { handleCallEndInternal(); return; } 
-    const iPressed = !!data.users?.[mySide]; 
-    localCallStartPressed = iPressed; 
-    updateCallUI(); 
-    if (data.status === 'started') callStatusDisplay.textContent = "通話中"; 
-    else if (data.status === 'waiting') callStatusDisplay.textContent = iPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
-    else { callStatusDisplay.textContent = "オフライン"; sessionStorage.removeItem(`reloaded_${roomName}`); } 
-  });
+  updateCallUI(); 
+  
+  // ステータス表示の切り分け
+  if (data.status === 'started') {
+    callStatusDisplay.textContent = "通話中"; 
+  } else if (data.status === 'waiting') { 
+    // 自分が押している場合は「待機中」、押していない場合は「着信中」として表示
+    callStatusDisplay.textContent = localCallStartPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
+  } else { 
+    callStatusDisplay.textContent = "オフライン"; 
+  } 
+});
 
   onValue(ref(db, `${roomName}/signaling/offer`), snap => { const offer = snap.val(); if (offer && offer.from !== mySide) sendAnswer(); });
   onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
@@ -823,25 +856,30 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
     });
   }
 
-    function formatKifuText(move, idx) {
+        // 棋譜リストの表示テキストを生成
+  function formatKifuText(move, idx) {
     if (idx === 0) return "開始";
-    if (!move || !move.type) return `${idx}.不明`;
-    if (move.type === "投了" || move.type === "時間切れ") { 
-      return `${idx}.${move.side === 'S' ? "▲" : "△"}${move.type}`; 
-    }
-    
-    // 座標が数値でない場合のガード
+    if (!move) return `${idx}.不明`;
+    const side = move.side === 'S' ? "▲" : "△";
+
+    // 1. 終了理由やエラーを最優先で、短く表示する
+    if (move.type.includes("投了")) return `${idx}.${side}投了`;
+    if (move.type.includes("時間切れ")) return `${idx}.${side}切れ負`;
+    if (move.type.includes("反則")) return `${idx}.${side}反則`;
+
+    // 2. 座標エラー（中断）のガード
     if (typeof move.toX !== 'number' || typeof move.toY !== 'number') {
-      const typeStr = SYMBOLS[move.type.replace("(反則)","")] || move.type;
-      return `${idx}.${move.side === 'S' ? "▲" : "△"}${typeStr}(中断)`;
+      return `${idx}.${side}中断`;
     }
 
-    const side = move.side === 'S' ? "▲" : "△";
+    // 3. 通常の指し手表示
     const x = 9 - move.toX;
     const y = KANJI_NUM[move.toY + 1];
     const isSame = (idx > 1 && move.toX === state.history[idx-1].toX && move.toY === state.history[idx-1].toY);
     
-    let type = SYMBOLS[move.type.replace("(反則)","")] || move.type;
+    // 駒の名前を抽出
+    let typeName = move.type.replace("(反則)","").replace("投了","").replace("時間切れ","");
+    let type = SYMBOLS[typeName] || "？";
     if (move.isPromoted) type += "成"; 
     else if (move.isDrop) type += "打";
     
@@ -850,6 +888,7 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
 
   function updateTimerDisplay() {
     const now = Date.now();
+
     const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
     ['S', 'G'].forEach(s => {
       let remMain = state.timers[s]; let displayStr = ""; let isByoAlert = false; const el = document.getElementById(`timer-${s}`);
@@ -891,20 +930,25 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
     return moves;
   };
   document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
-    document.getElementById('btnKif').onclick = () => {
+      document.getElementById('btnKif').onclick = () => {
     let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
     state.history.forEach((h, i) => { 
       if (i === 0) return; 
-      // 座標が数値でない場合は出力しないか、中断として扱う
-      if (typeof h.toX !== 'number' || typeof h.toY !== 'number') {
-        kif += String(i).padStart(4, " ") + " 中断\n";
-        return;
+      let moveText = "";
+
+      // 条件分岐で短いテキストを生成
+      if (h.type.includes("投了")) moveText = "投了";
+      else if (h.type.includes("時間切れ")) moveText = "投了"; // KIFでは時間切れも投了扱いが多い
+      else if (h.type.includes("反則")) moveText = "反則負け";
+      else if (typeof h.toX !== 'number') moveText = "中断";
+      else {
+        const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY); 
+        const pos = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1]; 
+        const piece = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")]; 
+        const from = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")"; 
+        moveText = pos + piece + from;
       }
-      const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY); 
-      let moveStr = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1]; 
-      let pieceStr = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")]; 
-      let fromStr = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")"; 
-      kif += String(i).padStart(4, " ") + " " + moveStr + pieceStr + fromStr + "( 0:00/00:00:00)\n"; 
+      kif += String(i).padStart(4, " ") + " " + moveText + "( 0:00/00:00:00)\n"; 
     });
     const area = document.createElement("textarea"); 
     area.value = kif; 
