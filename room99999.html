@@ -12,94 +12,25 @@
       --select-color: #ff9800;
       --call-btn: #4caf50;
     }
-    body { 
-  font-family: sans-serif; 
-  display: flex; 
-  flex-direction: column; 
-  align-items: center; 
-  background: #eee; 
-  margin: 0; 
-  padding: 2px; 
-  /* overflow-x: hidden; を削除し、必要に応じてスクロール可能にする */
-  touch-action: manipulation; 
-}
-
-#game-main { 
-  display: flex; 
-  flex-direction: row; 
-  justify-content: center;     /* 中央寄せ */
-  align-items: flex-start; 
-  width: 100%;
-  max-width: 100vw;            /* 画面幅を絶対超えない */
-  gap: 2px;                    /* 隙間を最小限に */
-  margin: 0 auto;
-  overflow: hidden;            /* スクロールを禁止 */
-  padding: 5px 2px;
-  box-sizing: border-box;
-}
-
-    #board-container { position: relative; width: 58vw; max-width: 380px; aspect-ratio: 1 / 1; flex-shrink: 1; }
+    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #eee; margin: 0; padding: 2px; overflow-x: hidden; touch-action: manipulation; }
+    h1 { font-size: 0.9rem; margin: 2px 0; }
+    #game-main { display: flex; flex-direction: row; justify-content: center; align-items: flex-start; width: 100vw; max-width: 600px; gap: 2px; }
+    #board-container { position: relative; width: 78vw; max-width: 400px; aspect-ratio: 1 / 1; }
     #board { display: grid; grid-template-columns: repeat(9, 11.1111%); grid-template-rows: repeat(9, 11.1111%); border: 1px solid #222; width: 100%; height: 100%; background: var(--board-color); box-sizing: border-box; }
-    
-    /* --- 左右に配置する駒台（2列×10行） --- */
-    .hand { 
-      width: 38px;               /* 幅を縮小 */
-      height: 58vw;              /* 盤面の新しい幅(58vw)に合わせる */
-      max-height: 380px; 
-      border: 1px solid #999; 
-      background: #fff; 
-      display: flex; 
-      flex-direction: column; 
-      flex-wrap: wrap; 
-      align-content: flex-start; 
-      padding: 14px 2px 2px 2px; /* パディングも微調整 */
-      gap: 2px; 
-      border-radius: 3px; 
-      position: relative; 
-      box-sizing: border-box;
-      flex-shrink: 0;
-    }
-    .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 0; width: 100%; text-align: center; font-size: 9px; font-weight: bold; color: #333; }
-    
-    /* 駒：10行に収まるサイズに自動調整 */
-    .hand span { 
-      width: 16px;               /* 19pxから3px縮小 */
-      height: calc((100% - 18px) / 10); 
-      border: 1px solid #777; 
-      background: #f0f0f0; 
-      display: inline-flex; 
-      align-items: center; 
-      justify-content: center; 
-      font-size: 10px;           /* 文字も少し小さく */
-      box-sizing: border-box;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-    .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
-
-    /* 棋譜パネル：先手駒台のさらに右側に配置 */
-    #review-panel { display: none; width: 75px; height: 58vw; max-height: 380px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; flex-shrink: 0; }
-
-    /* その他パーツのスタイル（以前のものを維持） */
     .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid rgba(0,0,0,0.2); box-sizing: border-box; width: 100%; height: 100%; }
     .selected { background: var(--select-color) !important; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
-    .piece-font { font-weight: bold; font-size: 4.5vw; line-height: 1; }
-    @media (min-width: 500px) { .piece-font { font-size: 22px; } }
-    .piece { 
-  z-index: 10; 
-  pointer-events: none; 
-  display: flex;             /* 中央揃えを確実にする */
-  align-items: center; 
-  justify-content: center; 
-}
+    .piece-font { font-weight: bold; font-size: 6.5vw; line-height: 1; }
+    @media (min-width: 500px) { .piece-font { font-size: 32px; } }
+    .piece { z-index: 10; pointer-events: none; }
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: var(--danger-btn); }
-    .kifu-list { flex-grow: 1; overflow-y: scroll; background: #fafafa; font-size: 9px; padding: 0; margin: 0; }
+    #review-panel { display: none; width: 21vw; max-width: 90px; height: 78vw; max-height: 400px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; }
+    .kifu-list { flex-grow: 1; overflow-y: scroll; background: #fafafa; font-size: 9px; padding: 0; margin: 0; -webkit-overflow-scrolling: touch; }
     .kifu-item { padding: 5px 1px; cursor: pointer; border-bottom: 1px solid #eee; text-align: center; white-space: nowrap; }
     .kifu-item.active { background: var(--primary-btn); color: white; }
     .nav-controls { display: grid; grid-template-columns: 1fr 1fr; background: #ddd; gap: 1px; padding: 1px; }
-    .nav-btn { font-size: 9px; padding: 7px 0; border: 1px solid #bbb; background: #fff; cursor: pointer; font-weight: bold; }
-    #nav-pos { grid-column: span 2; font-size: 9px; text-align: center; background: #eee; padding: 2px 0; border-bottom: solid 1px #ccc; }
+    .nav-btn { font-size: 9px; padding: 7px 0; border: 1px solid #bbb; background: #fff; cursor: pointer; font-weight: bold; letter-spacing: -0.5px; }
+    #nav-pos { grid-column: span 2; font-size: 9px; text-align: center; background: #eee; padding: 2px 0; font-family: monospace; border-bottom: solid 1px #ccc; }
     .controls { display: flex; gap: 2px; margin-bottom: 4px; flex-wrap: wrap; justify-content: center; background: #ddd; padding: 4px; border-radius: 4px; width: 98%; box-sizing: border-box; }
     button { cursor: pointer; border: none; border-radius: 3px; font-weight: bold; padding: 5px 6px; font-size: 11px; }
     button:disabled { background: #bbb !important; opacity: 0.6; cursor: not-allowed; }
@@ -109,21 +40,24 @@
     .timer { font-family: monospace; font-size: 14px; font-weight: bold; background: #fff; padding: 2px 4px; border: 1px solid #555; border-radius: 3px; min-width: 70px; text-align: center; }
     .your-turn { border-color: var(--danger-btn); background: #ffebee; }
     .timer-alert { color: var(--danger-btn) !important; }
-    #promote-dialog { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px; border: 4px solid #5d4037; z-index: 2000; text-align: center; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); min-width: 160px; }
+    #hands-container { display: flex; width: 100vw; max-width: 500px; gap: 4px; margin-top: 6px; align-items: flex-start; }
+    .hand { flex: 1; border: 1px solid #999; background: #fff; display: flex; flex-wrap: wrap; padding: 16px 2px 4px 2px; gap: 4px; border-radius: 3px; position: relative; min-height: 8vw; box-sizing: border-box; }
+    .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 3px; font-size: 10px; color: #333; font-weight: bold; }
+    .hand span { border: 1px solid #777; padding: 2px 4px; background: #f0f0f0; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
+    #promote-dialog { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 10px; border: 3px solid #5d4037; z-index: 2000; text-align: center; border-radius: 8px; }
+
     .call-area { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; background: #fff; padding: 5px; border-radius: 5px; border: 1px solid #ccc; align-items: center; justify-content: center; width: 98%; box-sizing: border-box; }
     #btnCallStart { background: var(--call-btn); color: white; }
     #btnMute { background: #757575; color: white; }
     #btnCallEnd { background: var(--danger-btn); color: white; }
     #callStatusDisplay { font-size: 10px; color: #333; font-weight: bold; }
     .vol-ctrl { font-size: 10px; display: flex; align-items: center; gap: 2px; }
-    .chat-message { margin-bottom: 4px; line-height: 1.4; border-bottom: 1px dotted #eee; padding-bottom: 2px; font-size: 12px;}
+    
+    .chat-message { margin-bottom: 4px; line-height: 1.4; border-bottom: 1px dotted #eee; padding-bottom: 2px; }
     .chat-name { font-weight: bold; margin-right: 5px; }
-    .chat-name.S { color: #1976d2; }
-    .chat-name.G { color: #d32f2f; }
-/* 相手側の持ち駒を上下反転させる */
-.hand.opponent {
-  transform: rotate(180deg);
-}
+    .chat-name.S { color: #1976d2; } /* 先手は青系 */
+    .chat-name.G { color: #d32f2f; } /* 後手は赤系 */    
 
   </style>
 </head>
@@ -160,21 +94,14 @@
 </div>
 
 <div id="game-main">
-  <div class="hand" id="handG" data-label="△後手"></div>
-
   <div id="board-container">
     <div id="board"></div>
     <div id="promote-dialog">
-      <div style="margin-bottom:15px; font-weight:bold; font-size:16px;">成りますか？</div>
-      <div style="display: flex; gap: 15px; justify-content: center;">
-        <button id="btn-prom-yes" style="background:var(--danger-btn); color:white; padding: 12px 20px; font-size: 16px;">成る</button>
-        <button id="btn-prom-no" style="background:#757575; color:white; padding: 12px 20px; font-size: 16px;">不成</button>
-      </div>
+      <div style="margin-bottom:8px; font-weight:bold; font-size:12px;">成りますか？</div>
+      <button id="btn-prom-yes" style="background:var(--danger-btn); color:white;">成</button>
+      <button id="btn-prom-no" style="background:#757575; color:white;">不</button>
     </div>
   </div>
-
-  <div class="hand" id="handS" data-label="▲先手"></div>
-
   <div id="review-panel">
     <div id="nav-pos">0/0</div>
     <div id="kifu-container" class="kifu-list"></div>
@@ -188,13 +115,9 @@
   </div>
 </div>
 
-<div id="chat-container" style="width: 95%; max-width: 500px; margin: 10px auto; background: #fff; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-  <div id="chatLog" style="height: 120px; overflow-y: auto; padding: 5px; background: #fafafa;"></div>
-  <div style="display: flex; padding: 5px; gap: 5px;">
-    <input type="text" id="chatInput" placeholder="メッセージを入力..." style="flex: 1; padding: 5px;">
-    <button id="btnSend" style="background: var(--primary-btn); color: white;">送信</button>
-    <button id="btnClearChat" style="background: var(--danger-btn); color: white;">削除</button>
-  </div>
+<div id="hands-container">
+  <div class="hand" id="handS" data-label="▲先手"></div>
+  <div class="hand" id="handG" data-label="△後手"></div>
 </div>
 
 <audio id="remote-audio" autoplay></audio>
@@ -239,13 +162,11 @@
   const boardEl = document.getElementById('board');
   mySideSelect.value = mySide;
   boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)';
-  updateHandOrientation();
 
   mySideSelect.onchange = (e) => { 
     mySide = e.target.value; 
     sessionStorage.setItem(`mySide_${roomName}`, mySide);
     boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)'; 
-    updateHandOrientation();
     window.location.reload();
   };
 
@@ -658,25 +579,8 @@
   }
 
   function render() {
-  // 感想戦モードでデータが未定義なら、強制的に同期させる
-  if (isReviewMode && !rvState) {
-    if (state.history && state.history.length > 0) {
-      syncReviewStateLocally();
-    } else {
-      return; // 描画可能なデータがなければ中断
-    }
-  }
-
-  let b, hs, hg;
-  if (isReviewMode) { 
-    b = rvState.board; 
-    hs = rvState.handS; 
-    hg = rvState.handG; 
-  } else { 
-    b = state.board; 
-    hs = state.handS; 
-    hg = state.handG; 
-  }
+    let b, hs, hg;
+    if (isReviewMode) { b = rvState?.board || state.board; hs = rvState?.handS || state.handS; hg = rvState?.handG || state.handG; } else { b = state.board; hs = state.handS; hg = state.handG; }
     for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) {
       const c = cells[y][x]; const p = b[y][x];
       c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
@@ -710,36 +614,6 @@
       container.appendChild(div); if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
   }
-  
-  function updateHandOrientation() {
-  const gameMain = document.getElementById('game-main');
-  const board = document.getElementById('board-container');
-  const handS = document.getElementById('handS');
-  const handG = document.getElementById('handG');
-
-  // 一旦 opponent を全解除
-  handS.classList.remove('opponent');
-  handG.classList.remove('opponent');
-
-  // game-main を一旦空にする
-  gameMain.innerHTML = '';
-
-  if (mySide === 'S') {
-    // 自分＝先手 → 自分(handS)を右
-    handG.classList.add('opponent');   // 相手を上下反転
-
-    gameMain.appendChild(handG);       // 左：相手
-    gameMain.appendChild(board);
-    gameMain.appendChild(handS);       // 右：自分
-  } else {
-    // 自分＝後手 → 自分(handG)を右
-    handS.classList.add('opponent');   // 相手を上下反転
-
-    gameMain.appendChild(handS);       // 左：相手
-    gameMain.appendChild(board);
-    gameMain.appendChild(handG);       // 右：自分
-  }
-}
 
   function formatKifuText(move, idx) {
     if (idx === 0) return "開始";
@@ -806,5 +680,14 @@
     return true;
   }
 </script>
+<div id="chat-container" style="width: 98%; max-width: 500px; margin: 10px auto; background: #fff; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
+  <div id="chatLog" style="height: 120px; overflow-y: auto; padding: 5px; font-size: 12px; border-bottom: 1px solid #eee; background: #fafafa;"></div>
+  <div style="display: flex; padding: 5px; gap: 5px;">
+    <input type="text" id="chatInput" placeholder="メッセージを入力..." style="flex: 1; font-size: 14px; padding: 5px; border: 1px solid #ccc; border-radius: 3px; min-width: 0;">
+    <button id="btnSend" style="background: var(--primary-btn); color: white; padding: 5px 10px; white-space: nowrap;">送信</button>
+    <button id="btnClearChat" style="background: var(--danger-btn); color: white; padding: 5px 10px; white-space: nowrap;">削除</button>
+  </div>
+</div>
+
 </body>
 </html>
