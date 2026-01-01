@@ -356,11 +356,12 @@
   
   let roomName = params.get('room') || fileName || "default_room";
 
-  // URLに ?room= が付いていない場合、混乱を防ぐために自動で付与してURLを統一する
-  if (!params.get('room')) {
+   // URLの書き換え処理を無効化
+  /* if (!params.get('room')) {
       const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + `?room=${roomName}`;
       window.history.pushState({ path: newUrl }, '', newUrl);
   }
+  */
 
   // --- 各データへの参照定義 ---
   const gameRef = ref(db, `${roomName}/shogiData`);
