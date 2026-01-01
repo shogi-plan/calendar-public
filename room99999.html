@@ -886,23 +886,59 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
     return `${idx}.${side}${isSame ? "同" : x+y}${type}`;
   }
 
-  function updateTimerDisplay() {
-    const now = Date.now();
+  // 修正後
+function updateTimerDisplay() {
+  const now = Date.now();
+  const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
 
-    const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
-    ['S', 'G'].forEach(s => {
-      let remMain = state.timers[s]; let displayStr = ""; let isByoAlert = false; const el = document.getElementById(`timer-${s}`);
-      if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
-        if (remMain > 0) {
-          const currentRem = Math.max(0, remMain - elapsed);
-          if (currentRem > 0) displayStr = `${s==='S'?'▲':'△'} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
-          else { const byoRem = Math.max(0, (state.config.byo || 30) - (elapsed - remMain)); displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`; if (byoRem <= 5) isByoAlert = true; }
-        } else { const byoRem = Math.max(0, (state.config.byo || 30) - elapsed); displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`; if (byoRem <= 5) isByoAlert = true; }
-        if (displayStr.includes("秒:0") && !state.winner) { state.winner = (s === 'S' ? 'G' : 'S'); state.winReason = "時間切れ"; finish({ side: s, type: "時間切れ" }); }
-      } else { if (remMain > 0) displayStr = `${s==='S'?'▲':'△'} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`; else displayStr = `${s==='S'?'▲':'△'} 秒:${state.config.byo || 30}`; }
-      el.textContent = displayStr; if (isByoAlert) el.classList.add('timer-alert'); else el.classList.remove('timer-alert');
-    });
-  }
+  ['S', 'G'].forEach(s => {
+    let remMain = state.timers[s]; 
+    let displayStr = ""; 
+    let isByoAlert = false; 
+    const el = document.getElementById(`timer-${s}`);
+
+    if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
+      let currentRem = 0;
+      let isTimeUp = false;
+
+      if (remMain > 0) {
+        currentRem = Math.max(0, remMain - elapsed);
+        if (currentRem > 0) {
+          displayStr = `${s==='S'?'▲':'△'} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
+        } else {
+          const byoRem = Math.max(0, (state.config.byo || 30) - (elapsed - remMain));
+          displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`;
+          if (byoRem <= 5) isByoAlert = true;
+          if (byoRem <= 0) isTimeUp = true;
+        }
+      } else {
+        const byoRem = Math.max(0, (state.config.byo || 30) - elapsed);
+        displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`;
+        if (byoRem <= 5) isByoAlert = true;
+        if (byoRem <= 0) isTimeUp = true;
+      }
+
+      // 【重要】自分の手番で、かつ自分の時間が切れた時だけ、自分が負けを認める
+      if (isTimeUp && s === mySide && !state.winner) {
+        state.winner = (mySide === 'S' ? 'G' : 'S'); 
+        state.winReason = "時間切れ"; 
+        finish({ side: s, type: "時間切れ" }); 
+      }
+    } else {
+      // 待機側や終了後の表示
+      if (remMain > 0) {
+        displayStr = `${s==='S'?'▲':'△'} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
+      } else {
+        displayStr = `${s==='S'?'▲':'△'} 秒:${state.config.byo || 30}`;
+      }
+    }
+    
+    el.textContent = displayStr; 
+    if (isByoAlert) el.classList.add('timer-alert'); 
+    else el.classList.remove('timer-alert');
+  });
+}
+
   setInterval(updateTimerDisplay, 1000);
 
   document.getElementById('btnToggleReview').onclick = () => { setReviewMode(!isReviewMode); if(isReviewMode) { syncReviewStateLocally(); pushReviewUpdate(); } render(); updateKifuList(); };
