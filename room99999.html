@@ -860,11 +860,20 @@ onValue(callStatusRef, (snap) => {
         const fromP = rvState.board[sel.y][sel.x];
         if (target && target.owner !== fromP.owner) (fromP.owner === 'S' ? rvState.handS : rvState.handG).push(UNPROMOTE_MAP[target.type] || target.type);
         rvState.board[y][x] = { type: fromP.type, owner: fromP.owner }; rvState.board[sel.y][sel.x] = null;
-        const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
-        if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) if(confirm("成りますか？")) rvState.board[y][x].type = PROMOTE_MAP[fromP.type];
-        sel = null; possibleMoves = []; 
-        pushReviewUpdate();
-        render(); 
+                const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
+        // 移動データを一旦作成
+        const moveData = { side: fromP.owner, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
+
+        if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
+          // 感想戦でもダイアログを表示し、判定を endProm に委ねる
+          pendingProm = { x, y, moveData };
+          document.getElementById('promote-dialog').style.display = 'block';
+          render();
+        } else {
+          sel = null; possibleMoves = []; 
+          pushReviewUpdate();
+          render(); 
+        }
         return;
       }
       if (selH) { 
@@ -1091,9 +1100,34 @@ function updateTimerDisplay() {
   document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
-  document.getElementById('btn-prom-yes').onclick = () => { pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; pendingProm.moveData.isPromoted = true; state.board[pendingProm.y][pendingProm.x].type = pendingProm.moveData.type; endProm(); };
+    document.getElementById('btn-prom-yes').onclick = () => { 
+    pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; 
+    pendingProm.moveData.isPromoted = true; 
+    // ※ state.board への直接代入を削除（endProm内でモード別に処理するため）
+    endProm(); 
+  };
   document.getElementById('btn-prom-no').onclick = () => endProm();
-  function endProm() { const d = pendingProm.moveData; pendingProm = null; document.getElementById('promote-dialog').style.display = 'none'; finish(d); }
+    function endProm() { 
+    const d = pendingProm.moveData; 
+    const tx = pendingProm.x;
+    const ty = pendingProm.y;
+
+    if (isReviewMode) {
+      // 感想戦モードの場合はローカルの検討状態(rvState)を更新
+      rvState.board[ty][tx].type = d.type;
+      sel = null; 
+      possibleMoves = [];
+      pushReviewUpdate();
+    } else {
+      // 対局モードの場合は通常通りFirebaseへ送信
+      state.board[ty][tx].type = d.type;
+      finish(d); 
+    }
+
+    pendingProm = null; 
+    document.getElementById('promote-dialog').style.display = 'none'; 
+    render(); 
+  }
 
   const getRawMoves = (x, y, board, owner) => {
     const moves = []; const p = board[y][x]; if (!p) return moves; const f = (owner === 'S' ? -1 : 1);
