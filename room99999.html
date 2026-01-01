@@ -12,25 +12,96 @@
       --select-color: #ff9800;
       --call-btn: #4caf50;
     }
-    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #eee; margin: 0; padding: 2px; overflow-x: hidden; touch-action: manipulation; }
-    h1 { font-size: 0.9rem; margin: 2px 0; }
-    #game-main { display: flex; flex-direction: row; justify-content: center; align-items: flex-start; width: 100vw; max-width: 600px; gap: 2px; }
-    #board-container { position: relative; width: 78vw; max-width: 400px; aspect-ratio: 1 / 1; }
+    body { 
+  font-family: sans-serif; 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  background: #eee; 
+  margin: 0; 
+  padding: 2px; 
+  /* overflow-x: hidden; を削除し、必要に応じてスクロール可能にする */
+  touch-action: manipulation; 
+}
+
+#game-main { 
+  display: flex; 
+  flex-direction: row; 
+  justify-content: center;     /* 中央寄せ */
+  align-items: flex-start; 
+  width: 100%;
+  max-width: 100vw;            /* 画面幅を絶対超えない */
+  gap: 2px;                    /* 隙間を最小限に */
+  margin: 0 auto;
+  overflow: hidden;            /* スクロールを禁止 */
+  padding: 5px 2px;
+  box-sizing: border-box;
+}
+
+    #board-container { position: relative; width: 58vw; max-width: 380px; aspect-ratio: 1 / 1; flex-shrink: 1; }
     #board { display: grid; grid-template-columns: repeat(9, 11.1111%); grid-template-rows: repeat(9, 11.1111%); border: 1px solid #222; width: 100%; height: 100%; background: var(--board-color); box-sizing: border-box; }
+    
+    /* --- 左右に配置する駒台（2列×10行） --- */
+    .hand { 
+      width: 38px;               /* 幅を縮小 */
+      height: 58vw;              /* 盤面の新しい幅(58vw)に合わせる */
+      max-height: 380px; 
+      border: 1px solid #999; 
+      background: #fff; 
+      display: flex; 
+      flex-direction: column; 
+      flex-wrap: wrap; 
+      align-content: flex-start; 
+      padding: 14px 2px 2px 2px; /* パディングも微調整 */
+      gap: 2px; 
+      border-radius: 3px; 
+      position: relative; 
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 0; width: 100%; text-align: center; font-size: 9px; font-weight: bold; color: #333; }
+
+    /* 駒：10行に収まるサイズに自動調整 */
+    .hand span { 
+      width: 16px;               /* 19pxから3px縮小 */
+      height: calc((100% - 18px) / 10); 
+      border: 1px solid #777; 
+      background: #f0f0f0; 
+      display: inline-flex; 
+      align-items: center; 
+      justify-content: center; 
+      font-size: 10px;           /* 文字も少し小さく */
+      box-sizing: border-box;
+      flex-shrink: 0;
+      cursor: pointer;
+      transform-origin: center;
+    }
+
+    .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
+
+    /* 棋譜パネル：先手駒台のさらに右側に配置 */
+    #review-panel { display: none; width: 75px; height: 58vw; max-height: 380px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; flex-shrink: 0; }
+
+    /* その他パーツのスタイル（以前のものを維持） */
     .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid rgba(0,0,0,0.2); box-sizing: border-box; width: 100%; height: 100%; }
     .selected { background: var(--select-color) !important; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
-    .piece-font { font-weight: bold; font-size: 6.5vw; line-height: 1; }
-    @media (min-width: 500px) { .piece-font { font-size: 32px; } }
-    .piece { z-index: 10; pointer-events: none; }
+    .piece-font { font-weight: bold; font-size: 4.5vw; line-height: 1; }
+    @media (min-width: 500px) { .piece-font { font-size: 22px; } }
+    .piece { 
+  z-index: 10; 
+  pointer-events: none; 
+  display: flex;             /* 中央揃えを確実にする */
+  align-items: center; 
+  justify-content: center; 
+}
     .piece.opposite { transform: rotate(180deg); }
     .piece.promoted { color: var(--danger-btn); }
-    #review-panel { display: none; width: 21vw; max-width: 90px; height: 78vw; max-height: 400px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; }
-    .kifu-list { flex-grow: 1; overflow-y: scroll; background: #fafafa; font-size: 9px; padding: 0; margin: 0; -webkit-overflow-scrolling: touch; }
+    .kifu-list { flex-grow: 1; overflow-y: scroll; background: #fafafa; font-size: 9px; padding: 0; margin: 0; }
     .kifu-item { padding: 5px 1px; cursor: pointer; border-bottom: 1px solid #eee; text-align: center; white-space: nowrap; }
     .kifu-item.active { background: var(--primary-btn); color: white; }
     .nav-controls { display: grid; grid-template-columns: 1fr 1fr; background: #ddd; gap: 1px; padding: 1px; }
-    .nav-btn { font-size: 9px; padding: 7px 0; border: 1px solid #bbb; background: #fff; cursor: pointer; font-weight: bold; letter-spacing: -0.5px; }
-    #nav-pos { grid-column: span 2; font-size: 9px; text-align: center; background: #eee; padding: 2px 0; font-family: monospace; border-bottom: solid 1px #ccc; }
+    .nav-btn { font-size: 9px; padding: 7px 0; border: 1px solid #bbb; background: #fff; cursor: pointer; font-weight: bold; }
+    #nav-pos { grid-column: span 2; font-size: 9px; text-align: center; background: #eee; padding: 2px 0; border-bottom: solid 1px #ccc; }
     .controls { display: flex; gap: 2px; margin-bottom: 4px; flex-wrap: wrap; justify-content: center; background: #ddd; padding: 4px; border-radius: 4px; width: 98%; box-sizing: border-box; }
     button { cursor: pointer; border: none; border-radius: 3px; font-weight: bold; padding: 5px 6px; font-size: 11px; }
     button:disabled { background: #bbb !important; opacity: 0.6; cursor: not-allowed; }
@@ -40,24 +111,22 @@
     .timer { font-family: monospace; font-size: 14px; font-weight: bold; background: #fff; padding: 2px 4px; border: 1px solid #555; border-radius: 3px; min-width: 70px; text-align: center; }
     .your-turn { border-color: var(--danger-btn); background: #ffebee; }
     .timer-alert { color: var(--danger-btn) !important; }
-    #hands-container { display: flex; width: 100vw; max-width: 500px; gap: 4px; margin-top: 6px; align-items: flex-start; }
-    .hand { flex: 1; border: 1px solid #999; background: #fff; display: flex; flex-wrap: wrap; padding: 16px 2px 4px 2px; gap: 4px; border-radius: 3px; position: relative; min-height: 8vw; box-sizing: border-box; }
-    .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 3px; font-size: 10px; color: #333; font-weight: bold; }
-    .hand span { border: 1px solid #777; padding: 2px 4px; background: #f0f0f0; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; transition: background 0.2s; }
-    .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
-    #promote-dialog { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 10px; border: 3px solid #5d4037; z-index: 2000; text-align: center; border-radius: 8px; }
-
+    #promote-dialog { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px; border: 4px solid #5d4037; z-index: 2000; text-align: center; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); min-width: 160px; }
     .call-area { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; background: #fff; padding: 5px; border-radius: 5px; border: 1px solid #ccc; align-items: center; justify-content: center; width: 98%; box-sizing: border-box; }
     #btnCallStart { background: var(--call-btn); color: white; }
     #btnMute { background: #757575; color: white; }
     #btnCallEnd { background: var(--danger-btn); color: white; }
     #callStatusDisplay { font-size: 10px; color: #333; font-weight: bold; }
     .vol-ctrl { font-size: 10px; display: flex; align-items: center; gap: 2px; }
-    
-    .chat-message { margin-bottom: 4px; line-height: 1.4; border-bottom: 1px dotted #eee; padding-bottom: 2px; }
+    .chat-message { margin-bottom: 4px; line-height: 1.4; border-bottom: 1px dotted #eee; padding-bottom: 2px; font-size: 12px;}
     .chat-name { font-weight: bold; margin-right: 5px; }
-    .chat-name.S { color: #1976d2; } /* 先手は青系 */
-    .chat-name.G { color: #d32f2f; } /* 後手は赤系 */    
+    .chat-name.S { color: #1976d2; }
+    .chat-name.G { color: #d32f2f; }
+    
+    /* 左側の持ち駒エリアを上下反転させる */
+.hand.left-rotated {
+  transform: rotate(180deg);
+}
 
   </style>
 </head>
@@ -94,14 +163,21 @@
 </div>
 
 <div id="game-main">
-  <div id="board-container">
-    <div id="board"></div>
-    <div id="promote-dialog">
-      <div style="margin-bottom:8px; font-weight:bold; font-size:12px;">成りますか？</div>
-      <button id="btn-prom-yes" style="background:var(--danger-btn); color:white;">成</button>
-      <button id="btn-prom-no" style="background:#757575; color:white;">不</button>
+  <div id="game-main-inner" style="display: flex; flex-direction: row; align-items: flex-start; gap: 2px;">
+    <div class="hand" id="handG" data-label="△後手"></div>
+    <div id="board-container">
+      <div id="board"></div>
+      <div id="promote-dialog">
+        <div style="margin-bottom:15px; font-weight:bold; font-size:16px;">成りますか？</div>
+        <div style="display: flex; gap: 15px; justify-content: center;">
+          <button id="btn-prom-yes" style="background:var(--danger-btn); color:white; padding: 12px 20px; font-size: 16px;">成る</button>
+          <button id="btn-prom-no" style="background:#757575; color:white; padding: 12px 20px; font-size: 16px;">不成</button>
+        </div>
+      </div>
     </div>
+    <div class="hand" id="handS" data-label="▲先手"></div>
   </div>
+
   <div id="review-panel">
     <div id="nav-pos">0/0</div>
     <div id="kifu-container" class="kifu-list"></div>
@@ -115,9 +191,13 @@
   </div>
 </div>
 
-<div id="hands-container">
-  <div class="hand" id="handS" data-label="▲先手"></div>
-  <div class="hand" id="handG" data-label="△後手"></div>
+<div id="chat-container" style="width: 95%; max-width: 500px; margin: 10px auto; background: #fff; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
+  <div id="chatLog" style="height: 120px; overflow-y: auto; padding: 5px; background: #fafafa;"></div>
+  <div style="display: flex; padding: 5px; gap: 5px;">
+    <input type="text" id="chatInput" placeholder="メッセージを入力..." style="flex: 1; padding: 5px;">
+    <button id="btnSend" style="background: var(--primary-btn); color: white;">送信</button>
+    <button id="btnClearChat" style="background: var(--danger-btn); color: white;">削除</button>
+  </div>
 </div>
 
 <audio id="remote-audio" autoplay></audio>
@@ -136,11 +216,25 @@
       messagingSenderId: "368704703397",
       appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
+   // --- Firebase 初期化 ---
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   
-  const params = new URLSearchParams(location.search);
-  const roomName = params.get('room') || "default_room";
+  // --- ルーム管理：ファイル名から部屋名を取得 ---
+  const params = new URLSearchParams(window.location.search);
+  
+  // URLからファイル名を取得（例: /Room999.html -> Room999）
+  const fileName = window.location.pathname.split("/").pop().split(".")[0];
+  
+  let roomName = params.get('room') || fileName || "default_room";
+
+  // URLに ?room= が付いていない場合、混乱を防ぐために自動で付与してURLを統一する
+  if (!params.get('room')) {
+      const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + `?room=${roomName}`;
+      window.history.pushState({ path: newUrl }, '', newUrl);
+  }
+
+  // --- 各データへの参照定義 ---
   const gameRef = ref(db, `${roomName}/shogiData`);
   const reviewRef = ref(db, `${roomName}/reviewData`);
   const callStatusRef = ref(db, `${roomName}/callStatus`);
@@ -156,18 +250,59 @@
   let sel = null, selH = null, possibleMoves = [], pendingProm = null;
   let isReviewMode = sessionStorage.getItem(`isReview_${roomName}`) === "true";
   let viewIdx = -1, rvState = null;
+  const boardEl = document.getElementById('board'); 
 
-  let mySide = sessionStorage.getItem(`mySide_${roomName}`) || 'S';
+   let mySide = sessionStorage.getItem(`mySide_${roomName}`) || 'S';
   const mySideSelect = document.getElementById('mySideSelect');
-  const boardEl = document.getElementById('board');
   mySideSelect.value = mySide;
-  boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)';
 
-  mySideSelect.onchange = (e) => { 
+  // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
+  function updateDisplayRotation(isFlipped) {
+  const container = document.getElementById('game-main-inner');
+  const board = document.getElementById('board');
+  const handS = document.getElementById('handS');
+  const handG = document.getElementById('handG');
+
+  // いったん左右の回転状態をリセット
+  handS.classList.remove('left-rotated');
+  handG.classList.remove('left-rotated');
+
+  if (isFlipped) {
+    // 後手視点
+    container.insertBefore(handS, container.firstChild); // 左
+    container.appendChild(handG);                         // 右
+    board.style.transform = 'rotate(180deg)';
+
+    // ★左側（handS）を上下反転
+    handS.classList.add('left-rotated');
+  } else {
+    // 先手視点
+    container.insertBefore(handG, container.firstChild); // 左
+    container.appendChild(handS);                         // 右
+    board.style.transform = 'rotate(0deg)';
+
+    // ★左側（handG）を上下反転
+    handG.classList.add('left-rotated');
+  }
+}
+
+  // 初回表示の適用
+  let currentFlip = (mySide === 'G');
+  updateDisplayRotation(currentFlip);
+
+    mySideSelect.onchange = (e) => { 
     mySide = e.target.value; 
     sessionStorage.setItem(`mySide_${roomName}`, mySide);
-    boardEl.style.transform = (mySide === 'G') ? 'rotate(180deg)' : 'rotate(0deg)'; 
-    window.location.reload();
+    // リロードせず、表示状態だけを更新する
+    currentFlip = (mySide === 'G');
+    updateDisplayRotation(currentFlip);
+    render(); 
+  };
+
+  // 反転ボタン（一番下のコードも書き換えます）
+  document.getElementById('btnFlip').onclick = () => {
+    currentFlip = !currentFlip;
+    updateDisplayRotation(currentFlip);
   };
 
   // --- 通話維持用（バックグラウンド対策強化版） ---
@@ -578,40 +713,113 @@
     if (target && target.owner === mySide) { sel = { x, y }; possibleMoves = getRawMoves(x, y, state.board, mySide); render(); }
   }
 
-  function render() {
-    let b, hs, hg;
-    if (isReviewMode) { b = rvState?.board || state.board; hs = rvState?.handS || state.handS; hg = rvState?.handG || state.handG; } else { b = state.board; hs = state.handS; hg = state.handG; }
-    for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) {
-      const c = cells[y][x]; const p = b[y][x];
-      c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
-      c.innerHTML = p ? `<div class="piece piece-font ${p.owner!=='S'?'opposite':''} ${UNPROMOTE_MAP[p.type]?'promoted':''}">${SYMBOLS[p.type]}</div>` : '';
+    function render() {
+    if (isReviewMode && !rvState) {
+      if (state.history && state.history.length > 0) {
+        syncReviewStateLocally();
+      } else { return; }
     }
-    const drawH = (id, list, owner) => {
-      const el = document.getElementById(id); el.innerHTML = '';
-      (list || []).forEach((t, i) => {
-        const s = document.createElement('span'); s.className = "piece-font"; s.textContent = SYMBOLS[t];
-        if (selH?.idx === i && selH?.owner === owner) s.classList.add('selected-piece');
-        s.onclick = (e) => { e.stopPropagation(); if (!isReviewMode && (state.winner || state.turn !== mySide || owner !== mySide)) return; if (selH?.idx === i) selH = null; else { selH = { type: t, owner, idx: i }; sel = null; possibleMoves = []; } render(); };
+
+    let b, hs, hg;
+    if (isReviewMode) { 
+      b = rvState.board; hs = rvState.handS; hg = rvState.handG; 
+    } else { 
+      b = state.board; hs = state.handS; hg = state.handG; 
+    }
+
+        // 盤面の描画
+    for (let y = 0; y < 9; y++) {
+      for (let x = 0; x < 9; x++) {
+        const c = cells[y][x]; 
+        const p = b[y][x];
+        c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
+        
+        if (p) {
+          // 盤面の描画（★従来どおり：所有者だけで向きを決める）
+const isOpposite = (p.owner === 'G');   // 後手だけ逆さ
+const promotedClass = UNPROMOTE_MAP[p.type] ? 'promoted' : '';
+const rotClass = isOpposite ? 'opposite' : '';
+
+c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMBOLS[p.type]}</div>`;
+        } else {
+          c.innerHTML = '';
+        }
+      }
+    }
+
+          const drawH = (id, list, owner) => {
+      const el = document.getElementById(id);
+      el.innerHTML = '';
+
+      // 駒の並び順の優先度（数字が小さいほど上に表示）
+      const HAND_ORDER = { HI: 1, KA: 2, KI: 3, GI: 4, KE: 5, KY: 6, FU: 7 };
+
+      // 持ち駒をソート。originalIdxを保持してクリック時の整合性を保つ
+      const sortedList = (list || []).map((type, idx) => ({ type, originalIdx: idx }))
+        .sort((a, b) => (HAND_ORDER[a.type] || 99) - (HAND_ORDER[b.type] || 99));
+
+      sortedList.forEach((item) => {
+        const s = document.createElement('span');
+        s.className = 'piece-font';
+        s.textContent = SYMBOLS[item.type];
+
+        // 選択ハイライトの判定（元の配列インデックスで比較）
+        if (selH?.idx === item.originalIdx && selH?.owner === owner) {
+          s.classList.add('selected-piece');
+        }
+
+        s.onclick = (e) => {
+          e.stopPropagation();
+          // 感想戦中か、自分の手番の自分の駒なら操作可能
+          if (!isReviewMode && (state.winner || state.turn !== mySide || owner !== mySide)) return;
+
+          if (selH?.idx === item.originalIdx && selH?.owner === owner) {
+            selH = null;
+          } else {
+            selH = { type: item.type, owner, idx: item.originalIdx };
+            sel = null;
+            possibleMoves = [];
+          }
+          render();
+        };
         el.appendChild(s);
       });
     };
-    drawH('handS', hs, 'S'); drawH('handG', hg, 'G');
+
+    drawH('handS', hs, 'S'); 
+    drawH('handG', hg, 'G');
+
     const st = document.getElementById('status-txt');
-    if (state.winner && !isReviewMode) { st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`; st.style.color = "red"; }
-    else if (isReviewMode) { st.textContent = "感想戦"; st.style.color = "orange"; }
-    else { st.textContent = state.turn === mySide ? "手番" : "待機"; st.style.color = "black"; }
+    if (state.winner && !isReviewMode) { 
+      st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`; 
+      st.style.color = "red"; 
+    } else if (isReviewMode) { 
+      st.textContent = "感想戦"; 
+      st.style.color = "orange"; 
+    } else { 
+      st.textContent = state.turn === mySide ? "手番" : "待機"; 
+      st.style.color = "black"; 
+    }
+
     document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
     document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
     document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
   }
 
+  // 棋譜リストの更新
   function updateKifuList() {
-    const container = document.getElementById('kifu-container'); container.innerHTML = '';
+    const container = document.getElementById('kifu-container'); 
+    container.innerHTML = '';
     state.history.forEach((h, i) => {
-      const div = document.createElement('div'); div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
+      const div = document.createElement('div'); 
+      div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
       div.textContent = formatKifuText(h, i);
-      div.onclick = () => { if (!isReviewMode) setReviewMode(true); viewIdx = i; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); };
-      container.appendChild(div); if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
+      div.onclick = () => { 
+        if (!isReviewMode) setReviewMode(true); 
+        viewIdx = i; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); 
+      };
+      container.appendChild(div); 
+      if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
   }
 
@@ -667,7 +875,6 @@
     else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
   };
-  document.getElementById('btnFlip').onclick = () => { boardEl.style.transform = boardEl.style.transform === 'rotate(180deg)' ? 'rotate(0deg)' : 'rotate(180deg)'; };
   document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
   document.getElementById('btnKif').onclick = () => {
     let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
@@ -680,14 +887,5 @@
     return true;
   }
 </script>
-<div id="chat-container" style="width: 98%; max-width: 500px; margin: 10px auto; background: #fff; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-  <div id="chatLog" style="height: 120px; overflow-y: auto; padding: 5px; font-size: 12px; border-bottom: 1px solid #eee; background: #fafafa;"></div>
-  <div style="display: flex; padding: 5px; gap: 5px;">
-    <input type="text" id="chatInput" placeholder="メッセージを入力..." style="flex: 1; font-size: 14px; padding: 5px; border: 1px solid #ccc; border-radius: 3px; min-width: 0;">
-    <button id="btnSend" style="background: var(--primary-btn); color: white; padding: 5px 10px; white-space: nowrap;">送信</button>
-    <button id="btnClearChat" style="background: var(--danger-btn); color: white; padding: 5px 10px; white-space: nowrap;">削除</button>
-  </div>
-</div>
-
 </body>
 </html>
