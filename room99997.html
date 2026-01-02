@@ -193,6 +193,7 @@
       <option value="10" selected>10分</option>
       <option value="15">15分</option>
       <option value="30">30分</option>
+      <option value="999999">無制限</option>
     </select>
   </div>
 
@@ -201,6 +202,7 @@
     <select id="cfgByo">
       <option value="30" selected>30秒</option>
       <option value="60">60秒</option>
+      <option value="999999">無制限</option>
     </select>
   </div>
 
@@ -682,8 +684,16 @@ onValue(callStatusRef, (snap) => {
     const data = snap.val() || { S: false, G: false };
     document.getElementById('lamp-S').className = `ready-lamp ${data.S ? 'on' : ''}`;
     document.getElementById('lamp-G').className = `ready-lamp ${data.G ? 'on' : ''}`;
-    btnReady.textContent = data[mySide] ? "準備解除" : "対局準備完了";
-    btnReady.style.background = data[mySide] ? "#757575" : "#ff9800";
+        // 対局中（lastTickが0以外）はボタンを無効化
+    if (state.lastTick !== 0 && !state.winner) {
+      btnReady.disabled = true;
+      btnReady.textContent = "対局中";
+      btnReady.style.background = "#607d8b";
+    } else {
+      btnReady.disabled = false;
+      btnReady.textContent = data[mySide] ? "準備解除" : "対局準備完了";
+      btnReady.style.background = data[mySide] ? "#757575" : "#ff9800";
+    }
 
     // 両者が準備完了し、まだ対局が始まっていない場合にカウントダウン開始
     if (data.S && data.G && state.lastTick === 0 && !state.winner && !isCountingDown) {
@@ -805,12 +815,13 @@ onValue(callStatusRef, (snap) => {
     set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: Date.now() });
   }
 
-  function finish(moveData) {
+    function finish(moveData) {
     const now = Date.now();
-    if (state.lastTick !== 0) {
+    if (state.lastTick !== 0 && state.timers[state.turn] < 900000) { // 持ち時間が無制限(999999)でない場合のみ減らす
       const elapsed = Math.floor((now - state.lastTick) / 1000);
-      if (state.timers[state.turn] > 0) state.timers[state.turn] = Math.max(0, state.timers[state.turn] - elapsed);
+      state.timers[state.turn] = Math.max(0, state.timers[state.turn] - elapsed);
     }
+    // 指した瞬間に lastTick を現在のサーバー時刻に更新（次の手番の計測開始）
     state.lastTick = now;
     let foulReason = "";
     if (isChecked(state.board, state.turn)) { foulReason = "王手放置"; }
@@ -944,7 +955,7 @@ onValue(callStatusRef, (snap) => {
     sel = null; selH = null; possibleMoves = []; 
   }
 
-  function handleCellClick(x, y) {
+    function handleCellClick(x, y) {
     if (isReviewMode) {
       const target = rvState.board[y][x];
       if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
@@ -979,6 +990,10 @@ onValue(callStatusRef, (snap) => {
       if (target) { sel = { x, y }; possibleMoves = getRawMoves(x, y, rvState.board, target.owner); render(); }
       return;
     }
+
+    // ★追加：対局開始（カウントダウン終了）前は駒を動かせない
+    if (state.lastTick === 0) return;
+
     if (state.winner || state.turn !== mySide || pendingProm) return;
     const target = state.board[y][x];
     if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
@@ -1054,10 +1069,12 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
           s.classList.add('selected-piece');
         }
 
-        s.onclick = (e) => {
+                s.onclick = (e) => {
           e.stopPropagation();
-          // 感想戦中か、自分の手番の自分の駒なら操作可能
-          if (!isReviewMode && (state.winner || state.turn !== mySide || owner !== mySide)) return;
+          // ★修正：感想戦以外では、対局が始まっていない（準備中）の操作も禁止
+          if (!isReviewMode) {
+            if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
+          }
 
           if (selH?.idx === item.originalIdx && selH?.owner === owner) {
             selH = null;
@@ -1132,7 +1149,6 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
     return `${idx}.${side}${isSame ? "同" : x+y}${type}`;
   }
 
-  // 修正後
 function updateTimerDisplay() {
   const now = Date.now();
   const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
@@ -1142,40 +1158,58 @@ function updateTimerDisplay() {
     let displayStr = ""; 
     let isByoAlert = false; 
     const el = document.getElementById(`timer-${s}`);
+    const mark = (s === 'S' ? '▲' : '△');
+
+    // 無制限判定用フラグ
+    const isMainInf = (remMain > 900000);
+    const isByoInf = (state.config.byo > 900000);
 
     if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
-      let currentRem = 0;
-      let isTimeUp = false;
-
-      if (remMain > 0) {
-        currentRem = Math.max(0, remMain - elapsed);
+      // 手番側の表示
+      if (isMainInf) {
+        displayStr = `${mark} 無制限`;
+      } else if (remMain > 0) {
+        const currentRem = Math.max(0, remMain - elapsed);
         if (currentRem > 0) {
-          displayStr = `${s==='S'?'▲':'△'} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
+          displayStr = `${mark} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
         } else {
-          const byoRem = Math.max(0, (state.config.byo || 30) - (elapsed - remMain));
-          displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`;
-          if (byoRem <= 5) isByoAlert = true;
-          if (byoRem <= 0) isTimeUp = true;
+          // 持ち時間使い切り後の秒読み
+          if (isByoInf) {
+            displayStr = `${mark} 秒:無制限`;
+          } else {
+            const byoRem = Math.max(0, (state.config.byo || 30) - (elapsed - remMain));
+            displayStr = `${mark} 秒:${byoRem}`;
+            if (byoRem <= 5) isByoAlert = true;
+            if (byoRem <= 0 && s === mySide && !state.winner) {
+              state.winner = (mySide === 'S' ? 'G' : 'S'); 
+              state.winReason = "時間切れ"; 
+              finish({ side: s, type: "時間切れ" }); 
+            }
+          }
         }
       } else {
-        const byoRem = Math.max(0, (state.config.byo || 30) - elapsed);
-        displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`;
-        if (byoRem <= 5) isByoAlert = true;
-        if (byoRem <= 0) isTimeUp = true;
-      }
-
-      // 【重要】自分の手番で、かつ自分の時間が切れた時だけ、自分が負けを認める
-      if (isTimeUp && s === mySide && !state.winner) {
-        state.winner = (mySide === 'S' ? 'G' : 'S'); 
-        state.winReason = "時間切れ"; 
-        finish({ side: s, type: "時間切れ" }); 
+        // 持ち時間0分設定（即秒読み）
+        if (isByoInf) {
+          displayStr = `${mark} 秒:無制限`;
+        } else {
+          const byoRem = Math.max(0, (state.config.byo || 30) - elapsed);
+          displayStr = `${mark} 秒:${byoRem}`;
+          if (byoRem <= 5) isByoAlert = true;
+          if (byoRem <= 0 && s === mySide && !state.winner) {
+            state.winner = (mySide === 'S' ? 'G' : 'S'); 
+            state.winReason = "時間切れ"; 
+            finish({ side: s, type: "時間切れ" });
+          }
+        }
       }
     } else {
       // 待機側や終了後の表示
-      if (remMain > 0) {
-        displayStr = `${s==='S'?'▲':'△'} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
+      if (isMainInf) {
+        displayStr = `${mark} 無制限`;
+      } else if (remMain > 0) {
+        displayStr = `${mark} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
       } else {
-        displayStr = `${s==='S'?'▲':'△'} 秒:${state.config.byo || 30}`;
+        displayStr = `${mark} 秒:${isByoInf ? '無制限' : (state.config.byo || 30)}`;
       }
     }
     
