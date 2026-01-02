@@ -181,90 +181,62 @@
 
 <div class="controls">
   <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
+      <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
     <button id="btnSetting">設定</button>
-
-<div id="setting-dialog">
-  <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">対局設定</h3>
-  
-  <div class="setting-row">
-    <label>持ち時間</label>
-    <select id="cfgMain">
-      <option value="0">0分（即秒読み）</option>
-      <option value="10" selected>10分</option>
-      <option value="15">15分</option>
-      <option value="30">30分</option>
-      <option value="999999">無制限</option>
-    </select>
-  </div>
-
-  <div class="setting-row">
-    <label>秒読み</label>
-    <select id="cfgByo">
-      <option value="30" selected>30秒</option>
-      <option value="60">60秒</option>
-      <option value="999999">無制限</option>
-    </select>
-  </div>
-
-  <div class="setting-row">
-    <label>手合割（駒落ち）</label>
-    <select id="cfgHandicap">
-      <option value="平手">平手</option>
-      <option value="香落ち">香落ち (上手：左香)</option>
-      <option value="角落ち">角落ち</option>
-      <option value="飛車落ち">飛車落ち</option>
-      <option value="飛香落ち">飛香落ち</option>
-      <option value="二枚落ち">二枚落ち (飛角)</option>
-      <option value="四枚落ち">四枚落ち (飛角香香)</option>
-      <option value="六枚落ち">六枚落ち (＋桂桂)</option>
-      <option value="八枚落ち">八枚落ち (＋銀銀)</option>
-    </select>
-  </div>
-  <div class="setting-row">
-    <label>上手（駒を落とす側）</label>
-    <select id="cfgUwateSide">
-      <option value="G">後手△が上手</option>
-      <option value="S">先手▲が上手</option>
-    </select>
-  </div>
-  <div style="display:flex; gap:10px;">
-    <button id="btnSettingSave" style="flex:1; background:var(--call-btn); color:white; padding:10px;">適用して初期化</button>
-    <button id="btnSettingCancel" style="flex:1; background:#ccc; padding:10px;">閉じる</button>
-  </div>
-</div>
-
-<div id="setting-dialog">
-  <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">対局設定</h3>
-  <div class="setting-row">
-    <label>手合割（駒落ち）</label>
-    <select id="cfgHandicap">
-      <option value="平手">平手</option>
-      <option value="香落ち">香落ち (上手：左香)</option>
-      <option value="角落ち">角落ち</option>
-      <option value="飛車落ち">飛車落ち</option>
-      <option value="飛香落ち">飛香落ち</option>
-      <option value="二枚落ち">二枚落ち (飛角)</option>
-      <option value="四枚落ち">四枚落ち (飛角香香)</option>
-      <option value="六枚落ち">六枚落ち (＋桂桂)</option>
-      <option value="八枚落ち">八枚落ち (＋銀銀)</option>
-    </select>
-  </div>
-  <div class="setting-row">
-    <label>上手（駒を落とす側）</label>
-    <select id="cfgUwateSide">
-      <option value="G">後手△が上手</option>
-      <option value="S">先手▲が上手</option>
-    </select>
-  </div>
-  <div style="display:flex; gap:10px;">
-    <button id="btnSettingSave" style="flex:1; background:var(--call-btn); color:white; padding:10px;">適用して初期化</button>
-    <button id="btnSettingCancel" style="flex:1; background:#ccc; padding:10px;">閉じる</button>
-  </div>
-</div>
-
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
-        <button id="btnResign">投了</button>
+    <button id="btnResign">投了</button>
+  </div>
+
+  <div id="setting-dialog">
+    <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">対局設定</h3>
+    
+    <div class="setting-row">
+      <label>持ち時間</label>
+      <select id="cfgMain">
+        <option value="0">0分（即秒読み）</option>
+        <option value="10" selected>10分</option>
+        <option value="15">15分</option>
+        <option value="30">30分</option>
+        <option value="999999">無制限</option>
+      </select>
+    </div>
+
+    <div class="setting-row">
+      <label>秒読み</label>
+      <select id="cfgByo">
+        <option value="30" selected>30秒</option>
+        <option value="60">60秒</option>
+        <option value="999999">無制限</option>
+      </select>
+    </div>
+
+    <div class="setting-row">
+      <label>手合割（駒落ち）</label>
+      <select id="cfgHandicap">
+        <option value="平手">平手</option>
+        <option value="香落ち">香落ち (上手：左香)</option>
+        <option value="角落ち">角落ち</option>
+        <option value="飛車落ち">飛車落ち</option>
+        <option value="飛香落ち">飛香落ち</option>
+        <option value="二枚落ち">二枚落ち (飛角)</option>
+        <option value="四枚落ち">四枚落ち (飛角香香)</option>
+        <option value="六枚落ち">六枚落ち (＋桂桂)</option>
+        <option value="八枚落ち">八枚落ち (＋銀銀)</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label>上手（駒を落とす側）</label>
+      <select id="cfgUwateSide">
+        <option value="G">後手△が上手</option>
+        <option value="S">先手▲が上手</option>
+      </select>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button id="btnSettingSave" style="flex:1; background:var(--call-btn); color:white; padding:10px;">適用して初期化</button>
+      <button id="btnSettingCancel" style="flex:1; background:#ccc; padding:10px;">閉じる</button>
+    </div>
+  </div>
   </div>
   <div class="ready-area">
     <select id="mySideSelect" style="font-size:10px;"><option value="S">先手▲</option><option value="G">後手△</option></select>
@@ -638,19 +610,18 @@ onValue(callStatusRef, (snap) => {
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
-  // --- Firebase 将棋データ監視 ---
+    // --- Firebase 将棋データ監視 ---
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
+
+    // 感想戦ボタンの活性状態のみを制御（勝者が決まっていない＝対局中なら無効）
     if (!data.winner) {
-        isReviewMode = false;
-        sessionStorage.setItem(`isReview_${roomName}`, "false");
-        document.getElementById('btnToggleReview').textContent = "感想戦";
-        document.getElementById('review-panel').style.display = 'none';
-        document.getElementById('btnToggleReview').disabled = true;
+      document.getElementById('btnToggleReview').disabled = true;
     } else {
-        document.getElementById('btnToggleReview').disabled = false;
+      document.getElementById('btnToggleReview').disabled = false;
     }
+
     state.board = JSON.parse(data.board);
     state.handS = data.handS || [];
     state.handG = data.handG || [];
@@ -661,14 +632,30 @@ onValue(callStatusRef, (snap) => {
     state.winner = data.winner || null;
     state.winReason = data.winReason || "";
     state.history = data.history || [];
+
     if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
-    if (!isReviewMode) { 
-        viewIdx = state.history.length - 1; 
-        syncReviewStateLocally(); 
+
+    // リロード時・データ更新時のモード判定
+    // sessionStorageに保存された状態を優先することで、リロード後も感想戦を維持する
+    const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
+    if (storedReview) {
+      isReviewMode = true;
+      document.getElementById('btnToggleReview').textContent = "戻る";
+      document.getElementById('review-panel').style.display = 'flex';
+      // 感想戦中だがデータが更新された（相手が動かした等）場合、現在の検討位置を保持
+      if (!rvState) syncReviewStateLocally(); 
+    } else {
+      // 対局モード（または感想戦フラグなし）なら最新手へ
+      isReviewMode = false;
+      document.getElementById('btnToggleReview').textContent = "感想戦";
+      document.getElementById('review-panel').style.display = 'none';
+      viewIdx = state.history.length - 1; 
+      syncReviewStateLocally(); 
     }
+
     render(); 
     updateKifuList();
-    updateTimerDisplay(); // データを取得した直後に表示を更新
+    updateTimerDisplay();
   });
   
     // --- 準備完了ステータスの監視 ---
@@ -911,8 +898,8 @@ onValue(callStatusRef, (snap) => {
   document.getElementById('btnSetting').onclick = () => { document.getElementById('setting-dialog').style.display = 'block'; };
   document.getElementById('btnSettingCancel').onclick = () => { document.getElementById('setting-dialog').style.display = 'none'; };
 
-    // 設定適用ボタン
-  document.getElementById('btnSettingSave').onclick = () => {
+        // 設定適用ボタン
+  document.getElementById('btnSettingSave').onclick = async () => {
     if(!confirm("設定を適用して初期化しますか？")) return;
     
     const hType = document.getElementById('cfgHandicap').value;
@@ -925,7 +912,8 @@ onValue(callStatusRef, (snap) => {
     const b = byoSec;
     const bStr = JSON.stringify(generateInitialBoard(hType, uSide));
 
-    set(gameRef, { 
+    // 1. 将棋データの初期化（lastTickを0にすることで対局状態をリセット）
+    await set(gameRef, { 
       board: bStr, 
       handS: [], 
       handG: [], 
@@ -935,10 +923,17 @@ onValue(callStatusRef, (snap) => {
       lastTick: 0, 
       winner: null, 
       winReason: "", 
-      // 履歴の1手目にルール内容を明記
       history: [{ board: bStr, handS: [], handG: [], type: `${hType} (${mainMin}分/${byoSec}秒)` }] 
     });
-    set(readyRef, { S: false, G: false }); // 準備状態もリセット
+
+    // 2. 準備状態の完全リセット
+    await set(readyRef, { S: false, G: false });
+
+    // 3. ローカルのUI表示を即座に「対局中」から「準備完了」へ戻す
+    const btnReady = document.getElementById('btnReady');
+    btnReady.disabled = false;
+    btnReady.textContent = "対局準備完了";
+    btnReady.style.background = "#ff9800";
 
     document.getElementById('setting-dialog').style.display = 'none';
     
