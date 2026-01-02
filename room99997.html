@@ -338,13 +338,7 @@
   import { getDatabase, ref, set, onValue, push, remove, update, get } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
   const firebaseConfig = {
-      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
-      authDomain: "calendar-chousei.firebaseapp.com",
-      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "calendar-chousei",
-      storageBucket: "calendar-chousei.firebasestorage.app",
-      messagingSenderId: "368704703397",
-      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+      ナイショ
   };
    // --- Firebase 初期化 ---
   const app = initializeApp(firebaseConfig);
@@ -717,10 +711,12 @@ onValue(callStatusRef, (snap) => {
     
     overlay.style.display = 'none';
 
-    // 先手が代表してFirebaseを更新。一括更新(update)にすることで同期のズレを防ぐ
-    if (mySide === 'S') {
+    // ★修正：どちらの端末でも対局開始を確定できるようにする
+    // lastTick が 0 のときだけ開始処理を行う（二重開始防止）
+    const snap = await get(gameRef);
+    const cur = snap.exists() ? snap.val() : null;
+    if (cur && cur.lastTick === 0) {
       const now = Date.now();
-      // ゲームデータと準備状態をほぼ同時に更新
       await update(gameRef, { 
         lastTick: now,
         updatedAt: now 
