@@ -321,6 +321,18 @@
    // --- Firebase 初期化 ---
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+
+  // --- 追加：サーバー時刻との時差を補正する ---
+  let serverOffset = 0;
+  const offsetRef = ref(db, ".info/serverTimeOffset");
+  onValue(offsetRef, (snap) => {
+    serverOffset = snap.val() || 0;
+  });
+
+  /** 端末の時計をサーバー基準に補正した現在時刻(ms)を返す **/
+  function getServerNow() {
+    return Date.now() + serverOffset;
+  }
   
   // --- ルーム管理：ファイル名から部屋名を取得 ---
   const params = new URLSearchParams(window.location.search);
@@ -866,13 +878,14 @@ btnCallStart.onclick = async () => {
     }
   }
 
-  function pushReviewUpdate() {
+    function pushReviewUpdate() {
     if (!isReviewMode) return;
-    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: Date.now() });
+    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: getServerNow() });
   }
 
 function finish(moveData) {
-  const now = Date.now();
+  // 消費時間の計算も補正後の現在時刻を使用
+  const now = getServerNow(); 
   let newTimers = { ...state.timers };
   
   // 1. 持ち時間と秒読みの厳密な計算
@@ -1293,7 +1306,9 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
   }
 
 function updateTimerDisplay() {
-  const now = Date.now();
+  // Date.now() ではなく補正後の時刻を使用
+  const now = getServerNow(); 
+  
   // 経過秒の計算
   const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
 
