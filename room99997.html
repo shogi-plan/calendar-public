@@ -310,13 +310,7 @@
   import { getDatabase, ref, set, onValue, push, remove, update, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
   const firebaseConfig = {
-      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
-      authDomain: "calendar-chousei.firebaseapp.com",
-      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "calendar-chousei",
-      storageBucket: "calendar-chousei.firebasestorage.app",
-      messagingSenderId: "368704703397",
-      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+      ナイショ
   };
    // --- Firebase 初期化 ---
   const app = initializeApp(firebaseConfig);
@@ -1058,209 +1052,258 @@ function finish(moveData) {
     sel = null; selH = null; possibleMoves = []; 
   }
 
-      function handleCellClick(x, y) {
-    if (isReviewMode) {
-      const target = rvState.board[y][x];
-      if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
-      
-      // 移動先をクリック
-      if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
-        const fromP = rvState.board[sel.y][sel.x];
-        const moveData = { side: fromP.owner, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
-        const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
-
-        // 駒取り処理
-        if (target && target.owner !== fromP.owner) {
-          (fromP.owner === 'S' ? rvState.handS : rvState.handG).push(UNPROMOTE_MAP[target.type] || target.type);
-        }
-
-        if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
-          // 成り選択がある場合は、盤面更新せずダイアログへ
-          pendingProm = { x, y, moveData };
-          document.getElementById('promote-dialog').style.display = 'block';
-        } else {
-          // 成りがない場合は、ここで移動を確定
-          rvState.board[y][x] = { type: fromP.type, owner: fromP.owner }; 
-          rvState.board[sel.y][sel.x] = null;
-          sel = null; 
-          possibleMoves = []; 
-          pushReviewUpdate();
-        }
-        render();
-        return;
-      }
-      
-      // 持ち駒を打つ
-      if (selH) { 
-        if (!target) { 
-            rvState.board[y][x] = { type: selH.type, owner: selH.owner }; 
-            (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); 
-            selH = null; pushReviewUpdate(); render(); 
-        } else { selH = null; render(); } 
-        return; 
-      }
-      
-      // 駒を選択
-      if (target) { sel = { x, y }; possibleMoves = getRawMoves(x, y, rvState.board, target.owner); render(); }
+    function handleCellClick(x, y) {
+  if (isReviewMode) {
+    const target = rvState.board[y][x];
+    if (sel && sel.x === x && sel.y === y) {
+      sel = null;
+      possibleMoves = [];
+      render();
       return;
     }
 
-    // --- 以下、対局モード ---
-    if (state.lastTick === 0) return;
-    if (state.winner || state.turn !== mySide || pendingProm) return;
-
-    const target = state.board[y][x];
-    if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
-    
     // 移動先をクリック
     if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
-      const fromP = state.board[sel.y][sel.x];
-      const moveData = { side: mySide, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
-      const promLine = (mySide === 'S') ? [0,1,2] : [6,7,8];
+      const fromP = rvState.board[sel.y][sel.x];
+      if (!fromP) return;
 
-      // 駒取り
-      if (target && target.owner !== mySide) {
-        const h = (mySide === 'S' ? state.handS : state.handG) || [];
-        h.push(UNPROMOTE_MAP[target.type] || target.type);
-        if (mySide === 'S') state.handS = h; else state.handG = h;
+      const moveData = {
+        side: fromP.owner,
+        fromX: sel.x,
+        fromY: sel.y,
+        toX: x,
+        toY: y,
+        type: fromP.type,
+        isDrop: false,
+        isPromoted: false
+      };
+      const promLine = (fromP.owner === 'S') ? [0, 1, 2] : [6, 7, 8];
+
+      // 駒取り処理
+      if (target && target.owner !== fromP.owner) {
+        (fromP.owner === 'S' ? rvState.handS : rvState.handG).push(UNPROMOTE_MAP[target.type] || target.type);
       }
 
       if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
-        const deadLine = (mySide === 'S') ? 0 : 8;
-        // 強制成りの判定
-        if (((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine) || (fromP.type === 'KE' && (mySide==='S' ? y<=1 : y>=7))) { 
-          state.board[y][x] = { type: PROMOTE_MAP[fromP.type], owner: mySide }; 
-          state.board[sel.y][sel.x] = null;
-          moveData.type = PROMOTE_MAP[fromP.type]; 
-          moveData.isPromoted = true; 
-          finish(moveData); 
+        pendingProm = { x, y, moveData };
+        document.getElementById('promote-dialog').style.display = 'block';
+      } else {
+        // 先に移動元を消去してから移動先に配置（消失防止）
+        const movingPiece = { type: fromP.type, owner: fromP.owner };
+        rvState.board[sel.y][sel.x] = null;
+        rvState.board[y][x] = movingPiece;
+        sel = null;
+        possibleMoves = [];
+        pushReviewUpdate();
+      }
+      render();
+      return;
+    }
+
+    // 持ち駒を打つ
+    if (selH) {
+      if (!target) {
+        const targetHand = (selH.owner === 'S' ? rvState.handS : rvState.handG);
+        if (targetHand && targetHand[selH.idx] === selH.type) {
+          rvState.board[y][x] = { type: selH.type, owner: selH.owner };
+          targetHand.splice(selH.idx, 1);
+          selH = null;
+          pushReviewUpdate();
+          render();
         } else {
-          // 選択可能な場合は、盤面更新せずダイアログへ
-          pendingProm = { x, y, moveData }; 
-          document.getElementById('promote-dialog').style.display = 'block'; 
-          render(); 
+          selH = null;
+          render();
         }
       } else {
-        // 成りがない移動
-        state.board[y][x] = { type: fromP.type, owner: mySide }; 
-        state.board[sel.y][sel.x] = null;
-        finish(moveData); 
+        selH = null;
+        render();
       }
       return;
     }
-    
-    // 持ち駒を打つ
-    if (selH) { 
-      if (!target) { 
-        state.board[y][x] = { type: selH.type, owner: mySide }; 
-        (mySide === 'S' ? state.handS : state.handG).splice(selH.idx, 1); 
-        finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true }); 
-      } else { selH = null; render(); } 
-      return; 
-    }
-    
+
     // 駒を選択
-    if (target && target.owner === mySide) { 
-      sel = { x, y }; 
-      possibleMoves = getRawMoves(x, y, state.board, mySide); 
-      render(); 
+    if (target) {
+      sel = { x, y };
+      possibleMoves = getRawMoves(x, y, rvState.board, target.owner);
+      render();
+    }
+    return;
+  }
+
+  // --- 以下、対局モード ---
+  if (state.lastTick === 0) return;
+  if (state.winner || state.turn !== mySide || pendingProm) return;
+
+  const target = state.board[y][x];
+  if (sel && sel.x === x && sel.y === y) {
+    sel = null;
+    possibleMoves = [];
+    render();
+    return;
+  }
+
+  // 移動先をクリック
+  if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
+    const fromP = state.board[sel.y][sel.x];
+    if (!fromP) return;
+
+    const moveData = {
+      side: mySide,
+      fromX: sel.x,
+      fromY: sel.y,
+      toX: x,
+      toY: y,
+      type: fromP.type,
+      isDrop: false,
+      isPromoted: false
+    };
+    const promLine = (mySide === 'S') ? [0, 1, 2] : [6, 7, 8];
+
+    // 駒取り
+    if (target && target.owner !== mySide) {
+      const h = (mySide === 'S' ? state.handS : state.handG) || [];
+      h.push(UNPROMOTE_MAP[target.type] || target.type);
+      if (mySide === 'S') state.handS = h;
+      else state.handG = h;
+    }
+
+    if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
+      const deadLine = (mySide === 'S') ? 0 : 8;
+      if (((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine) || (fromP.type === 'KE' && (mySide === 'S' ? y <= 1 : y >= 7))) {
+        state.board[sel.y][sel.x] = null;
+        state.board[y][x] = { type: PROMOTE_MAP[fromP.type], owner: mySide };
+        moveData.type = PROMOTE_MAP[fromP.type];
+        moveData.isPromoted = true;
+        finish(moveData);
+      } else {
+        pendingProm = { x, y, moveData };
+        document.getElementById('promote-dialog').style.display = 'block';
+        render();
+      }
+    } else {
+      state.board[sel.y][sel.x] = null;
+      state.board[y][x] = { type: fromP.type, owner: mySide };
+      finish(moveData);
+    }
+    return;
+  }
+
+  // 持ち駒を打つ
+  if (selH) {
+    if (!target) {
+      const targetHand = (mySide === 'S' ? state.handS : state.handG);
+      if (targetHand && targetHand[selH.idx] === selH.type) {
+        state.board[y][x] = { type: selH.type, owner: mySide };
+        targetHand.splice(selH.idx, 1);
+        finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true });
+      } else {
+        selH = null;
+        render();
+      }
+    } else {
+      selH = null;
+      render();
+    }
+    return;
+  }
+
+  // 駒を選択
+  if (target && target.owner === mySide) {
+    sel = { x, y };
+    possibleMoves = getRawMoves(x, y, state.board, mySide);
+    render();
+  }
+} // handleCellClick 終了
+
+function render() {
+  if (isReviewMode && !rvState) {
+    if (state.history && state.history.length > 0) {
+      syncReviewStateLocally();
+    } else {
+      return;
     }
   }
 
-    function render() {
-    if (isReviewMode && !rvState) {
-      if (state.history && state.history.length > 0) {
-        syncReviewStateLocally();
-      } else { return; }
-    }
+  let b, hs, hg;
+  if (isReviewMode) {
+    b = rvState.board;
+    hs = rvState.handS;
+    hg = rvState.handG;
+  } else {
+    b = state.board;
+    hs = state.handS;
+    hg = state.handG;
+  }
 
-    let b, hs, hg;
-    if (isReviewMode) { 
-      b = rvState.board; hs = rvState.handS; hg = rvState.handG; 
-    } else { 
-      b = state.board; hs = state.handS; hg = state.handG; 
-    }
+  // 盤面の描画
+  for (let y = 0; y < 9; y++) {
+    for (let x = 0; x < 9; x++) {
+      const c = cells[y][x];
+      const p = b[y][x];
+      c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
 
-        // 盤面の描画
-    for (let y = 0; y < 9; y++) {
-      for (let x = 0; x < 9; x++) {
-        const c = cells[y][x]; 
-        const p = b[y][x];
-        c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
-        
-        if (p) {
-          // 盤面の描画（★従来どおり：所有者だけで向きを決める）
-const isOpposite = (p.owner === 'G');   // 後手だけ逆さ
-const promotedClass = UNPROMOTE_MAP[p.type] ? 'promoted' : '';
-const rotClass = isOpposite ? 'opposite' : '';
-
-c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMBOLS[p.type]}</div>`;
-        } else {
-          c.innerHTML = '';
-        }
+      if (p) {
+        const isOpposite = (p.owner === 'G');
+        const promotedClass = UNPROMOTE_MAP[p.type] ? 'promoted' : '';
+        const rotClass = isOpposite ? 'opposite' : '';
+        c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMBOLS[p.type]}</div>`;
+      } else {
+        c.innerHTML = '';
       }
     }
-
-          const drawH = (id, list, owner) => {
-      const el = document.getElementById(id);
-      el.innerHTML = '';
-
-      // 駒の並び順の優先度（数字が小さいほど上に表示）
-      const HAND_ORDER = { HI: 1, KA: 2, KI: 3, GI: 4, KE: 5, KY: 6, FU: 7 };
-
-      // 持ち駒をソート。originalIdxを保持してクリック時の整合性を保つ
-      const sortedList = (list || []).map((type, idx) => ({ type, originalIdx: idx }))
-        .sort((a, b) => (HAND_ORDER[a.type] || 99) - (HAND_ORDER[b.type] || 99));
-
-      sortedList.forEach((item) => {
-        const s = document.createElement('span');
-        s.className = 'piece-font';
-        s.textContent = SYMBOLS[item.type];
-
-        // 選択ハイライトの判定（元の配列インデックスで比較）
-        if (selH?.idx === item.originalIdx && selH?.owner === owner) {
-          s.classList.add('selected-piece');
-        }
-
-                s.onclick = (e) => {
-          e.stopPropagation();
-          // ★修正：感想戦以外では、対局が始まっていない（準備中）の操作も禁止
-          if (!isReviewMode) {
-            if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
-          }
-
-          if (selH?.idx === item.originalIdx && selH?.owner === owner) {
-            selH = null;
-          } else {
-            selH = { type: item.type, owner, idx: item.originalIdx };
-            sel = null;
-            possibleMoves = [];
-          }
-          render();
-        };
-        el.appendChild(s);
-      });
-    };
-
-    drawH('handS', hs, 'S'); 
-    drawH('handG', hg, 'G');
-
-    const st = document.getElementById('status-txt');
-    if (state.winner && !isReviewMode) { 
-      st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`; 
-      st.style.color = "red"; 
-    } else if (isReviewMode) { 
-      st.textContent = "感想戦"; 
-      st.style.color = "orange"; 
-    } else { 
-      st.textContent = state.turn === mySide ? "手番" : "待機"; 
-      st.style.color = "black"; 
-    }
-
-    document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
-    document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
-    document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
   }
+
+  const drawH = (id, list, owner) => {
+    const el = document.getElementById(id);
+    el.innerHTML = '';
+    const HAND_ORDER = { HI: 1, KA: 2, KI: 3, GI: 4, KE: 5, KY: 6, FU: 7 };
+    const sortedList = (list || []).map((type, idx) => ({ type, originalIdx: idx }))
+      .sort((a, b) => (HAND_ORDER[a.type] || 99) - (HAND_ORDER[b.type] || 99));
+
+    sortedList.forEach((item) => {
+      const s = document.createElement('span');
+      s.className = 'piece-font';
+      s.textContent = SYMBOLS[item.type];
+      if (selH && selH.idx === item.originalIdx && selH.owner === owner) {
+        s.classList.add('selected-piece');
+      }
+      s.onclick = (e) => {
+        e.stopPropagation();
+        if (!isReviewMode) {
+          if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
+        }
+        if (selH && selH.idx === item.originalIdx && selH.owner === owner) {
+          selH = null;
+        } else {
+          selH = { type: item.type, owner, idx: item.originalIdx };
+          sel = null;
+          possibleMoves = [];
+        }
+        render();
+      };
+      el.appendChild(s);
+    });
+  };
+
+  drawH('handS', hs, 'S');
+  drawH('handG', hg, 'G');
+
+  const st = document.getElementById('status-txt');
+  if (state.winner && !isReviewMode) {
+    st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`;
+    st.style.color = "red";
+  } else if (isReviewMode) {
+    st.textContent = "感想戦";
+    st.style.color = "orange";
+  } else {
+    st.textContent = state.turn === mySide ? "手番" : "待機";
+    st.style.color = "black";
+  }
+
+  document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
+  document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
+  document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
+} // render 終了
 
   // 棋譜リストの更新
   function updateKifuList() {
