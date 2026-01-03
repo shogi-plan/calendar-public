@@ -41,46 +41,80 @@
     #board-container { position: relative; width: 58vw; max-width: 380px; aspect-ratio: 1 / 1; flex-shrink: 1; }
     #board { display: grid; grid-template-columns: repeat(9, 11.1111%); grid-template-rows: repeat(9, 11.1111%); border: 1px solid #222; width: 100%; height: 100%; background: var(--board-color); box-sizing: border-box; }
     
-    /* --- 左右に配置する駒台（2列×10行） --- */
-    .hand { 
-      width: 38px;               /* 幅を縮小 */
-      height: 58vw;              /* 盤面の新しい幅(58vw)に合わせる */
+        /* --- 左右に配置する駒台（1列×7行） --- */
+        .hand { 
+      width: 10vw;               /* 少し幅を狭めて余裕を持たせる */
+      max-width: 40px;
+      height: 58vw;              /* 盤面の高さに合わせる */
       max-height: 380px; 
       border: 1px solid #999; 
       background: #fff; 
-      display: flex; 
-      flex-direction: column; 
-      flex-wrap: wrap; 
-      align-content: flex-start; 
-      padding: 14px 2px 2px 2px; /* パディングも微調整 */
-      gap: 2px; 
+      display: grid; 
+      grid-template-rows: repeat(7, 1fr); /* 7種類固定 */
+      grid-template-columns: 1fr;
+      padding: 14px 1px 1px 1px; 
+      gap: 1px; 
       border-radius: 3px; 
       position: relative; 
       box-sizing: border-box;
       flex-shrink: 0;
     }
-    .hand::before { content: attr(data-label); position: absolute; top: 1px; left: 0; width: 100%; text-align: center; font-size: 9px; font-weight: bold; color: #333; }
+    .hand::before { 
+      content: attr(data-label); 
+      position: absolute; 
+      top: 1px; left: 0; 
+      width: 100%; 
+      text-align: center; 
+      font-size: 8px; 
+      font-weight: bold; 
+      color: #333; 
+      white-space: nowrap;
+    }
 
-    /* 駒：10行に収まるサイズに自動調整 */
+    /* 駒台の中の各駒スロット */
+    .hand-slot {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
     .hand span { 
-      width: 16px;               /* 19pxから3px縮小 */
-      height: calc((100% - 18px) / 10); 
+      width: 85%;                /* 駒のサイズを少し小さく */
+      height: 85%;               /* 駒のサイズを少し小さく */
       border: 1px solid #777; 
       background: #f0f0f0; 
       display: inline-flex; 
       align-items: center; 
       justify-content: center; 
-      font-size: 10px;           /* 文字も少し小さく */
       box-sizing: border-box;
-      flex-shrink: 0;
       cursor: pointer;
-      transform-origin: center;
+      border-radius: 2px;        /* 角を少し丸くして隙間を強調 */
+    }
+
+    /* 枚数ラベル（×2など） */
+    .hand-count {
+      position: absolute;
+      bottom: 2px;               /* 駒の縮小に合わせて位置調整 */
+      right: 2px;                /* 駒の縮小に合わせて位置調整 */
+      background: rgba(255,255,255,0.9);
+      border: 1px solid #999;
+      border-radius: 2px;
+      font-size: 8px;
+      font-weight: bold;
+      padding: 0 1px;
+      line-height: 1;
+      pointer-events: none;
+      color: #000;
+      z-index: 5;
     }
 
     .hand span.selected-piece { background: var(--select-color) !important; color: white; border-color: #e68a00; }
 
-    /* 棋譜パネル：先手駒台のさらに右側に配置 */
-    #review-panel { display: none; width: 75px; height: 58vw; max-height: 380px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; flex-shrink: 0; }
+    /* 棋譜パネル：幅をスリムにして持ち駒エリアの欠けを防止 */
+    #review-panel { display: none; width: 65px; height: 58vw; max-height: 380px; background: #fff; border: 1px solid #999; border-radius: 2px; flex-direction: column; box-sizing: border-box; flex-shrink: 0; }
 
     /* その他パーツのスタイル（以前のものを維持） */
     .cell { display: flex; align-items: center; justify-content: center; border: 0.5px solid rgba(0,0,0,0.2); box-sizing: border-box; width: 100%; height: 100%; }
@@ -99,8 +133,9 @@
     .kifu-list { flex-grow: 1; overflow-y: scroll; background: #fafafa; font-size: 9px; padding: 0; margin: 0; }
     .kifu-item { padding: 5px 1px; cursor: pointer; border-bottom: 1px solid #eee; text-align: center; white-space: nowrap; }
     .kifu-item.active { background: var(--primary-btn); color: white; }
-    .nav-controls { display: grid; grid-template-columns: 1fr 1fr; background: #ddd; gap: 1px; padding: 1px; }
-    .nav-btn { font-size: 9px; padding: 7px 0; border: 1px solid #bbb; background: #fff; cursor: pointer; font-weight: bold; }
+        .nav-controls { display: grid; grid-template-columns: 1fr 1fr; background: #ddd; gap: 1px; padding: 1px; }
+    /* フォントサイズを8pxに下げ、パディングを調整して1行に収める */
+    .nav-btn { font-size: 8px; padding: 6px 0; border: 1px solid #bbb; background: #fff; cursor: pointer; font-weight: bold; letter-spacing: -0.5px; }
     #nav-pos { grid-column: span 2; font-size: 9px; text-align: center; background: #eee; padding: 2px 0; border-bottom: solid 1px #ccc; }
     .controls { display: flex; gap: 2px; margin-bottom: 4px; flex-wrap: wrap; justify-content: center; background: #ddd; padding: 4px; border-radius: 4px; width: 98%; box-sizing: border-box; }
     button { cursor: pointer; border: none; border-radius: 3px; font-weight: bold; padding: 5px 6px; font-size: 11px; }
@@ -283,12 +318,12 @@
   <div id="review-panel">
     <div id="nav-pos">0/0</div>
     <div id="kifu-container" class="kifu-list"></div>
-    <div class="nav-controls">
-      <button id="nav-prev" class="nav-btn">＜ 前</button>
-      <button id="nav-next" class="nav-btn">次 ＞</button>
-      <button id="nav-first" class="nav-btn">《 最初</button>
-      <button id="nav-last" class="nav-btn">最後 》</button>
-      <button id="btnKif" class="nav-btn" style="grid-column: span 2; background: #4caf50; color: white;">KIF</button>
+        <div class="nav-controls">
+      <button id="nav-prev" class="nav-btn">＜前</button>
+      <button id="nav-next" class="nav-btn">次＞</button>
+      <button id="nav-first" class="nav-btn">最初</button>
+      <button id="nav-last" class="nav-btn">最後</button>
+      <button id="btnKif" class="nav-btn" style="grid-column: span 2; background: #4caf50; color: white;">KIFコピー</button>
     </div>
   </div>
 </div>
@@ -1259,36 +1294,63 @@ function render() {
     }
   }
 
-  const drawH = (id, list, owner) => {
+        const drawH = (id, list, owner) => {
     const el = document.getElementById(id);
     el.innerHTML = '';
-    const HAND_ORDER = { HI: 1, KA: 2, KI: 3, GI: 4, KE: 5, KY: 6, FU: 7 };
-    const sortedList = (list || []).map((type, idx) => ({ type, originalIdx: idx }))
-      .sort((a, b) => (HAND_ORDER[a.type] || 99) - (HAND_ORDER[b.type] || 99));
+    // 駒の種類と表示順序を定義
+    const HAND_ORDER = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
+    
+    // 現在持っている駒を枚数集計
+    const counts = {};
+    (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
 
-    sortedList.forEach((item) => {
-      const s = document.createElement('span');
-      s.className = 'piece-font';
-      s.textContent = SYMBOLS[item.type];
-      if (selH && selH.idx === item.originalIdx && selH.owner === owner) {
-        s.classList.add('selected-piece');
+    // 持っている駒の種類だけを、定義した順序で抽出
+    const existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
+
+    // 常に7つのスロットを作成し、持っている駒を上から順に詰めて表示
+    for (let i = 0; i < 7; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'hand-slot';
+      
+      const type = existingTypes[i]; // 上から順に駒を割り当て
+
+      if (type) {
+        const s = document.createElement('span');
+        s.className = 'piece-font';
+        s.textContent = SYMBOLS[type];
+        
+        // 枚数ラベル
+        if (counts[type] > 1) {
+          const c = document.createElement('div');
+          c.className = 'hand-count';
+          c.textContent = `×${counts[type]}`;
+          slot.appendChild(c);
+        }
+
+        // 選択処理
+        const firstIdx = list.indexOf(type);
+        if (selH && selH.type === type && selH.owner === owner) {
+          s.classList.add('selected-piece');
+        }
+
+        s.onclick = (e) => {
+          e.stopPropagation();
+          if (!isReviewMode) {
+            if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
+          }
+          if (selH && selH.type === type && selH.owner === owner) {
+            selH = null;
+          } else {
+            selH = { type: type, owner, idx: firstIdx };
+            sel = null;
+            possibleMoves = [];
+          }
+          render();
+        };
+        slot.appendChild(s);
       }
-      s.onclick = (e) => {
-        e.stopPropagation();
-        if (!isReviewMode) {
-          if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
-        }
-        if (selH && selH.idx === item.originalIdx && selH.owner === owner) {
-          selH = null;
-        } else {
-          selH = { type: item.type, owner, idx: item.originalIdx };
-          sel = null;
-          possibleMoves = [];
-        }
-        render();
-      };
-      el.appendChild(s);
-    });
+      el.appendChild(slot);
+    }
   };
 
   drawH('handS', hs, 'S');
