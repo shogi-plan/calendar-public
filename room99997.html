@@ -804,16 +804,20 @@ onValue(callStatusRef, (snap) => {
     set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: Date.now() });
   }
 
-      function finish(moveData) {
+        function finish(moveData) {
     const now = Date.now();
-    // 持ち時間の減算処理（持ち時間が0より大きい、かつ無制限でない場合）
-    if (state.lastTick !== 0 && state.timers[state.turn] < 900000) {
+    
+    // --- 持ち時間の計算を厳密化 ---
+    if (state.lastTick !== 0 && !state.winner) {
       const elapsed = Math.floor((now - state.lastTick) / 1000);
-      state.timers[state.turn] = Math.max(0, state.timers[state.turn] - elapsed);
+      // 持ち時間が無制限(900000以上)でない場合のみ減算
+      if (state.timers[state.turn] < 900000) {
+        state.timers[state.turn] = Math.max(0, state.timers[state.turn] - elapsed);
+      }
     }
     
-    // 指した瞬間の時刻を基準点として更新
-    state.lastTick = now;
+    // 指した瞬間の時刻を次の基準点にする
+    const currentTick = now;
 
     let foulReason = "";
     if (isChecked(state.board, state.turn)) { 
@@ -824,33 +828,39 @@ onValue(callStatusRef, (snap) => {
       if (count > 1) foulReason = "二歩";
     }
 
+    const nextTurn = (state.turn === 'S' ? 'G' : 'S');
+
     if (foulReason) {
-      state.winner = (state.turn === 'S' ? 'G' : 'S');
+      state.winner = nextTurn;
       state.winReason = foulReason;
       state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])], type: moveData.type + "(反則)" });
     } else {
-      const nextTurn = (state.turn === 'S' ? 'G' : 'S');
       if (state.history.length > 2 && isCheckmate(state.board, nextTurn, state.handS, state.handG)) { 
         state.winner = state.turn; 
         state.winReason = "詰み"; 
       }
-      state.turn = nextTurn;
       state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
+    }
+
+    // 最後に turn を交代させる
+    if (!state.winner) {
+      state.turn = nextTurn;
     }
 
     sel = null; 
     selH = null; 
     possibleMoves = [];
 
-    // Firebaseへ更新。timersとlastTickを同期させる
-    update(gameRef, { 
+    // Firebaseへ更新。
+    // 重要：ここでは「計算済みの新しいtimers」と「新しい基準点(lastTick)」をセットで送る
+    set(gameRef, { 
       board: JSON.stringify(state.board), 
       handS: state.handS || [], 
       handG: state.handG || [], 
       turn: state.turn, 
-      timers: state.timers, 
+      timers: { S: state.timers.S, G: state.timers.G }, // 現在の値を確定
       config: state.config, 
-      lastTick: state.lastTick, 
+      lastTick: currentTick, 
       winner: state.winner || null, 
       winReason: state.winReason || "", 
       history: state.history,
