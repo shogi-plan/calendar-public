@@ -547,8 +547,26 @@ btnCallStart.onclick = async () => {
   } 
 };
 
+    // --- 通話終了ボタンの処理 ---
   btnCallEnd.onclick = async () => { 
-    await update(callStatusRef, { status: 'ended', users: { S: false, G: false } }); 
+    // 手動終了フラグを立てる（これでリロードが実行されるようになる）
+    sessionStorage.setItem(`isManualEnd_${roomName}`, 'true');
+
+    const snap = await get(callStatusRef);
+    if (snap.exists()) {
+      let data = snap.val();
+      if (data.users) {
+        data.users[mySide] = false;
+        // 両方のフラグが落ちたら完全に終了（ended）にする
+        if (!data.users.S && !data.users.G) {
+          await update(callStatusRef, { status: 'ended', users: { S: false, G: false } });
+          remove(signalingRef);
+        } else {
+          // 片方が残っているなら待機状態(waiting)に更新
+          await update(callStatusRef, { status: 'waiting', users: data.users });
+        }
+      }
+    }
     handleCallEndInternal(); 
   };
 
@@ -557,53 +575,60 @@ btnCallStart.onclick = async () => {
     stopKeepAlive(); 
     if (peerConnection) { peerConnection.close(); peerConnection = null; } 
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; } 
-    remove(signalingRef); 
     updateCallUI(); 
-    if (!sessionStorage.getItem(`reloaded_${roomName}`)) { 
+
+    // 手動終了ボタンが押されていた場合のみ、ページをリロードして初期化する
+    if (sessionStorage.getItem(`isManualEnd_${roomName}`) === 'true') {
+      sessionStorage.removeItem(`isManualEnd_${roomName}`);
+      // reloaded_フラグは以前の仕様に合わせて一応残すか、不要なら削除
       sessionStorage.setItem(`reloaded_${roomName}`, '1'); 
       window.location.reload(); 
+    }
+  }
+
+  // --- 通話ステータス監視 (リロード対策版) ---
+  onValue(callStatusRef, async (snap) => { 
+    const data = snap.val(); 
+    if (!data) return; 
+    
+    // 相手が終了させた、または自分が終了させた場合
+    if (data.status === 'ended') { 
+      if (localCallStartPressed) {
+        handleCallEndInternal();
+      }
+      return; 
     } 
-  }
+    
+    // Firebase上で自分が「参加中」になっているか
+    const iAmRegisteredOnFirebase = !!(data.users && data.users[mySide]);
+    
+    // ★重要：リロード対策
+    // Firebase上で参加中なのに、ローカルのストリームがまだ開始されていない場合（＝ページ更新直後）
+    if (iAmRegisteredOnFirebase && !localCallStartPressed) {
+      localCallStartPressed = true;
+      try {
+        await startKeepAlive();
+        await startLocalStream();
+        // 自分が復帰した際、相手もいれば接続を再開
+        if (data.status === 'started' || (data.users.S && data.users.G)) {
+          await sendOffer();
+        }
+      } catch (e) {
+        console.error("Auto-resume call failed:", e);
+        localCallStartPressed = false;
+      }
+    }
 
-  function updateCallUI() { 
-  // localCallStartPressed が true（＝自分が開始済み）なら
-  // 「通話開始」ボタンを無効にし、「終了」「ミュート」を有効にする
-  btnCallStart.disabled = localCallStartPressed; 
-  btnCallEnd.disabled = !localCallStartPressed; 
-  btnMute.disabled = !localCallStartPressed; 
-}
-
-  // 修正後
-onValue(callStatusRef, (snap) => { 
-  const data = snap.val(); 
-  if (!data) return; 
-  
-  if (data.status === 'ended' && localCallStartPressed) { 
-    handleCallEndInternal(); 
-    return; 
-  } 
-  
-  // 修正の要：Firebase上で「自分が」登録されているかだけを厳密にチェック
-  const iAmRegisteredOnFirebase = !!(data.users && data.users[mySide]);
-  
-  // 自分がボタンを押した、あるいはFirebase上で既に自分が通話参加中なら
-  // ローカルのフラグをtrueに固定する（これでボタンが無効化される）
-  if (iAmRegisteredOnFirebase) {
-    localCallStartPressed = true;
-  }
-
-  updateCallUI(); 
-  
-  // ステータス表示の切り分け
-  if (data.status === 'started') {
-    callStatusDisplay.textContent = "通話中"; 
-  } else if (data.status === 'waiting') { 
-    // 自分が押している場合は「待機中」、押していない場合は「着信中」として表示
-    callStatusDisplay.textContent = localCallStartPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
-  } else { 
-    callStatusDisplay.textContent = "オフライン"; 
-  } 
-});
+    updateCallUI(); 
+    
+    if (data.status === 'started') {
+      callStatusDisplay.textContent = "通話中"; 
+    } else if (data.status === 'waiting') { 
+      callStatusDisplay.textContent = localCallStartPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
+    } else { 
+      callStatusDisplay.textContent = "オフライン"; 
+    } 
+  });
 
   onValue(ref(db, `${roomName}/signaling/offer`), snap => { const offer = snap.val(); if (offer && offer.from !== mySide) sendAnswer(); });
   onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
@@ -804,69 +829,79 @@ onValue(callStatusRef, (snap) => {
     set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: Date.now() });
   }
 
-        function finish(moveData) {
-    const now = Date.now();
+        // --- 修正された finish 関数 ---
+function finish(moveData) {
+  const now = Date.now();
+  let newTimers = { ...state.timers };
+  
+  // 1. 持ち時間と秒読みの厳密な計算
+  if (state.lastTick !== 0 && !state.winner) {
+    const elapsedTotal = Math.floor((now - state.lastTick) / 1000);
+    const currentMain = state.timers[state.turn];
     
-    // --- 持ち時間の計算を厳密化 ---
-    if (state.lastTick !== 0 && !state.winner) {
-      const elapsed = Math.floor((now - state.lastTick) / 1000);
-      // 持ち時間が無制限(900000以上)でない場合のみ減算
-      if (state.timers[state.turn] < 900000) {
-        state.timers[state.turn] = Math.max(0, state.timers[state.turn] - elapsed);
+    // 持ち時間が無制限（900000以上）でない場合
+    if (currentMain < 900000) {
+      if (currentMain >= elapsedTotal) {
+        // 持ち時間内で指した場合
+        newTimers[state.turn] = currentMain - elapsedTotal;
+      } else {
+        // 持ち時間を使い切り、秒読みに入った場合
+        newTimers[state.turn] = 0;
+        // 秒読みオーバーの判定は updateTimerDisplay またはここで行う
       }
     }
-    
-    // 指した瞬間の時刻を次の基準点にする
-    const currentTick = now;
-
-    let foulReason = "";
-    if (isChecked(state.board, state.turn)) { 
-      foulReason = "王手放置"; 
-    } else if (moveData.isDrop && moveData.type === 'FU') {
-      let count = 0;
-      for (let y = 0; y < 9; y++) if (state.board[y][moveData.toX]?.type === 'FU' && state.board[y][moveData.toX]?.owner === state.turn) count++;
-      if (count > 1) foulReason = "二歩";
-    }
-
-    const nextTurn = (state.turn === 'S' ? 'G' : 'S');
-
-    if (foulReason) {
-      state.winner = nextTurn;
-      state.winReason = foulReason;
-      state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])], type: moveData.type + "(反則)" });
-    } else {
-      if (state.history.length > 2 && isCheckmate(state.board, nextTurn, state.handS, state.handG)) { 
-        state.winner = state.turn; 
-        state.winReason = "詰み"; 
-      }
-      state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
-    }
-
-    // 最後に turn を交代させる
-    if (!state.winner) {
-      state.turn = nextTurn;
-    }
-
-    sel = null; 
-    selH = null; 
-    possibleMoves = [];
-
-    // Firebaseへ更新。
-    // 重要：ここでは「計算済みの新しいtimers」と「新しい基準点(lastTick)」をセットで送る
-    set(gameRef, { 
-      board: JSON.stringify(state.board), 
-      handS: state.handS || [], 
-      handG: state.handG || [], 
-      turn: state.turn, 
-      timers: { S: state.timers.S, G: state.timers.G }, // 現在の値を確定
-      config: state.config, 
-      lastTick: currentTick, 
-      winner: state.winner || null, 
-      winReason: state.winReason || "", 
-      history: state.history,
-      updatedAt: now 
-    });
   }
+  
+  // 2. 反則判定
+  let foulReason = "";
+  if (isChecked(state.board, state.turn)) { 
+    foulReason = "王手放置"; 
+  } else if (moveData.isDrop && moveData.type === 'FU') {
+    let count = 0;
+    for (let y = 0; y < 9; y++) {
+      if (state.board[y][moveData.toX]?.type === 'FU' && state.board[y][moveData.toX]?.owner === state.turn) count++;
+    }
+    if (count > 1) foulReason = "二歩";
+  }
+
+  const nextTurn = (state.turn === 'S' ? 'G' : 'S');
+
+  if (foulReason) {
+    state.winner = nextTurn;
+    state.winReason = foulReason;
+    state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])], type: moveData.type + "(反則)" });
+  } else {
+    if (state.history.length > 2 && isCheckmate(state.board, nextTurn, state.handS, state.handG)) { 
+      state.winner = state.turn; 
+      state.winReason = "詰み"; 
+    }
+    state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
+  }
+
+  if (!state.winner) {
+    state.turn = nextTurn;
+  }
+
+  sel = null; 
+  selH = null; 
+  possibleMoves = [];
+
+  // 3. Firebaseへ一括更新（updateではなくsetを推奨）
+  // ここで currentTick をセットすることで、次の手番の計測開始時間を固定します
+  set(gameRef, { 
+    board: JSON.stringify(state.board), 
+    handS: state.handS || [], 
+    handG: state.handG || [], 
+    turn: state.turn, 
+    timers: newTimers, 
+    config: state.config, 
+    lastTick: now, 
+    winner: state.winner || null, 
+    winReason: state.winReason || "", 
+    history: state.history,
+    updatedAt: now 
+  });
+}
 
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
@@ -1167,9 +1202,10 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
     return `${idx}.${side}${isSame ? "同" : x+y}${type}`;
   }
 
+// --- 修正された updateTimerDisplay 関数 ---
 function updateTimerDisplay() {
   const now = Date.now();
-  // 最後に着手（または開始）してからの経過秒数
+  // 経過秒の計算
   const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
 
   ['S', 'G'].forEach(s => {
@@ -1180,38 +1216,38 @@ function updateTimerDisplay() {
     if (!el) return;
     const mark = (s === 'S' ? '▲' : '△');
 
-    const isMainInf = (remMain > 900000);
-    const isByoInf = (state.config.byo > 900000);
+    const isMainInf = (remMain >= 900000);
+    const isByoInf = (state.config.byo >= 900000);
 
     if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
-      // 手番側のリアルタイム計算
+      // 手番側の計算
       if (isMainInf) {
         displayStr = `${mark} 無制限`;
       } else if (remMain > elapsed) {
-        // 持ち時間がまだ残っている場合
+        // 持ち時間がある
         const currentRem = remMain - elapsed;
         displayStr = `${mark} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
       } else {
-        // 持ち時間を使い切った後の秒読み
+        // 秒読み
         if (isByoInf) {
           displayStr = `${mark} 秒:無制限`;
         } else {
-          // 経過時間から持ち時間を引いた分が、秒読みから引かれる時間
           const byoElapsed = elapsed - Math.max(0, remMain);
           const byoRem = Math.max(0, (state.config.byo || 30) - byoElapsed);
           displayStr = `${mark} 秒:${byoRem}`;
           if (byoRem <= 5) isByoAlert = true;
           
-          // 自分が手番で、秒読みが切れたら負け判定を送信
+          // 自分が手番で秒読みが切れた場合のみ、負けを送信
           if (byoRem <= 0 && s === mySide && !state.winner) {
             state.winner = (mySide === 'S' ? 'G' : 'S'); 
             state.winReason = "時間切れ"; 
-            finish({ side: s, type: "時間切れ" }); 
+            // タイムアウト専用の処理
+            finish({ side: s, type: "時間切れ", toX: null, toY: null }); 
           }
         }
       }
     } else {
-      // 待機側、または対局停止中
+      // 待機側または停止中
       if (isMainInf) {
         displayStr = `${mark} 無制限`;
       } else if (remMain > 0) {
