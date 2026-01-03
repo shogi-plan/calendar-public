@@ -685,13 +685,21 @@ btnCallStart.onclick = async () => {
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
-    // --- Firebase 将棋データ監視 ---
+      // --- Firebase 将棋データ監視 ---
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
 
-    // 感想戦ボタンの活性状態のみを制御（勝者が決まっていない＝対局中なら無効）
-    if (!data.winner) {
+    // ★追加：初期化フラグ(lastTick=0)かつ対局未終了なら、感想戦モードを強制解除
+    if (data.lastTick === 0 && !data.winner) {
+      isReviewMode = false;
+      sessionStorage.removeItem(`isReview_${roomName}`);
+      Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
+      rvState = null; // 感想戦の盤面キャッシュを破棄
+    }
+
+    // 感想戦ボタンの活性状態を制御（勝者が決まっていない＝対局中なら無効。ただし準備中(lastTick=0)も無効）
+    if (!data.winner || data.lastTick === 0) {
       document.getElementById('btnToggleReview').disabled = true;
     } else {
       document.getElementById('btnToggleReview').disabled = false;
@@ -701,10 +709,9 @@ btnCallStart.onclick = async () => {
     state.handS = data.handS || [];
     state.handG = data.handG || [];
     state.turn = data.turn || 'S';
-            state.timers = data.timers || {S:600, G:600};
+    state.timers = data.timers || {S:600, G:600};
     state.config = data.config || {main:600, byo:30};
-    // 数値（ミリ秒）として有効な場合のみ state.lastTick を更新する
-    // serverTimestamp使用時は一瞬 null が返ってくることがあるため
+
     if (typeof data.lastTick === 'number') {
       state.lastTick = data.lastTick;
     }
@@ -714,17 +721,15 @@ btnCallStart.onclick = async () => {
 
     if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
 
-    // リロード時・データ更新時のモード判定
-    // sessionStorageに保存された状態を優先することで、リロード後も感想戦を維持する
+    // モード判定の同期
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
-    if (storedReview) {
+    if (storedReview && data.winner) { // 勝者がいる場合のみ感想戦モードを許可
       isReviewMode = true;
       document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
-      // 感想戦中だがデータが更新された（相手が動かした等）場合、現在の検討位置を保持
       if (!rvState) syncReviewStateLocally(); 
     } else {
-      // 対局モード（または感想戦フラグなし）なら最新手へ
+      // 初期化された場合や対局中の場合
       isReviewMode = false;
       document.getElementById('btnToggleReview').textContent = "感想戦";
       document.getElementById('review-panel').style.display = 'none';
@@ -1008,7 +1013,7 @@ function finish(moveData) {
   document.getElementById('btnSetting').onclick = () => { document.getElementById('setting-dialog').style.display = 'block'; };
   document.getElementById('btnSettingCancel').onclick = () => { document.getElementById('setting-dialog').style.display = 'none'; };
 
-        // 設定適用ボタン
+          // 設定適用ボタン
   document.getElementById('btnSettingSave').onclick = async () => {
     if(!confirm("設定を適用して初期化しますか？")) return;
     
@@ -1017,12 +1022,11 @@ function finish(moveData) {
     const mainMin = parseInt(document.getElementById('cfgMain').value) || 0;
     const byoSec = parseInt(document.getElementById('cfgByo').value) || 30;
     
-    // 内部計算用に秒に変換
     const m = mainMin * 60;
     const b = byoSec;
     const bStr = JSON.stringify(generateInitialBoard(hType, uSide));
 
-    // 1. 将棋データの初期化（lastTickを0にすることで対局状態をリセット）
+    // 1. 将棋データの初期化（initAtを追加し、初期化が行われたことを他方に通知）
     await set(gameRef, { 
       board: bStr, 
       handS: [], 
@@ -1033,26 +1037,18 @@ function finish(moveData) {
       lastTick: 0, 
       winner: null, 
       winReason: "", 
+      initAt: serverTimestamp(), // ★初期化実行時刻を記録
       history: [{ board: bStr, handS: [], handG: [], type: `${hType} (${mainMin}分/${byoSec}秒)` }] 
     });
 
     // 2. 準備状態の完全リセット
     await set(readyRef, { S: false, G: false });
 
-    // 3. ローカルのUI表示を即座に「対局中」から「準備完了」へ戻す
-    const btnReady = document.getElementById('btnReady');
-    btnReady.disabled = false;
-    btnReady.textContent = "対局準備完了";
-    btnReady.style.background = "#ff9800";
-
-    document.getElementById('setting-dialog').style.display = 'none';
+    // 3. ローカルの感想戦セッションをクリア（この後onValueでモードが自動で戻ります）
+    sessionStorage.removeItem(`isReview_${roomName}`);
+    Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
     
-    // 感想戦モード等のリセット処理
-    setReviewMode(false);
-    remove(reviewRef);
-    Object.keys(sessionStorage).forEach(k => { 
-      if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); 
-    });
+    document.getElementById('setting-dialog').style.display = 'none';
   };
   
   function syncReviewStateLocally() { 
