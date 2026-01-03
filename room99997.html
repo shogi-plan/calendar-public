@@ -783,14 +783,15 @@ btnCallStart.onclick = async () => {
     
     overlay.style.display = 'none';
 
-        // ★修正：どちらの端末でも対局開始を確定できるようにする
-    // lastTick が 0 のときだけ開始処理を行う（二重開始防止）
+        // ★修正：対局開始処理
     const snap = await get(gameRef);
     const cur = snap.exists() ? snap.val() : null;
     if (cur && (cur.lastTick === 0 || !cur.lastTick)) {
-      // Date.now() ではなく serverTimestamp() を使用して開始時刻を全端末で同期
+      // サーバー時刻を書き込む
       await update(gameRef, { 
         lastTick: serverTimestamp(),
+        // 念のため、初期化時のタイマーも再セットしてズレを防止
+        timers: state.config.main ? {S: state.config.main, G: state.config.main} : {S: 600, G: 600},
         updatedAt: serverTimestamp() 
       });
       await set(readyRef, { S: false, G: false });
@@ -1309,8 +1310,10 @@ function updateTimerDisplay() {
   // Date.now() ではなく補正後の時刻を使用
   const now = getServerNow(); 
   
-  // 経過秒の計算
-  const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
+    // 経過秒の計算
+  // 0.5秒程度の余裕(500ms引く)を持たせることで、通信ラグによる「10:01」跳ねを物理的に防ぎます
+  const diff = now - state.lastTick;
+  const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor(Math.max(0, diff - 200) / 1000);
 
   ['S', 'G'].forEach(s => {
     let remMain = state.timers[s]; 
