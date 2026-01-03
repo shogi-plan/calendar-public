@@ -341,7 +341,7 @@
   const gameRef = ref(db, `${roomName}/shogiData`);
   const reviewRef = ref(db, `${roomName}/reviewData`);
   const callStatusRef = ref(db, `${roomName}/callStatus`);
-    const signalingRef = ref(db, `${roomName}/signaling`);
+  const signalingRef = ref(db, `${roomName}/signaling`);
   const readyRef = ref(db, `${roomName}/readyStatus`); // 追加
 
   let isCountingDown = false; // 追加：カウントダウン中フラグ
@@ -587,47 +587,67 @@ btnCallStart.onclick = async () => {
   }
 
   // --- 通話ステータス監視 (リロード対策版) ---
+    // ★1. ボタンの見た目を更新する関数を新しく追加します
+  function updateCallUI() {
+    // localCallStartPressed(通話中フラグ)がtrueなら、開始ボタンを押せなくする
+    btnCallStart.disabled = localCallStartPressed;
+    // 逆に終了ボタンとミュートボタンは押せるようにする
+    btnCallEnd.disabled = !localCallStartPressed;
+    btnMute.disabled = !localCallStartPressed;
+
+    // 見た目の透明度も調整
+    btnCallStart.style.opacity = localCallStartPressed ? "0.5" : "1";
+    btnCallEnd.style.opacity = !localCallStartPressed ? "0.5" : "1";
+  }
+
+  // --- 通話ステータス監視 (リロード対策版) ---
   onValue(callStatusRef, async (snap) => { 
     const data = snap.val(); 
-    if (!data) return; 
+    if (!data) {
+      updateCallUI();
+      return;
+    }
     
-    // 相手が終了させた、または自分が終了させた場合
     if (data.status === 'ended') { 
       if (localCallStartPressed) {
         handleCallEndInternal();
       }
+      updateCallUI(); // 終了時も見た目を更新
       return; 
     } 
     
-    // Firebase上で自分が「参加中」になっているか
     const iAmRegisteredOnFirebase = !!(data.users && data.users[mySide]);
     
-    // ★重要：リロード対策
-    // Firebase上で参加中なのに、ローカルのストリームがまだ開始されていない場合（＝ページ更新直後）
     if (iAmRegisteredOnFirebase && !localCallStartPressed) {
       localCallStartPressed = true;
+      
+      // ★2. ここで見た目を即座に「通話中」の状態に切り替えます
+      updateCallUI(); 
+
       try {
         await startKeepAlive();
         await startLocalStream();
-        // 自分が復帰した際、相手もいれば接続を再開
         if (data.status === 'started' || (data.users.S && data.users.G)) {
           await sendOffer();
         }
       } catch (e) {
         console.error("Auto-resume call failed:", e);
         localCallStartPressed = false;
+        updateCallUI(); // 失敗したら元に戻す
       }
     }
 
-    updateCallUI(); 
-    
+    // テキスト表示の更新
     if (data.status === 'started') {
       callStatusDisplay.textContent = "通話中"; 
     } else if (data.status === 'waiting') { 
       callStatusDisplay.textContent = localCallStartPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
     } else { 
       callStatusDisplay.textContent = "オフライン"; 
-    } 
+    }
+
+    // ★3. 念のため最後にもう一度見た目を確定させます
+    updateCallUI(); 
   });
 
   onValue(ref(db, `${roomName}/signaling/offer`), snap => { const offer = snap.val(); if (offer && offer.from !== mySide) sendAnswer(); });
