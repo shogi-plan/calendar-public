@@ -1375,7 +1375,7 @@ function updateTimerDisplay() {
   document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
-    document.getElementById('btn-prom-yes').onclick = () => { 
+        document.getElementById('btn-prom-yes').onclick = () => { 
     pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; 
     pendingProm.moveData.isPromoted = true; 
     // ※ state.board への直接代入を削除（endProm内でモード別に処理するため）
