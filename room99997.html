@@ -872,21 +872,17 @@ function finish(moveData) {
   const now = Date.now();
   let newTimers = { ...state.timers };
   
-  // 1. 持ち時間と秒読みの厳密な計算
+    // 1. 持ち時間と秒読みの厳密な計算
   if (state.lastTick !== 0 && !state.winner) {
-    const elapsedTotal = Math.floor((now - state.lastTick) / 1000);
+    // ミリ秒単位で計算してから秒に変換（より正確な指し時間計算のため）
+    const elapsedMs = now - state.lastTick;
+    const elapsedTotal = Math.floor(elapsedMs / 1000);
     const currentMain = state.timers[state.turn];
     
     // 持ち時間が無制限（900000以上）でない場合
     if (currentMain < 900000) {
-      if (currentMain >= elapsedTotal) {
-        // 持ち時間内で指した場合
-        newTimers[state.turn] = currentMain - elapsedTotal;
-      } else {
-        // 持ち時間を使い切り、秒読みに入った場合
-        newTimers[state.turn] = 0;
-        // 秒読みオーバーの判定は updateTimerDisplay またはここで行う
-      }
+      // 持ち時間を減らす。消費が持ち時間を上回った場合は 0 に固定
+      newTimers[state.turn] = Math.max(0, currentMain - elapsedTotal);
     }
   }
   
@@ -1265,21 +1261,22 @@ function updateTimerDisplay() {
         // 持ち時間がある
         const currentRem = remMain - elapsed;
         displayStr = `${mark} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
-      } else {
-        // 秒読み
+            } else {
+        // 秒読みフェーズ
         if (isByoInf) {
           displayStr = `${mark} 秒:無制限`;
-        } else {
-          const byoElapsed = elapsed - Math.max(0, remMain);
-          const byoRem = Math.max(0, (state.config.byo || 30) - byoElapsed);
+                } else {
+          // 秒読みフェーズ：(elapsed - remMain) は「持ち時間を使い切ってから何秒経ったか」
+          const extraTime = Math.max(0, elapsed - remMain);
+          const byoRem = Math.max(0, (state.config.byo || 30) - extraTime);
+          
           displayStr = `${mark} 秒:${byoRem}`;
           if (byoRem <= 5) isByoAlert = true;
           
-          // 自分が手番で秒読みが切れた場合のみ、負けを送信
+          // タイムアップ判定
           if (byoRem <= 0 && s === mySide && !state.winner) {
             state.winner = (mySide === 'S' ? 'G' : 'S'); 
             state.winReason = "時間切れ"; 
-            // タイムアウト専用の処理
             finish({ side: s, type: "時間切れ", toX: null, toY: null }); 
           }
         }
