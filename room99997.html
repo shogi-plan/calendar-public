@@ -412,10 +412,11 @@
     updateDisplayRotation(currentFlip);
   };
 
-  // --- 通話維持用（バックグラウンド対策強化版） ---
+    // --- 通話維持用（バックグラウンド対策強化版） ---
   let wakeLock = null;
   let silenceAudio = null;
   let audioCtx = null;
+  let keepAliveInterval = null; // ★追加：生存確認タイマー用
   const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
   async function startKeepAlive() {
@@ -443,6 +444,17 @@
         };
       }
       if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+      // ★追加：5分(300000ms)おきにFirebaseを微更新して、接続の切断を防ぐ
+      if (!keepAliveInterval) {
+        keepAliveInterval = setInterval(async () => {
+          if (localCallStartPressed) {
+            await update(callStatusRef, { lastActive: new Date().toISOString() });
+            console.log("Ping sent to Firebase to keep connection alive.");
+          }
+        }, 300000); 
+      }
+
     } catch (err) { console.warn("Keep-alive Error:", err); }
   }
 
@@ -450,6 +462,12 @@
     if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
     if (silenceAudio) { silenceAudio.pause(); }
     if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
+    
+    // ★追加：タイマーを止める
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
   }
 
   document.addEventListener('visibilitychange', async () => {
