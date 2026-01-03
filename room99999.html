@@ -147,99 +147,105 @@
     .setting-row { margin-bottom: 15px; }
     .setting-row label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; }
     .setting-row select { width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
-
+    
+        /* カウントダウンモーダル */
+    #countdown-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-weight: bold;
+      pointer-events: none;
+    }
+        #countdown-text {
+      font-size: 15vw; /* 画面幅に合わせる */
+      white-space: nowrap; /* 絶対に折り返さない */
+      text-shadow: 0 0 20px rgba(255,255,255,0.5);
+      transition: all 0.2s;
+      text-align: center;
+      width: 100%;
+    }
+    /* 準備完了ランプ */
+    .ready-area { display: flex; gap: 8px; align-items: center; justify-content: center; margin: 4px 0; }
+    .ready-lamp { width: 12px; height: 12px; border-radius: 50%; background: #ccc; border: 1px solid #999; }
+    .ready-lamp.on { background: #4caf50; box-shadow: 0 0 8px #4caf50; border-color: #fff; }
   </style>
 </head>
 <body>
-
+<div id="countdown-overlay"><div id="countdown-text">5</div></div>
 <h1>遠タメ将棋 Online</h1>
 
 <div class="controls">
   <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
+      <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
     <button id="btnSetting">設定</button>
-
-<div id="setting-dialog">
-  <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">対局設定</h3>
-  
-  <div class="setting-row">
-    <label>持ち時間</label>
-    <select id="cfgMain">
-      <option value="0">0分（即秒読み）</option>
-      <option value="10" selected>10分</option>
-      <option value="15">15分</option>
-      <option value="30">30分</option>
-    </select>
-  </div>
-
-  <div class="setting-row">
-    <label>秒読み</label>
-    <select id="cfgByo">
-      <option value="30" selected>30秒</option>
-      <option value="60">60秒</option>
-    </select>
-  </div>
-
-  <div class="setting-row">
-    <label>手合割（駒落ち）</label>
-    <select id="cfgHandicap">
-      <option value="平手">平手</option>
-      <option value="香落ち">香落ち (上手：左香)</option>
-      <option value="角落ち">角落ち</option>
-      <option value="飛車落ち">飛車落ち</option>
-      <option value="飛香落ち">飛香落ち</option>
-      <option value="二枚落ち">二枚落ち (飛角)</option>
-      <option value="四枚落ち">四枚落ち (飛角香香)</option>
-      <option value="六枚落ち">六枚落ち (＋桂桂)</option>
-      <option value="八枚落ち">八枚落ち (＋銀銀)</option>
-    </select>
-  </div>
-  <div class="setting-row">
-    <label>上手（駒を落とす側）</label>
-    <select id="cfgUwateSide">
-      <option value="G">後手△が上手</option>
-      <option value="S">先手▲が上手</option>
-    </select>
-  </div>
-  <div style="display:flex; gap:10px;">
-    <button id="btnSettingSave" style="flex:1; background:var(--call-btn); color:white; padding:10px;">適用して初期化</button>
-    <button id="btnSettingCancel" style="flex:1; background:#ccc; padding:10px;">閉じる</button>
-  </div>
-</div>
-
-<div id="setting-dialog">
-  <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">対局設定</h3>
-  <div class="setting-row">
-    <label>手合割（駒落ち）</label>
-    <select id="cfgHandicap">
-      <option value="平手">平手</option>
-      <option value="香落ち">香落ち (上手：左香)</option>
-      <option value="角落ち">角落ち</option>
-      <option value="飛車落ち">飛車落ち</option>
-      <option value="飛香落ち">飛香落ち</option>
-      <option value="二枚落ち">二枚落ち (飛角)</option>
-      <option value="四枚落ち">四枚落ち (飛角香香)</option>
-      <option value="六枚落ち">六枚落ち (＋桂桂)</option>
-      <option value="八枚落ち">八枚落ち (＋銀銀)</option>
-    </select>
-  </div>
-  <div class="setting-row">
-    <label>上手（駒を落とす側）</label>
-    <select id="cfgUwateSide">
-      <option value="G">後手△が上手</option>
-      <option value="S">先手▲が上手</option>
-    </select>
-  </div>
-  <div style="display:flex; gap:10px;">
-    <button id="btnSettingSave" style="flex:1; background:var(--call-btn); color:white; padding:10px;">適用して初期化</button>
-    <button id="btnSettingCancel" style="flex:1; background:#ccc; padding:10px;">閉じる</button>
-  </div>
-</div>
-
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
     <button id="btnResign">投了</button>
   </div>
-  <select id="mySideSelect" style="font-size:10px;"><option value="S">先手▲</option><option value="G">後手△</option></select>
+
+  <div id="setting-dialog">
+    <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">対局設定</h3>
+    
+    <div class="setting-row">
+      <label>持ち時間</label>
+      <select id="cfgMain">
+        <option value="0">0分（即秒読み）</option>
+        <option value="10" selected>10分</option>
+        <option value="15">15分</option>
+        <option value="30">30分</option>
+        <option value="999999">無制限</option>
+      </select>
+    </div>
+
+    <div class="setting-row">
+      <label>秒読み</label>
+      <select id="cfgByo">
+        <option value="30" selected>30秒</option>
+        <option value="60">60秒</option>
+        <option value="999999">無制限</option>
+      </select>
+    </div>
+
+    <div class="setting-row">
+      <label>手合割（駒落ち）</label>
+      <select id="cfgHandicap">
+        <option value="平手">平手</option>
+        <option value="香落ち">香落ち (上手：左香)</option>
+        <option value="角落ち">角落ち</option>
+        <option value="飛車落ち">飛車落ち</option>
+        <option value="飛香落ち">飛香落ち</option>
+        <option value="二枚落ち">二枚落ち (飛角)</option>
+        <option value="四枚落ち">四枚落ち (飛角香香)</option>
+        <option value="六枚落ち">六枚落ち (＋桂桂)</option>
+        <option value="八枚落ち">八枚落ち (＋銀銀)</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label>上手（駒を落とす側）</label>
+      <select id="cfgUwateSide">
+        <option value="G">後手△が上手</option>
+        <option value="S">先手▲が上手</option>
+      </select>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button id="btnSettingSave" style="flex:1; background:var(--call-btn); color:white; padding:10px;">適用して初期化</button>
+      <button id="btnSettingCancel" style="flex:1; background:#ccc; padding:10px;">閉じる</button>
+    </div>
+  </div>
+  </div>
+  <div class="ready-area">
+    <select id="mySideSelect" style="font-size:10px;"><option value="S">先手▲</option><option value="G">後手△</option></select>
+    <button id="btnReady" style="background: #ff9800; color: white; padding: 4px 8px;">対局準備完了</button>
+    <div style="display: flex; gap: 4px; font-size: 10px; align-items: center; margin-left:5px;">
+      ▲<div id="lamp-S" class="ready-lamp"></div>
+      △<div id="lamp-G" class="ready-lamp"></div>
+    </div>
+  </div>
   <div id="status-txt" style="font-size:11px; font-weight:bold; margin-left:10px;">接続待ち...</div>
 </div>
 
@@ -301,7 +307,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-  import { getDatabase, ref, set, onValue, push, remove, update, get } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+  import { getDatabase, ref, set, onValue, push, remove, update, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
   const firebaseConfig = {
       apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
@@ -315,6 +321,18 @@
    // --- Firebase 初期化 ---
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+
+  // --- 追加：サーバー時刻との時差を補正する ---
+  let serverOffset = 0;
+  const offsetRef = ref(db, ".info/serverTimeOffset");
+  onValue(offsetRef, (snap) => {
+    serverOffset = snap.val() || 0;
+  });
+
+  /** 端末の時計をサーバー基準に補正した現在時刻(ms)を返す **/
+  function getServerNow() {
+    return Date.now() + serverOffset;
+  }
   
   // --- ルーム管理：ファイル名から部屋名を取得 ---
   const params = new URLSearchParams(window.location.search);
@@ -324,7 +342,7 @@
   
   let roomName = params.get('room') || fileName || "default_room";
 
-    // URLの書き換え処理を無効化
+   // URLの書き換え処理を無効化
   /* if (!params.get('room')) {
       const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + `?room=${roomName}`;
       window.history.pushState({ path: newUrl }, '', newUrl);
@@ -336,8 +354,12 @@
   const reviewRef = ref(db, `${roomName}/reviewData`);
   const callStatusRef = ref(db, `${roomName}/callStatus`);
   const signalingRef = ref(db, `${roomName}/signaling`);
+  const readyRef = ref(db, `${roomName}/readyStatus`); // 追加
+
+  let isCountingDown = false; // 追加：カウントダウン中フラグ
 
   const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
+
   const PROMOTE_MAP = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'};
   const UNPROMOTE_MAP = {TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'};
   const KANJI_NUM = ["","一","二","三","四","五","六","七","八","九"];
@@ -402,10 +424,11 @@
     updateDisplayRotation(currentFlip);
   };
 
-  // --- 通話維持用（バックグラウンド対策強化版） ---
+    // --- 通話維持用（バックグラウンド対策強化版） ---
   let wakeLock = null;
   let silenceAudio = null;
   let audioCtx = null;
+  let keepAliveInterval = null; // ★追加：生存確認タイマー用
   const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
   async function startKeepAlive() {
@@ -433,6 +456,17 @@
         };
       }
       if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+      // ★追加：5分(300000ms)おきにFirebaseを微更新して、接続の切断を防ぐ
+      if (!keepAliveInterval) {
+        keepAliveInterval = setInterval(async () => {
+          if (localCallStartPressed) {
+            await update(callStatusRef, { lastActive: new Date().toISOString() });
+            console.log("Ping sent to Firebase to keep connection alive.");
+          }
+        }, 300000); 
+      }
+
     } catch (err) { console.warn("Keep-alive Error:", err); }
   }
 
@@ -440,6 +474,12 @@
     if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
     if (silenceAudio) { silenceAudio.pause(); }
     if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
+    
+    // ★追加：タイマーを止める
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
   }
 
   document.addEventListener('visibilitychange', async () => {
@@ -537,8 +577,26 @@ btnCallStart.onclick = async () => {
   } 
 };
 
+    // --- 通話終了ボタンの処理 ---
   btnCallEnd.onclick = async () => { 
-    await update(callStatusRef, { status: 'ended', users: { S: false, G: false } }); 
+    // 手動終了フラグを立てる（これでリロードが実行されるようになる）
+    sessionStorage.setItem(`isManualEnd_${roomName}`, 'true');
+
+    const snap = await get(callStatusRef);
+    if (snap.exists()) {
+      let data = snap.val();
+      if (data.users) {
+        data.users[mySide] = false;
+        // 両方のフラグが落ちたら完全に終了（ended）にする
+        if (!data.users.S && !data.users.G) {
+          await update(callStatusRef, { status: 'ended', users: { S: false, G: false } });
+          remove(signalingRef);
+        } else {
+          // 片方が残っているなら待機状態(waiting)に更新
+          await update(callStatusRef, { status: 'waiting', users: data.users });
+        }
+      }
+    }
     handleCallEndInternal(); 
   };
 
@@ -547,90 +605,206 @@ btnCallStart.onclick = async () => {
     stopKeepAlive(); 
     if (peerConnection) { peerConnection.close(); peerConnection = null; } 
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; } 
-    remove(signalingRef); 
     updateCallUI(); 
-    if (!sessionStorage.getItem(`reloaded_${roomName}`)) { 
+
+    // 手動終了ボタンが押されていた場合のみ、ページをリロードして初期化する
+    if (sessionStorage.getItem(`isManualEnd_${roomName}`) === 'true') {
+      sessionStorage.removeItem(`isManualEnd_${roomName}`);
+      // reloaded_フラグは以前の仕様に合わせて一応残すか、不要なら削除
       sessionStorage.setItem(`reloaded_${roomName}`, '1'); 
       window.location.reload(); 
+    }
+  }
+
+  // --- 通話ステータス監視 (リロード対策版) ---
+    // ★1. ボタンの見た目を更新する関数を新しく追加します
+  function updateCallUI() {
+    // localCallStartPressed(通話中フラグ)がtrueなら、開始ボタンを押せなくする
+    btnCallStart.disabled = localCallStartPressed;
+    // 逆に終了ボタンとミュートボタンは押せるようにする
+    btnCallEnd.disabled = !localCallStartPressed;
+    btnMute.disabled = !localCallStartPressed;
+
+    // 見た目の透明度も調整
+    btnCallStart.style.opacity = localCallStartPressed ? "0.5" : "1";
+    btnCallEnd.style.opacity = !localCallStartPressed ? "0.5" : "1";
+  }
+
+  // --- 通話ステータス監視 (リロード対策版) ---
+  onValue(callStatusRef, async (snap) => { 
+    const data = snap.val(); 
+    if (!data) {
+      updateCallUI();
+      return;
+    }
+    
+    if (data.status === 'ended') { 
+      if (localCallStartPressed) {
+        handleCallEndInternal();
+      }
+      updateCallUI(); // 終了時も見た目を更新
+      return; 
     } 
-  }
+    
+    const iAmRegisteredOnFirebase = !!(data.users && data.users[mySide]);
+    
+    if (iAmRegisteredOnFirebase && !localCallStartPressed) {
+      localCallStartPressed = true;
+      
+      // ★2. ここで見た目を即座に「通話中」の状態に切り替えます
+      updateCallUI(); 
 
-  function updateCallUI() { 
-  // localCallStartPressed が true（＝自分が開始済み）なら
-  // 「通話開始」ボタンを無効にし、「終了」「ミュート」を有効にする
-  btnCallStart.disabled = localCallStartPressed; 
-  btnCallEnd.disabled = !localCallStartPressed; 
-  btnMute.disabled = !localCallStartPressed; 
-}
+      try {
+        await startKeepAlive();
+        await startLocalStream();
+        if (data.status === 'started' || (data.users.S && data.users.G)) {
+          await sendOffer();
+        }
+      } catch (e) {
+        console.error("Auto-resume call failed:", e);
+        localCallStartPressed = false;
+        updateCallUI(); // 失敗したら元に戻す
+      }
+    }
 
-  // 修正後
-onValue(callStatusRef, (snap) => { 
-  const data = snap.val(); 
-  if (!data) return; 
-  
-  if (data.status === 'ended' && localCallStartPressed) { 
-    handleCallEndInternal(); 
-    return; 
-  } 
-  
-  // 修正の要：Firebase上で「自分が」登録されているかだけを厳密にチェック
-  const iAmRegisteredOnFirebase = !!(data.users && data.users[mySide]);
-  
-  // 自分がボタンを押した、あるいはFirebase上で既に自分が通話参加中なら
-  // ローカルのフラグをtrueに固定する（これでボタンが無効化される）
-  if (iAmRegisteredOnFirebase) {
-    localCallStartPressed = true;
-  }
+    // テキスト表示の更新
+    if (data.status === 'started') {
+      callStatusDisplay.textContent = "通話中"; 
+    } else if (data.status === 'waiting') { 
+      callStatusDisplay.textContent = localCallStartPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
+    } else { 
+      callStatusDisplay.textContent = "オフライン"; 
+    }
 
-  updateCallUI(); 
-  
-  // ステータス表示の切り分け
-  if (data.status === 'started') {
-    callStatusDisplay.textContent = "通話中"; 
-  } else if (data.status === 'waiting') { 
-    // 自分が押している場合は「待機中」、押していない場合は「着信中」として表示
-    callStatusDisplay.textContent = localCallStartPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
-  } else { 
-    callStatusDisplay.textContent = "オフライン"; 
-  } 
-});
+    // ★3. 念のため最後にもう一度見た目を確定させます
+    updateCallUI(); 
+  });
 
   onValue(ref(db, `${roomName}/signaling/offer`), snap => { const offer = snap.val(); if (offer && offer.from !== mySide) sendAnswer(); });
   onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
-  // --- Firebase 将棋データ監視 ---
+      // --- Firebase 将棋データ監視 ---
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
-    if (!data.winner) {
-        isReviewMode = false;
-        sessionStorage.setItem(`isReview_${roomName}`, "false");
-        document.getElementById('btnToggleReview').textContent = "感想戦";
-        document.getElementById('review-panel').style.display = 'none';
-        document.getElementById('btnToggleReview').disabled = true;
-    } else {
-        document.getElementById('btnToggleReview').disabled = false;
+
+    // ★追加：初期化フラグ(lastTick=0)かつ対局未終了なら、感想戦モードを強制解除
+    if (data.lastTick === 0 && !data.winner) {
+      isReviewMode = false;
+      sessionStorage.removeItem(`isReview_${roomName}`);
+      Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
+      rvState = null; // 感想戦の盤面キャッシュを破棄
     }
+
+    // 感想戦ボタンの活性状態を制御（勝者が決まっていない＝対局中なら無効。ただし準備中(lastTick=0)も無効）
+    if (!data.winner || data.lastTick === 0) {
+      document.getElementById('btnToggleReview').disabled = true;
+    } else {
+      document.getElementById('btnToggleReview').disabled = false;
+    }
+
     state.board = JSON.parse(data.board);
     state.handS = data.handS || [];
     state.handG = data.handG || [];
     state.turn = data.turn || 'S';
     state.timers = data.timers || {S:600, G:600};
     state.config = data.config || {main:600, byo:30};
-    state.lastTick = data.lastTick || 0;
-    state.winner = data.winner || null;
+
+    if (typeof data.lastTick === 'number') {
+      state.lastTick = data.lastTick;
+    }
+    state.winner = data.winner || null;    
     state.winReason = data.winReason || "";
     state.history = data.history || [];
+
     if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
-    if (!isReviewMode) { 
-        viewIdx = state.history.length - 1; 
-        syncReviewStateLocally(); 
+
+    // モード判定の同期
+    const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
+    if (storedReview && data.winner) { // 勝者がいる場合のみ感想戦モードを許可
+      isReviewMode = true;
+      document.getElementById('btnToggleReview').textContent = "戻る";
+      document.getElementById('review-panel').style.display = 'flex';
+      if (!rvState) syncReviewStateLocally(); 
+    } else {
+      // 初期化された場合や対局中の場合
+      isReviewMode = false;
+      document.getElementById('btnToggleReview').textContent = "感想戦";
+      document.getElementById('review-panel').style.display = 'none';
+      viewIdx = state.history.length - 1; 
+      syncReviewStateLocally(); 
     }
+
     render(); 
     updateKifuList();
+    updateTimerDisplay();
   });
+  
+    // --- 準備完了ステータスの監視 ---
+  const btnReady = document.getElementById('btnReady');
+  btnReady.onclick = async () => {
+    const snap = await get(readyRef);
+    let readyData = snap.exists() ? snap.val() : { S: false, G: false };
+    readyData[mySide] = !readyData[mySide];
+    await set(readyRef, readyData);
+  };
+
+  onValue(readyRef, (snap) => {
+    const data = snap.val() || { S: false, G: false };
+    document.getElementById('lamp-S').className = `ready-lamp ${data.S ? 'on' : ''}`;
+    document.getElementById('lamp-G').className = `ready-lamp ${data.G ? 'on' : ''}`;
+        // 対局中（lastTickが0以外）はボタンを無効化
+    if (state.lastTick !== 0 && !state.winner) {
+      btnReady.disabled = true;
+      btnReady.textContent = "対局中";
+      btnReady.style.background = "#607d8b";
+    } else {
+      btnReady.disabled = false;
+      btnReady.textContent = data[mySide] ? "準備解除" : "対局準備完了";
+      btnReady.style.background = data[mySide] ? "#757575" : "#ff9800";
+    }
+
+    // 両者が準備完了し、まだ対局が始まっていない場合にカウントダウン開始
+    if (data.S && data.G && state.lastTick === 0 && !state.winner && !isCountingDown) {
+      startCountdown();
+    }
+  });
+
+    async function startCountdown() {
+    if (isCountingDown) return; // 二重起動防止
+    isCountingDown = true;
+    const overlay = document.getElementById('countdown-overlay');
+    const text = document.getElementById('countdown-text');
+    overlay.style.display = 'flex';
+    
+    for (let i = 5; i >= 0; i--) {
+      text.textContent = i === 0 ? "対局開始！" : i;
+      text.style.transform = "scale(1.1)";
+      await new Promise(r => setTimeout(r, 1000));
+      text.style.transform = "scale(1.0)";
+    }
+    
+    overlay.style.display = 'none';
+
+        // ★修正：対局開始処理
+    const snap = await get(gameRef);
+    const cur = snap.exists() ? snap.val() : null;
+    if (cur && (cur.lastTick === 0 || !cur.lastTick)) {
+      // サーバー時刻を書き込む
+      await update(gameRef, { 
+        lastTick: serverTimestamp(),
+        // 念のため、初期化時のタイマーも再セットしてズレを防止
+        timers: state.config.main ? {S: state.config.main, G: state.config.main} : {S: 600, G: 600},
+        updatedAt: serverTimestamp() 
+      });
+      await set(readyRef, { S: false, G: false });
+    }
+    
+    // フラグのリセットを少し遅らせて連打を防止
+    setTimeout(() => { isCountingDown = false; }, 2000);
+  }
 
   onValue(reviewRef, (snap) => {
     if (!isReviewMode) return;
@@ -710,52 +884,83 @@ onValue(callStatusRef, (snap) => {
     }
   }
 
-  function pushReviewUpdate() {
+    function pushReviewUpdate() {
     if (!isReviewMode) return;
-    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: Date.now() });
+    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: getServerNow() });
   }
 
-  function finish(moveData) {
-    const now = Date.now();
-    if (state.lastTick !== 0) {
-      const elapsed = Math.floor((now - state.lastTick) / 1000);
-      if (state.timers[state.turn] > 0) state.timers[state.turn] = Math.max(0, state.timers[state.turn] - elapsed);
+function finish(moveData) {
+  // 消費時間の計算も補正後の現在時刻を使用
+  const now = getServerNow(); 
+  let newTimers = { ...state.timers };
+  
+  // 1. 持ち時間と秒読みの厳密な計算
+  if (state.lastTick !== 0 && !state.winner) {
+    // 指すまでにかかった秒数を計算
+    const elapsedTotal = Math.floor((now - state.lastTick) / 1000);
+    const currentMain = state.timers[state.turn];
+    
+    // 持ち時間が無制限（900000以上）でない場合
+    if (currentMain < 900000) {
+      // 持ち時間を減らす。消費が持ち時間を上回った場合は 0 になり、次手から秒読みが適用される
+      newTimers[state.turn] = Math.max(0, currentMain - elapsedTotal);
     }
-    state.lastTick = now;
-    let foulReason = "";
-    if (isChecked(state.board, state.turn)) { foulReason = "王手放置"; }
-    else if (moveData.isDrop && moveData.type === 'FU') {
-      let count = 0;
-      for (let y = 0; y < 9; y++) if (state.board[y][moveData.toX]?.type === 'FU' && state.board[y][moveData.toX]?.owner === state.turn) count++;
-      if (count > 1) foulReason = "二歩";
-    }
-    if (foulReason) {
-      state.winner = (state.turn === 'S' ? 'G' : 'S');
-      state.winReason = foulReason;
-      state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])], type: moveData.type + "(反則)" });
-    } else {
-      const nextTurn = (state.turn === 'S' ? 'G' : 'S');
-      if (state.history.length > 2 && isCheckmate(state.board, nextTurn, state.handS, state.handG)) { state.winner = state.turn; state.winReason = "詰み"; }
-      state.turn = nextTurn;
-      state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
-    }
-    sel = null; selH = null; possibleMoves = [];
-        sel = null; selH = null; possibleMoves = [];
-    // updateを使用し、タイムスタンプを付与することで同期の確実性を高めます
-    update(gameRef, { 
-      board: JSON.stringify(state.board), 
-      handS: state.handS || [], 
-      handG: state.handG || [], 
-      turn: state.turn, 
-      timers: state.timers, 
-      config: state.config, 
-      lastTick: state.lastTick, 
-      winner: state.winner || null, 
-      winReason: state.winReason || "", 
-      history: state.history,
-      updatedAt: Date.now() // 更新時間を混ぜることで強制的に同期を走らせる
-    });
   }
+  
+  // 2. 反則判定
+  let foulReason = "";
+  if (isChecked(state.board, state.turn)) { 
+    foulReason = "王手放置"; 
+  } else if (moveData.isDrop && moveData.type === 'FU') {
+    let count = 0;
+    for (let y = 0; y < 9; y++) {
+      if (state.board[y][moveData.toX]?.type === 'FU' && state.board[y][moveData.toX]?.owner === state.turn) count++;
+    }
+    if (count > 1) foulReason = "二歩";
+  }
+
+  const nextTurn = (state.turn === 'S' ? 'G' : 'S');
+
+  if (foulReason) {
+    state.winner = nextTurn;
+    state.winReason = foulReason;
+    state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])], type: moveData.type + "(反則)" });
+  } else {
+    if (state.history.length > 2 && isCheckmate(state.board, nextTurn, state.handS, state.handG)) { 
+      state.winner = state.turn; 
+      state.winReason = "詰み"; 
+    }
+    state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
+  }
+
+  if (!state.winner) {
+    state.turn = nextTurn;
+  }
+
+  sel = null; 
+  selH = null; 
+  possibleMoves = [];
+
+    // ※ scriptの最初の方の import に serverTimestamp を追加してください
+  // import { ..., serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    // 3. Firebaseへ一括更新
+  // lastTick を serverTimestamp() にすることで、
+  // 通信ラグがある環境でも「サーバーが受信した正確な時刻」を起点にできます
+  set(gameRef, { 
+    board: JSON.stringify(state.board), 
+    handS: state.handS || [], 
+    handG: state.handG || [], 
+    turn: state.turn, 
+    timers: newTimers, 
+    config: state.config, 
+    lastTick: serverTimestamp(), 
+    winner: state.winner || null, 
+    winReason: state.winReason || "", 
+    history: state.history,
+    updatedAt: serverTimestamp() 
+  });
+}
 
   const isChecked = (board, owner) => {
     let kx = -1, ky = -1;
@@ -808,8 +1013,8 @@ onValue(callStatusRef, (snap) => {
   document.getElementById('btnSetting').onclick = () => { document.getElementById('setting-dialog').style.display = 'block'; };
   document.getElementById('btnSettingCancel').onclick = () => { document.getElementById('setting-dialog').style.display = 'none'; };
 
-    // 設定適用ボタン
-  document.getElementById('btnSettingSave').onclick = () => {
+          // 設定適用ボタン
+  document.getElementById('btnSettingSave').onclick = async () => {
     if(!confirm("設定を適用して初期化しますか？")) return;
     
     const hType = document.getElementById('cfgHandicap').value;
@@ -817,12 +1022,12 @@ onValue(callStatusRef, (snap) => {
     const mainMin = parseInt(document.getElementById('cfgMain').value) || 0;
     const byoSec = parseInt(document.getElementById('cfgByo').value) || 30;
     
-    // 内部計算用に秒に変換
     const m = mainMin * 60;
     const b = byoSec;
     const bStr = JSON.stringify(generateInitialBoard(hType, uSide));
 
-    set(gameRef, { 
+    // 1. 将棋データの初期化（initAtを追加し、初期化が行われたことを他方に通知）
+    await set(gameRef, { 
       board: bStr, 
       handS: [], 
       handG: [], 
@@ -832,18 +1037,18 @@ onValue(callStatusRef, (snap) => {
       lastTick: 0, 
       winner: null, 
       winReason: "", 
-      // 履歴の1手目にルール内容を明記
+      initAt: serverTimestamp(), // ★初期化実行時刻を記録
       history: [{ board: bStr, handS: [], handG: [], type: `${hType} (${mainMin}分/${byoSec}秒)` }] 
     });
 
-    document.getElementById('setting-dialog').style.display = 'none';
+    // 2. 準備状態の完全リセット
+    await set(readyRef, { S: false, G: false });
+
+    // 3. ローカルの感想戦セッションをクリア（この後onValueでモードが自動で戻ります）
+    sessionStorage.removeItem(`isReview_${roomName}`);
+    Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
     
-    // 感想戦モード等のリセット処理
-    setReviewMode(false);
-    remove(reviewRef);
-    Object.keys(sessionStorage).forEach(k => { 
-      if(k.startsWith("shown_") || k.startsWith("isReview_")) sessionStorage.removeItem(k); 
-    });
+    document.getElementById('setting-dialog').style.display = 'none';
   };
   
   function syncReviewStateLocally() { 
@@ -853,153 +1058,258 @@ onValue(callStatusRef, (snap) => {
     sel = null; selH = null; possibleMoves = []; 
   }
 
-  function handleCellClick(x, y) {
-    if (isReviewMode) {
-      const target = rvState.board[y][x];
-      if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
-      if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
-        const fromP = rvState.board[sel.y][sel.x];
-        if (target && target.owner !== fromP.owner) (fromP.owner === 'S' ? rvState.handS : rvState.handG).push(UNPROMOTE_MAP[target.type] || target.type);
-        rvState.board[y][x] = { type: fromP.type, owner: fromP.owner }; rvState.board[sel.y][sel.x] = null;
-                const promLine = (fromP.owner === 'S') ? [0,1,2] : [6,7,8];
-        // 移動データを一旦作成
-        const moveData = { side: fromP.owner, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
-
-        if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
-          // 感想戦でもダイアログを表示し、判定を endProm に委ねる
-          pendingProm = { x, y, moveData };
-          document.getElementById('promote-dialog').style.display = 'block';
-          render();
-        } else {
-          sel = null; possibleMoves = []; 
-          pushReviewUpdate();
-          render(); 
-        }
-        return;
-      }
-      if (selH) { 
-        if (!target) { 
-            rvState.board[y][x] = { type: selH.type, owner: selH.owner }; 
-            (selH.owner === 'S' ? rvState.handS : rvState.handG).splice(selH.idx, 1); 
-            selH = null; pushReviewUpdate(); render(); 
-        } else { selH = null; render(); } 
-        return; 
-      }
-      if (target) { sel = { x, y }; possibleMoves = getRawMoves(x, y, rvState.board, target.owner); render(); }
+    function handleCellClick(x, y) {
+  if (isReviewMode) {
+    const target = rvState.board[y][x];
+    if (sel && sel.x === x && sel.y === y) {
+      sel = null;
+      possibleMoves = [];
+      render();
       return;
     }
-    if (state.winner || state.turn !== mySide || pendingProm) return;
-    const target = state.board[y][x];
-    if (sel && sel.x === x && sel.y === y) { sel = null; possibleMoves = []; render(); return; }
+
+    // 移動先をクリック
     if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
-      const fromP = state.board[sel.y][sel.x];
-      if (target && target.owner !== mySide) { const h = (mySide === 'S' ? state.handS : state.handG) || []; h.push(UNPROMOTE_MAP[target.type] || target.type); if (mySide === 'S') state.handS = h; else state.handG = h; }
-      const moveData = { side: mySide, fromX: sel.x, fromY: sel.y, toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false };
-      state.board[y][x] = { type: fromP.type, owner: mySide }; state.board[sel.y][sel.x] = null;
-      const promLine = (mySide === 'S') ? [0,1,2] : [6,7,8];
+      const fromP = rvState.board[sel.y][sel.x];
+      if (!fromP) return;
+
+      const moveData = {
+        side: fromP.owner,
+        fromX: sel.x,
+        fromY: sel.y,
+        toX: x,
+        toY: y,
+        type: fromP.type,
+        isDrop: false,
+        isPromoted: false
+      };
+      const promLine = (fromP.owner === 'S') ? [0, 1, 2] : [6, 7, 8];
+
+      // 駒取り処理
+      if (target && target.owner !== fromP.owner) {
+        (fromP.owner === 'S' ? rvState.handS : rvState.handG).push(UNPROMOTE_MAP[target.type] || target.type);
+      }
+
       if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
-        const deadLine = (mySide === 'S') ? 0 : 8;
-        if (((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine) || (fromP.type === 'KE' && (mySide==='S' ? y<=1 : y>=7))) { state.board[y][x].type = PROMOTE_MAP[fromP.type]; moveData.type = PROMOTE_MAP[fromP.type]; moveData.isPromoted = true; finish(moveData); } 
-        else { pendingProm = { x, y, moveData }; document.getElementById('promote-dialog').style.display = 'block'; render(); }
-      } else { finish(moveData); }
+        pendingProm = { x, y, moveData };
+        document.getElementById('promote-dialog').style.display = 'block';
+      } else {
+        // 先に移動元を消去してから移動先に配置（消失防止）
+        const movingPiece = { type: fromP.type, owner: fromP.owner };
+        rvState.board[sel.y][sel.x] = null;
+        rvState.board[y][x] = movingPiece;
+        sel = null;
+        possibleMoves = [];
+        pushReviewUpdate();
+      }
+      render();
       return;
     }
-    if (selH) { if (!target) { state.board[y][x] = { type: selH.type, owner: mySide }; (mySide === 'S' ? state.handS : state.handG).splice(selH.idx, 1); finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true }); } else { selH = null; render(); } return; }
-    if (target && target.owner === mySide) { sel = { x, y }; possibleMoves = getRawMoves(x, y, state.board, mySide); render(); }
+
+    // 持ち駒を打つ
+    if (selH) {
+      if (!target) {
+        const targetHand = (selH.owner === 'S' ? rvState.handS : rvState.handG);
+        if (targetHand && targetHand[selH.idx] === selH.type) {
+          rvState.board[y][x] = { type: selH.type, owner: selH.owner };
+          targetHand.splice(selH.idx, 1);
+          selH = null;
+          pushReviewUpdate();
+          render();
+        } else {
+          selH = null;
+          render();
+        }
+      } else {
+        selH = null;
+        render();
+      }
+      return;
+    }
+
+    // 駒を選択
+    if (target) {
+      sel = { x, y };
+      possibleMoves = getRawMoves(x, y, rvState.board, target.owner);
+      render();
+    }
+    return;
   }
 
-    function render() {
-    if (isReviewMode && !rvState) {
-      if (state.history && state.history.length > 0) {
-        syncReviewStateLocally();
-      } else { return; }
+  // --- 以下、対局モード ---
+  if (state.lastTick === 0) return;
+  if (state.winner || state.turn !== mySide || pendingProm) return;
+
+  const target = state.board[y][x];
+  if (sel && sel.x === x && sel.y === y) {
+    sel = null;
+    possibleMoves = [];
+    render();
+    return;
+  }
+
+  // 移動先をクリック
+  if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
+    const fromP = state.board[sel.y][sel.x];
+    if (!fromP) return;
+
+    const moveData = {
+      side: mySide,
+      fromX: sel.x,
+      fromY: sel.y,
+      toX: x,
+      toY: y,
+      type: fromP.type,
+      isDrop: false,
+      isPromoted: false
+    };
+    const promLine = (mySide === 'S') ? [0, 1, 2] : [6, 7, 8];
+
+    // 駒取り
+    if (target && target.owner !== mySide) {
+      const h = (mySide === 'S' ? state.handS : state.handG) || [];
+      h.push(UNPROMOTE_MAP[target.type] || target.type);
+      if (mySide === 'S') state.handS = h;
+      else state.handG = h;
     }
 
-    let b, hs, hg;
-    if (isReviewMode) { 
-      b = rvState.board; hs = rvState.handS; hg = rvState.handG; 
-    } else { 
-      b = state.board; hs = state.handS; hg = state.handG; 
+    if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
+      const deadLine = (mySide === 'S') ? 0 : 8;
+      if (((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine) || (fromP.type === 'KE' && (mySide === 'S' ? y <= 1 : y >= 7))) {
+        state.board[sel.y][sel.x] = null;
+        state.board[y][x] = { type: PROMOTE_MAP[fromP.type], owner: mySide };
+        moveData.type = PROMOTE_MAP[fromP.type];
+        moveData.isPromoted = true;
+        finish(moveData);
+      } else {
+        pendingProm = { x, y, moveData };
+        document.getElementById('promote-dialog').style.display = 'block';
+        render();
+      }
+    } else {
+      state.board[sel.y][sel.x] = null;
+      state.board[y][x] = { type: fromP.type, owner: mySide };
+      finish(moveData);
     }
+    return;
+  }
 
-        // 盤面の描画
-    for (let y = 0; y < 9; y++) {
-      for (let x = 0; x < 9; x++) {
-        const c = cells[y][x]; 
-        const p = b[y][x];
-        c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
-        
-        if (p) {
-          // 盤面の描画（★従来どおり：所有者だけで向きを決める）
-const isOpposite = (p.owner === 'G');   // 後手だけ逆さ
-const promotedClass = UNPROMOTE_MAP[p.type] ? 'promoted' : '';
-const rotClass = isOpposite ? 'opposite' : '';
+  // 持ち駒を打つ
+  if (selH) {
+    if (!target) {
+      const targetHand = (mySide === 'S' ? state.handS : state.handG);
+      if (targetHand && targetHand[selH.idx] === selH.type) {
+        state.board[y][x] = { type: selH.type, owner: mySide };
+        targetHand.splice(selH.idx, 1);
+        finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true });
+      } else {
+        selH = null;
+        render();
+      }
+    } else {
+      selH = null;
+      render();
+    }
+    return;
+  }
 
-c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMBOLS[p.type]}</div>`;
-        } else {
-          c.innerHTML = '';
-        }
+  // 駒を選択
+  if (target && target.owner === mySide) {
+    sel = { x, y };
+    possibleMoves = getRawMoves(x, y, state.board, mySide);
+    render();
+  }
+} // handleCellClick 終了
+
+function render() {
+  if (isReviewMode && !rvState) {
+    if (state.history && state.history.length > 0) {
+      syncReviewStateLocally();
+    } else {
+      return;
+    }
+  }
+
+  let b, hs, hg;
+  if (isReviewMode) {
+    b = rvState.board;
+    hs = rvState.handS;
+    hg = rvState.handG;
+  } else {
+    b = state.board;
+    hs = state.handS;
+    hg = state.handG;
+  }
+
+  // 盤面の描画
+  for (let y = 0; y < 9; y++) {
+    for (let x = 0; x < 9; x++) {
+      const c = cells[y][x];
+      const p = b[y][x];
+      c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
+
+      if (p) {
+        const isOpposite = (p.owner === 'G');
+        const promotedClass = UNPROMOTE_MAP[p.type] ? 'promoted' : '';
+        const rotClass = isOpposite ? 'opposite' : '';
+        c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMBOLS[p.type]}</div>`;
+      } else {
+        c.innerHTML = '';
       }
     }
-
-          const drawH = (id, list, owner) => {
-      const el = document.getElementById(id);
-      el.innerHTML = '';
-
-      // 駒の並び順の優先度（数字が小さいほど上に表示）
-      const HAND_ORDER = { HI: 1, KA: 2, KI: 3, GI: 4, KE: 5, KY: 6, FU: 7 };
-
-      // 持ち駒をソート。originalIdxを保持してクリック時の整合性を保つ
-      const sortedList = (list || []).map((type, idx) => ({ type, originalIdx: idx }))
-        .sort((a, b) => (HAND_ORDER[a.type] || 99) - (HAND_ORDER[b.type] || 99));
-
-      sortedList.forEach((item) => {
-        const s = document.createElement('span');
-        s.className = 'piece-font';
-        s.textContent = SYMBOLS[item.type];
-
-        // 選択ハイライトの判定（元の配列インデックスで比較）
-        if (selH?.idx === item.originalIdx && selH?.owner === owner) {
-          s.classList.add('selected-piece');
-        }
-
-        s.onclick = (e) => {
-          e.stopPropagation();
-          // 感想戦中か、自分の手番の自分の駒なら操作可能
-          if (!isReviewMode && (state.winner || state.turn !== mySide || owner !== mySide)) return;
-
-          if (selH?.idx === item.originalIdx && selH?.owner === owner) {
-            selH = null;
-          } else {
-            selH = { type: item.type, owner, idx: item.originalIdx };
-            sel = null;
-            possibleMoves = [];
-          }
-          render();
-        };
-        el.appendChild(s);
-      });
-    };
-
-    drawH('handS', hs, 'S'); 
-    drawH('handG', hg, 'G');
-
-    const st = document.getElementById('status-txt');
-    if (state.winner && !isReviewMode) { 
-      st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`; 
-      st.style.color = "red"; 
-    } else if (isReviewMode) { 
-      st.textContent = "感想戦"; 
-      st.style.color = "orange"; 
-    } else { 
-      st.textContent = state.turn === mySide ? "手番" : "待機"; 
-      st.style.color = "black"; 
-    }
-
-    document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
-    document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
-    document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
   }
+
+  const drawH = (id, list, owner) => {
+    const el = document.getElementById(id);
+    el.innerHTML = '';
+    const HAND_ORDER = { HI: 1, KA: 2, KI: 3, GI: 4, KE: 5, KY: 6, FU: 7 };
+    const sortedList = (list || []).map((type, idx) => ({ type, originalIdx: idx }))
+      .sort((a, b) => (HAND_ORDER[a.type] || 99) - (HAND_ORDER[b.type] || 99));
+
+    sortedList.forEach((item) => {
+      const s = document.createElement('span');
+      s.className = 'piece-font';
+      s.textContent = SYMBOLS[item.type];
+      if (selH && selH.idx === item.originalIdx && selH.owner === owner) {
+        s.classList.add('selected-piece');
+      }
+      s.onclick = (e) => {
+        e.stopPropagation();
+        if (!isReviewMode) {
+          if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
+        }
+        if (selH && selH.idx === item.originalIdx && selH.owner === owner) {
+          selH = null;
+        } else {
+          selH = { type: item.type, owner, idx: item.originalIdx };
+          sel = null;
+          possibleMoves = [];
+        }
+        render();
+      };
+      el.appendChild(s);
+    });
+  };
+
+  drawH('handS', hs, 'S');
+  drawH('handG', hg, 'G');
+
+  const st = document.getElementById('status-txt');
+  if (state.winner && !isReviewMode) {
+    st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`;
+    st.style.color = "red";
+  } else if (isReviewMode) {
+    st.textContent = "感想戦";
+    st.style.color = "orange";
+  } else {
+    st.textContent = state.turn === mySide ? "手番" : "待機";
+    st.style.color = "black";
+  }
+
+  document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
+  document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
+  document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
+} // render 終了
 
   // 棋譜リストの更新
   function updateKifuList() {
@@ -1041,50 +1351,62 @@ c.innerHTML = `<div class="piece piece-font ${rotClass} ${promotedClass}">${SYMB
     return `${idx}.${side}${isSame ? "同" : x+y}${type}`;
   }
 
-  // 修正後
 function updateTimerDisplay() {
-  const now = Date.now();
-  const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor((now - state.lastTick) / 1000);
+  // Date.now() ではなく補正後の時刻を使用
+  const now = getServerNow(); 
+  
+    // 経過秒の計算
+  // 0.5秒程度の余裕(500ms引く)を持たせることで、通信ラグによる「10:01」跳ねを物理的に防ぎます
+  const diff = now - state.lastTick;
+  const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor(Math.max(0, diff - 200) / 1000);
 
   ['S', 'G'].forEach(s => {
     let remMain = state.timers[s]; 
     let displayStr = ""; 
     let isByoAlert = false; 
     const el = document.getElementById(`timer-${s}`);
+    if (!el) return;
+    const mark = (s === 'S' ? '▲' : '△');
+
+    const isMainInf = (remMain >= 900000);
+    const isByoInf = (state.config.byo >= 900000);
 
     if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
-      let currentRem = 0;
-      let isTimeUp = false;
-
-      if (remMain > 0) {
-        currentRem = Math.max(0, remMain - elapsed);
-        if (currentRem > 0) {
-          displayStr = `${s==='S'?'▲':'△'} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
-        } else {
-          const byoRem = Math.max(0, (state.config.byo || 30) - (elapsed - remMain));
-          displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`;
-          if (byoRem <= 5) isByoAlert = true;
-          if (byoRem <= 0) isTimeUp = true;
-        }
+      // 手番側の計算
+      if (isMainInf) {
+        displayStr = `${mark} 無制限`;
+      } else if (remMain > elapsed) {
+        // 持ち時間がある
+        const currentRem = remMain - elapsed;
+        displayStr = `${mark} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
       } else {
-        const byoRem = Math.max(0, (state.config.byo || 30) - elapsed);
-        displayStr = `${s==='S'?'▲':'△'} 秒:${byoRem}`;
-        if (byoRem <= 5) isByoAlert = true;
-        if (byoRem <= 0) isTimeUp = true;
-      }
-
-      // 【重要】自分の手番で、かつ自分の時間が切れた時だけ、自分が負けを認める
-      if (isTimeUp && s === mySide && !state.winner) {
-        state.winner = (mySide === 'S' ? 'G' : 'S'); 
-        state.winReason = "時間切れ"; 
-        finish({ side: s, type: "時間切れ" }); 
+        // 秒読みフェーズ
+        if (isByoInf) {
+          displayStr = `${mark} 秒:無制限`;
+        } else {
+          // 秒読み計算：(elapsed - remMain) は「持ち時間を使い切ってから何秒経過したか」を示す
+          const overTime = Math.max(0, elapsed - remMain);
+          const byoRem = Math.max(0, (state.config.byo || 30) - overTime);
+          
+          displayStr = `${mark} 秒:${byoRem}`;
+          if (byoRem <= 5) isByoAlert = true;
+          
+          // タイムアップ判定
+          if (byoRem <= 0 && s === mySide && !state.winner) {
+            state.winner = (mySide === 'S' ? 'G' : 'S'); 
+            state.winReason = "時間切れ"; 
+            finish({ side: s, type: "時間切れ", toX: null, toY: null }); 
+          }
+        }
       }
     } else {
-      // 待機側や終了後の表示
-      if (remMain > 0) {
-        displayStr = `${s==='S'?'▲':'△'} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
+      // 待機側または停止中
+      if (isMainInf) {
+        displayStr = `${mark} 無制限`;
+      } else if (remMain > 0) {
+        displayStr = `${mark} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
       } else {
-        displayStr = `${s==='S'?'▲':'△'} 秒:${state.config.byo || 30}`;
+        displayStr = `${mark} 秒:${isByoInf ? '無制限' : (state.config.byo || 30)}`;
       }
     }
     
@@ -1101,27 +1423,29 @@ function updateTimerDisplay() {
   document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
-    document.getElementById('btn-prom-yes').onclick = () => { 
+        document.getElementById('btn-prom-yes').onclick = () => { 
     pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; 
     pendingProm.moveData.isPromoted = true; 
     // ※ state.board への直接代入を削除（endProm内でモード別に処理するため）
     endProm(); 
   };
   document.getElementById('btn-prom-no').onclick = () => endProm();
-    function endProm() { 
+      function endProm() { 
     const d = pendingProm.moveData; 
     const tx = pendingProm.x;
     const ty = pendingProm.y;
 
     if (isReviewMode) {
-      // 感想戦モードの場合はローカルの検討状態(rvState)を更新
-      rvState.board[ty][tx].type = d.type;
+      // 感想戦：移動元を消し、移動先に駒を置く（成る場合はd.typeが既に書き換わっている）
+      rvState.board[ty][tx] = { type: d.type, owner: d.side };
+      rvState.board[d.fromY][d.fromX] = null;
       sel = null; 
       possibleMoves = [];
       pushReviewUpdate();
     } else {
-      // 対局モードの場合は通常通りFirebaseへ送信
-      state.board[ty][tx].type = d.type;
+      // 対局モード
+      state.board[ty][tx] = { type: d.type, owner: d.side };
+      state.board[d.fromY][d.fromX] = null;
       finish(d); 
     }
 
@@ -1146,54 +1470,80 @@ function updateTimerDisplay() {
     return moves;
   };
   document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
-      document.getElementById('btnKif').onclick = () => {
-    let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
-    
-    state.history.forEach((h, i) => { 
-      if (i === 0) return; 
-      let moveText = "";
-      
-      if (h.type.includes("投了") || h.type.includes("時間切れ")) {
-        moveText = "投了";
-      } else if (h.type.includes("反則")) {
-        moveText = "投了"; // KIF互換のため反則も投了として出力
-      } else if (typeof h.toX !== 'number') {
-        moveText = "中断";
-      } else {
-        const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY); 
-        const pos = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1]; 
-        
-        let piece = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")];
-        // 駒名が1文字（歩、金など）なら全角スペースを足して2文字にする
-        if (piece.length === 1) piece += "　";
+        document.getElementById('btnKif').onclick = () => {
+    const hType = state.config.handicap || "平手";
+    const isHirate = (hType === "平手");
 
-        const from = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")"; 
-        moveText = pos + piece + from;
+    let kif = "# ----  ぴよ将棋 棋譜ファイル  ----\n";
+    kif += "棋戦：\n戦型：\n開始日時：\n終了日時：\n";
+    
+    // 手合割の出力
+    if (isHirate) {
+      kif += "手合割：平手\n先手：先手\n後手：後手\n";
+    } else {
+      kif += "手合割：その他\n";
+      // 駒落ち盤面の生成 (history[0]のboardを使用)
+      const startBoard = JSON.parse(state.history[0].board);
+      const startHandS = state.history[0].handS || [];
+      const startHandG = state.history[0].handG || [];
+
+      const getHandStr = (h) => (h.length === 0 ? "なし" : h.map(t => SYMBOLS[t]).join(" "));
+      kif += `上手の持駒：${getHandStr(startHandG)}\n`;
+      kif += "  ９ ８ ７ ６ ５ ４ ３ ２ １\n+---------------------------+\n";
+      for (let y = 0; y < 9; y++) {
+        let row = "|";
+        for (let x = 0; x < 9; x++) {
+          const p = startBoard[y][x];
+          if (!p) row += " ・";
+          else {
+            const sym = SYMBOLS[p.type];
+            row += (p.owner === 'G' ? "v" : " ") + sym;
+          }
+        }
+        row += "|" + KANJI_NUM[y + 1] + "\n";
+        kif += row;
+      }
+      kif += "+---------------------------+\n";
+      kif += `下手の持駒：${getHandStr(startHandS)}\n\n`;
+      kif += "下手番\n下手：\n上手：\n";
+    }
+
+    kif += "手数----指手---------消費時間--\n";
+
+    state.history.forEach((h, i) => {
+      if (i === 0) return;
+      let moveText = "";
+
+      if (h.type.includes("投了") || h.type.includes("時間切れ") || h.type.includes("反則")) {
+        moveText = "投了       ";
+      } else if (typeof h.toX !== 'number') {
+        moveText = "中断       ";
+      } else {
+        const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY);
+        const pos = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1];
+        
+        let pieceName = h.isPromoted ? (SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成") : SYMBOLS[h.type.replace("(反則)", "")];
+        // 駒名が1文字の場合は、後ろにスペースを入れずに座標を繋げる
+        const from = h.isDrop ? "打" : `(${9 - h.fromX}${h.fromY + 1})`;
+        moveText = (pos + pieceName + from).padEnd(11, " ");
       }
 
       const lineNum = String(i).padStart(4, " ");
-      
-      // 指し手と時間の間のスペースを厳密に調整
-      // KIFは「手数」「指し手」「時間」の開始位置が決まっています
-      let displayMove = moveText.padEnd(7, "　"); 
-      if (moveText === "投了" || moveText === "中断") {
-          displayMove = "投了      "; 
-      }
-
-      // 時間の前にスペースを2つ入れ、( 0:00/00:00:00) の形式を維持
-      kif += `${lineNum} ${displayMove} ( 0:00/00:00:00)\n`; 
+      kif += `${lineNum} ${moveText}( 0:00/00:00:00)\n`;
     });
 
-    const area = document.createElement("textarea"); 
-    area.value = kif; document.body.appendChild(area); area.select();
-    try { 
-      document.execCommand("copy"); 
-      alert("KIF形式でコピーしました。"); 
-    } catch (err) { 
-      alert("コピー失敗"); 
-    } 
+    const area = document.createElement("textarea");
+    area.value = kif;
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand("copy");
+      alert("ぴよ将棋形式(KIF)でコピーしました。");
+    } catch (err) {
+      alert("コピー失敗");
+    }
     document.body.removeChild(area);
-  };
+  };  
 
   function isCheckmate(board, turn, handS, handG) {
     for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (board[y][x]?.owner === turn) { const moves = getRawMoves(x, y, board, turn); for (let m of moves) { const tb = JSON.parse(JSON.stringify(board)); tb[m.y][m.x] = tb[y][x]; tb[y][x] = null; if (!isChecked(tb, turn)) return false; } }

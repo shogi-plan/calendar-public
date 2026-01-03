@@ -1470,54 +1470,80 @@ function updateTimerDisplay() {
     return moves;
   };
   document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
-      document.getElementById('btnKif').onclick = () => {
-    let kif = "# KIF形式棋譜ファイル\n手合割：平手\n先手：先手\n後手：後手\n\n手数----指手----消費時間--\n";
-    
-    state.history.forEach((h, i) => { 
-      if (i === 0) return; 
-      let moveText = "";
-      
-      if (h.type.includes("投了") || h.type.includes("時間切れ")) {
-        moveText = "投了";
-      } else if (h.type.includes("反則")) {
-        moveText = "投了"; // KIF互換のため反則も投了として出力
-      } else if (typeof h.toX !== 'number') {
-        moveText = "中断";
-      } else {
-        const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY); 
-        const pos = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1]; 
-        
-        let piece = h.isPromoted ? SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成" : SYMBOLS[h.type.replace("(反則)","")];
-        // 駒名が1文字（歩、金など）なら全角スペースを足して2文字にする
-        if (piece.length === 1) piece += "　";
+        document.getElementById('btnKif').onclick = () => {
+    const hType = state.config.handicap || "平手";
+    const isHirate = (hType === "平手");
 
-        const from = h.isDrop ? "打" : "(" + (9 - h.fromX) + (h.fromY + 1) + ")"; 
-        moveText = pos + piece + from;
+    let kif = "# ----  ぴよ将棋 棋譜ファイル  ----\n";
+    kif += "棋戦：\n戦型：\n開始日時：\n終了日時：\n";
+    
+    // 手合割の出力
+    if (isHirate) {
+      kif += "手合割：平手\n先手：先手\n後手：後手\n";
+    } else {
+      kif += "手合割：その他\n";
+      // 駒落ち盤面の生成 (history[0]のboardを使用)
+      const startBoard = JSON.parse(state.history[0].board);
+      const startHandS = state.history[0].handS || [];
+      const startHandG = state.history[0].handG || [];
+
+      const getHandStr = (h) => (h.length === 0 ? "なし" : h.map(t => SYMBOLS[t]).join(" "));
+      kif += `上手の持駒：${getHandStr(startHandG)}\n`;
+      kif += "  ９ ８ ７ ６ ５ ４ ３ ２ １\n+---------------------------+\n";
+      for (let y = 0; y < 9; y++) {
+        let row = "|";
+        for (let x = 0; x < 9; x++) {
+          const p = startBoard[y][x];
+          if (!p) row += " ・";
+          else {
+            const sym = SYMBOLS[p.type];
+            row += (p.owner === 'G' ? "v" : " ") + sym;
+          }
+        }
+        row += "|" + KANJI_NUM[y + 1] + "\n";
+        kif += row;
+      }
+      kif += "+---------------------------+\n";
+      kif += `下手の持駒：${getHandStr(startHandS)}\n\n`;
+      kif += "下手番\n下手：\n上手：\n";
+    }
+
+    kif += "手数----指手---------消費時間--\n";
+
+    state.history.forEach((h, i) => {
+      if (i === 0) return;
+      let moveText = "";
+
+      if (h.type.includes("投了") || h.type.includes("時間切れ") || h.type.includes("反則")) {
+        moveText = "投了       ";
+      } else if (typeof h.toX !== 'number') {
+        moveText = "中断       ";
+      } else {
+        const isSame = (i > 1 && h.toX === state.history[i-1].toX && h.toY === state.history[i-1].toY);
+        const pos = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1];
+        
+        let pieceName = h.isPromoted ? (SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成") : SYMBOLS[h.type.replace("(反則)", "")];
+        // 駒名が1文字の場合は、後ろにスペースを入れずに座標を繋げる
+        const from = h.isDrop ? "打" : `(${9 - h.fromX}${h.fromY + 1})`;
+        moveText = (pos + pieceName + from).padEnd(11, " ");
       }
 
       const lineNum = String(i).padStart(4, " ");
-      
-      // 指し手と時間の間のスペースを厳密に調整
-      // KIFは「手数」「指し手」「時間」の開始位置が決まっています
-      let displayMove = moveText.padEnd(7, "　"); 
-      if (moveText === "投了" || moveText === "中断") {
-          displayMove = "投了      "; 
-      }
-
-      // 時間の前にスペースを2つ入れ、( 0:00/00:00:00) の形式を維持
-      kif += `${lineNum} ${displayMove} ( 0:00/00:00:00)\n`; 
+      kif += `${lineNum} ${moveText}( 0:00/00:00:00)\n`;
     });
 
-    const area = document.createElement("textarea"); 
-    area.value = kif; document.body.appendChild(area); area.select();
-    try { 
-      document.execCommand("copy"); 
-      alert("KIF形式でコピーしました。"); 
-    } catch (err) { 
-      alert("コピー失敗"); 
-    } 
+    const area = document.createElement("textarea");
+    area.value = kif;
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand("copy");
+      alert("ぴよ将棋形式(KIF)でコピーしました。");
+    } catch (err) {
+      alert("コピー失敗");
+    }
     document.body.removeChild(area);
-  };
+  };  
 
   function isCheckmate(board, turn, handS, handG) {
     for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (board[y][x]?.owner === turn) { const moves = getRawMoves(x, y, board, turn); for (let m of moves) { const tb = JSON.parse(JSON.stringify(board)); tb[m.y][m.x] = tb[y][x]; tb[y][x] = null; if (!isChecked(tb, turn)) return false; } }
