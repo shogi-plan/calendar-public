@@ -753,10 +753,22 @@ btnCallStart.onclick = async () => {
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
-      // --- Firebase 将棋データ監視 ---
+    // --- Firebase 将棋データ監視 ---
+  let lastInitAt = 0; // 追加：初期化検知用の変数
+
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
+
+    // ★追加：初期化（initAtの更新）を検知して、全端末で自分のサイド選択をリセットする
+    if (data.initAt && data.initAt !== lastInitAt) {
+      lastInitAt = data.initAt;
+      mySide = '';
+      sessionStorage.removeItem(`mySide_${roomName}`);
+      document.getElementById('mySideSelect').value = '';
+      currentFlip = false; // 先手視点に戻す
+      updateDisplayRotation(false);
+    }
 
     // ★追加：初期化フラグ(lastTick=0)かつ対局未終了なら、感想戦モードを強制解除
     if (data.lastTick === 0 && !data.winner) {
@@ -787,19 +799,17 @@ btnCallStart.onclick = async () => {
     state.winReason = data.winReason || "";
     state.history = data.history || [];
 
-        if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
+    if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
 
     // モード判定の同期
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
     
-    // 勝者が決まっている かつ すでに感想戦モードがON（ダイアログ後の処理済み）の場合のみ切り替え
     if (data.winner && storedReview) {
       isReviewMode = true;
       document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
       if (!rvState) syncReviewStateLocally(); 
     } else {
-      // 対局中、または勝敗が決まった直後（まだアラートを閉じていない間）
       isReviewMode = false;
       document.getElementById('btnToggleReview').textContent = "感想戦";
       document.getElementById('review-panel').style.display = 'none';
@@ -810,7 +820,7 @@ btnCallStart.onclick = async () => {
     render(); 
     updateKifuList();
     updateTimerDisplay();
-    // 【追加修正】データ更新に伴い、準備ボタンの状態を再評価する
+    
     get(readyRef).then(rsnap => {
       const rData = rsnap.val() || { S: false, G: false };
       const isDuringGame = (state.lastTick !== 0 && !state.winner);
@@ -825,7 +835,7 @@ btnCallStart.onclick = async () => {
       }
     });
   });
-  
+
     // --- 準備完了ステータスの監視 ---
   const btnReady = document.getElementById('btnReady');
   btnReady.onclick = async () => {
@@ -988,27 +998,9 @@ btnCallStart.onclick = async () => {
   }
 
 function finish(moveData) {
-  // 駒音を鳴らす
-  playPieceSound();
-
-  // 消費時間の計算も補正後の現在時刻を使用
-  const now = getServerNow(); 
-  let newTimers = { ...state.timers };
+  const nextTurn = (state.turn === 'S' ? 'G' : 'S');
   
-  // 1. 持ち時間と秒読みの厳密な計算
-  if (state.lastTick !== 0 && !state.winner) {
-    // 指すまでにかかった秒数を計算
-    const elapsedTotal = Math.floor((now - state.lastTick) / 1000);
-    const currentMain = state.timers[state.turn];
-    
-    // 持ち時間が無制限（900000以上）でない場合
-    if (currentMain < 900000) {
-      // 持ち時間を減らす。消費が持ち時間を上回った場合は 0 になり、次手から秒読みが適用される
-      newTimers[state.turn] = Math.max(0, currentMain - elapsedTotal);
-    }
-  }
-  
-  // 2. 反則判定
+  // 1. 反則判定を先行して行う
   let foulReason = "";
   if (isChecked(state.board, state.turn)) { 
     foulReason = "王手放置"; 
@@ -1020,14 +1012,35 @@ function finish(moveData) {
     if (count > 1) foulReason = "二歩";
   }
 
-  const nextTurn = (state.turn === 'S' ? 'G' : 'S');
+  // 2. 詰み判定
+  let isMated = false;
+  if (!foulReason && state.history.length > 2) {
+    if (isCheckmate(state.board, nextTurn, state.handS, state.handG)) isMated = true;
+  }
+
+  // ★駒音の再生：反則、詰み、投了、時間切れでない場合のみ鳴らす
+  const isGameOverMove = foulReason || isMated || moveData.type === "投了" || moveData.type === "時間切れ";
+  if (!isGameOverMove) {
+    playPieceSound();
+  }
+
+  const now = getServerNow(); 
+  let newTimers = { ...state.timers };
+  
+  if (state.lastTick !== 0 && !state.winner) {
+    const elapsedTotal = Math.floor((now - state.lastTick) / 1000);
+    const currentMain = state.timers[state.turn];
+    if (currentMain < 900000) {
+      newTimers[state.turn] = Math.max(0, currentMain - elapsedTotal);
+    }
+  }
 
   if (foulReason) {
     state.winner = nextTurn;
     state.winReason = foulReason;
     state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])], type: moveData.type + "(反則)" });
   } else {
-    if (state.history.length > 2 && isCheckmate(state.board, nextTurn, state.handS, state.handG)) { 
+    if (isMated) { 
       state.winner = state.turn; 
       state.winReason = "詰み"; 
     }
@@ -1042,12 +1055,6 @@ function finish(moveData) {
   selH = null; 
   possibleMoves = [];
 
-    // ※ scriptの最初の方の import に serverTimestamp を追加してください
-  // import { ..., serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
-
-    // 3. Firebaseへ一括更新
-  // lastTick を serverTimestamp() にすることで、
-  // 通信ラグがある環境でも「サーバーが受信した正確な時刻」を起点にできます
   set(gameRef, { 
     board: JSON.stringify(state.board), 
     handS: state.handS || [], 
@@ -1120,7 +1127,7 @@ function finish(moveData) {
   document.getElementById('btnSetting').onclick = () => { document.getElementById('setting-dialog').style.display = 'block'; };
   document.getElementById('btnSettingCancel').onclick = () => { document.getElementById('setting-dialog').style.display = 'none'; };
 
-          // 設定適用ボタン
+    // 設定適用ボタン
   document.getElementById('btnSettingSave').onclick = async () => {
     if(!confirm("設定を適用して初期化しますか？")) return;
     
@@ -1133,7 +1140,7 @@ function finish(moveData) {
     const b = byoSec;
     const bStr = JSON.stringify(generateInitialBoard(hType, uSide));
 
-    // 1. 将棋データの初期化（initAtを追加し、初期化が行われたことを他方に通知）
+    // 1. 将棋データの初期化（initAtを更新し、全端末に初期化を通知）
     await set(gameRef, { 
       board: bStr, 
       handS: [], 
@@ -1144,25 +1151,25 @@ function finish(moveData) {
       lastTick: 0, 
       winner: null, 
       winReason: "", 
-      initAt: serverTimestamp(), // ★初期化実行時刻を記録
+      initAt: serverTimestamp(), 
       history: [{ board: bStr, handS: [], handG: [], type: `${hType} (${mainMin}分/${byoSec}秒)` }] 
     });
 
-    // 2. 準備状態の完全リセット
-    await set(readyRef, { S: false, G: false });
+    // 2. 準備状態と選択状態（Firebase側）をリセット
+    await set(readyRef, { S: false, G: false, lastResetAt: serverTimestamp() });
 
-        // 3. ローカルの感想戦セッションをクリア
+    // 3. ローカルの感想戦セッションをクリア
     sessionStorage.removeItem(`isReview_${roomName}`);
     Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
     
-    // 4. 自サイドの選択をリセット（未選択に戻す）
+    // 4. 自端末の選択をリセット
     mySide = '';
     sessionStorage.removeItem(`mySide_${roomName}`);
     mySideSelect.value = '';
     
     document.getElementById('setting-dialog').style.display = 'none';
-    render(); // 再描画して反映
-  };  
+    render();
+  };
   
   function syncReviewStateLocally() { 
     if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; 
@@ -1574,22 +1581,20 @@ function updateTimerDisplay() {
     endProm(); 
   };
   document.getElementById('btn-prom-no').onclick = () => endProm();
-            function endProm() { 
+      function endProm() { 
     const d = pendingProm.moveData; 
     const tx = pendingProm.x;
     const ty = pendingProm.y;
 
     if (isReviewMode) {
-      // 感想戦での成り音
       playPieceSound();
-      // 感想戦：移動元を消し、移動先に駒を置く（成る場合はd.typeが既に書き換わっている）
       rvState.board[ty][tx] = { type: d.type, owner: d.side };
       rvState.board[d.fromY][d.fromX] = null;
       sel = null; 
       possibleMoves = [];
       pushReviewUpdate();
     } else {
-      // 対局モード
+      // 対局モード：ここでは音を鳴らさずfinishに任せる（finish内で勝敗判定後に鳴らすか決める）
       state.board[ty][tx] = { type: d.type, owner: d.side };
       state.board[d.fromY][d.fromX] = null;
       finish(d); 
