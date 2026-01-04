@@ -153,10 +153,12 @@
     #btnCallEnd { background: var(--danger-btn); color: white; }
     #callStatusDisplay { font-size: 10px; color: #333; font-weight: bold; }
     .vol-ctrl { font-size: 10px; display: flex; align-items: center; gap: 2px; }
-    .chat-message { margin-bottom: 4px; line-height: 1.4; border-bottom: 1px dotted #eee; padding-bottom: 2px; font-size: 12px;}
-    .chat-name { font-weight: bold; margin-right: 5px; }
-    .chat-name.S { color: #1976d2; }
-    .chat-name.G { color: #d32f2f; }
+        .chat-message { margin-bottom: 4px; line-height: 1.4; border-bottom: 1px dotted #eee; padding-bottom: 2px; font-size: 12px;}
+    /* 自分のメッセージ用（青系） */
+    .chat-msg-self { color: #0d47a1; background: #e3f2fd; border-radius: 3px; padding: 2px 4px; }
+    /* 他人のメッセージ用（緑系） */
+    .chat-msg-other { color: #1b5e20; background: #e8f5e9; border-radius: 3px; padding: 2px 4px; }
+    .chat-name { font-weight: bold; margin-right: 5px; display: none; } /* 名前の表示を非表示に設定 */
     
     /* 左側の持ち駒エリアを上下反転させる */
 .hand.left-rotated {
@@ -273,8 +275,12 @@
     </div>
   </div>
   </div>
-  <div class="ready-area">
-    <select id="mySideSelect" style="font-size:10px;"><option value="S">先手▲</option><option value="G">後手△</option></select>
+    <div class="ready-area">
+    <select id="mySideSelect" style="font-size:10px;">
+      <option value="" selected>未選択</option>
+      <option value="S">先手▲</option>
+      <option value="G">後手△</option>
+    </select>
     <button id="btnReady" style="background: #ff9800; color: white; padding: 4px 8px;">対局準備完了</button>
     <div style="display: flex; gap: 4px; font-size: 10px; align-items: center; margin-left:5px;">
       ▲<div id="lamp-S" class="ready-lamp"></div>
@@ -406,7 +412,8 @@
   let viewIdx = -1, rvState = null;
   const boardEl = document.getElementById('board'); 
 
-   let mySide = sessionStorage.getItem(`mySide_${roomName}`) || 'S';
+    // 初期値を空（未選択）にする
+  let mySide = sessionStorage.getItem(`mySide_${roomName}`) || '';
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
@@ -440,20 +447,24 @@
   }
 }
 
-  // 初回表示の適用
+    // 初回表示の適用（未選択時は先手視点とする）
   let currentFlip = (mySide === 'G');
   updateDisplayRotation(currentFlip);
 
-    mySideSelect.onchange = (e) => { 
+  mySideSelect.onchange = (e) => { 
     mySide = e.target.value; 
-    sessionStorage.setItem(`mySide_${roomName}`, mySide);
-    // リロードせず、表示状態だけを更新する
+    if (mySide) {
+      sessionStorage.setItem(`mySide_${roomName}`, mySide);
+    } else {
+      sessionStorage.removeItem(`mySide_${roomName}`);
+    }
+    // 未選択時はとりあえず先手視点（false）
     currentFlip = (mySide === 'G');
     updateDisplayRotation(currentFlip);
     render(); 
   };
 
-  // 反転ボタン（一番下のコードも書き換えます）
+  // 反転ボタン
   document.getElementById('btnFlip').onclick = () => {
     currentFlip = !currentFlip;
     updateDisplayRotation(currentFlip);
@@ -885,16 +896,26 @@ btnCallStart.onclick = async () => {
   // エンターキー送信対応
   chatInput.onkeydown = (e) => { if(e.key === 'Enter') btnSend.click(); };
 
-  // ログの監視と表示
+    // ログの監視と表示
   onValue(ref(db, `${roomName}/chatLog`), (snap) => {
     const logs = snap.val() || [];
     chatLog.innerHTML = '';
+    // 最新50件を取得してループ
     logs.slice(-50).forEach(msg => {
       const div = document.createElement('div');
       div.className = 'chat-message';
-      div.innerHTML = `<span class="chat-name ${msg.user}">${msg.name}:</span><span>${msg.text}</span>`;
+
+      // 自分が書いた内容か他人が書いた内容かでクラスを分岐
+      // (mySideが空の状態でも動作するように比較)
+      const isMyMsg = (mySide !== '' && msg.user === mySide);
+      const msgClass = isMyMsg ? 'chat-msg-self' : 'chat-msg-other';
+      
+      // HTMLを組み立て（名前の表示は無くし、色分け用のspanで囲む）
+      div.innerHTML = `<span class="${msgClass}">${msg.text}</span>`;
+      
       chatLog.appendChild(div);
     });
+    // スクロール位置を一番下に調整
     chatLog.scrollTop = chatLog.scrollHeight;
   });
 
@@ -1079,12 +1100,18 @@ function finish(moveData) {
     // 2. 準備状態の完全リセット
     await set(readyRef, { S: false, G: false });
 
-    // 3. ローカルの感想戦セッションをクリア（この後onValueでモードが自動で戻ります）
+        // 3. ローカルの感想戦セッションをクリア
     sessionStorage.removeItem(`isReview_${roomName}`);
     Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
     
+    // 4. 自サイドの選択をリセット（未選択に戻す）
+    mySide = '';
+    sessionStorage.removeItem(`mySide_${roomName}`);
+    mySideSelect.value = '';
+    
     document.getElementById('setting-dialog').style.display = 'none';
-  };
+    render(); // 再描画して反映
+  };  
   
   function syncReviewStateLocally() { 
     if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; 
