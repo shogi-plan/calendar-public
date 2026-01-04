@@ -435,7 +435,7 @@
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
-    // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
+      // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
   function updateDisplayRotation(isFlipped) {
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
@@ -997,12 +997,16 @@ btnCallStart.onclick = async () => {
     chatLog.scrollTop = chatLog.scrollHeight;
   });
 
-  // --- 将棋 UI / ロジック ---
+    // --- 将棋 UI / ロジック ---
   function setReviewMode(bool) {
     isReviewMode = bool;
     sessionStorage.setItem(`isReview_${roomName}`, bool.toString());
     document.getElementById('btnToggleReview').textContent = bool ? "戻る" : "感想戦";
     document.getElementById('review-panel').style.display = bool ? 'flex' : 'none';
+    
+    // ★追加：モード切り替え時にサイズ・回転状態を強制的に更新
+    updateDisplayRotation(currentFlip);
+    
     if (bool) pushReviewUpdate();
   }
 
@@ -1105,7 +1109,7 @@ function finish(moveData) {
     return false;
   };
 
-    function showGameOverPopup(winner, reason = "") {
+        function showGameOverPopup(winner, reason = "") {
     const key = `shown_${roomName}_${state.history.length}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "true");
@@ -1118,6 +1122,10 @@ function finish(moveData) {
       setReviewMode(true);
       syncReviewStateLocally(); 
       pushReviewUpdate();
+      
+      // ★追加：ダイアログを閉じた直後にレイアウトを再適用して表示崩れを直す
+      updateDisplayRotation(currentFlip);
+      render();
     }, 200);
   }
 
