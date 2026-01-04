@@ -399,7 +399,14 @@
 
   let isCountingDown = false; // 追加：カウントダウン中フラグ
 
-  const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
+    const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
+
+  // 駒音の定義
+  const pieceSound = new Audio("spo_ge_syogi_s01.mp3");
+  function playPieceSound() {
+    pieceSound.currentTime = 0;
+    pieceSound.play().catch(e => console.warn("音源の再生に失敗しました:", e));
+  }
 
   const PROMOTE_MAP = {FU:'TO',KY:'NY',KE:'NK',GI:'NG',KA:'UM',HI:'RY'};
   const UNPROMOTE_MAP = {TO:'FU',NY:'KY',NK:'KE',NG:'GI',UM:'KA',RY:'HI'};
@@ -981,6 +988,9 @@ btnCallStart.onclick = async () => {
   }
 
 function finish(moveData) {
+  // 駒音を鳴らす
+  playPieceSound();
+
   // 消費時間の計算も補正後の現在時刻を使用
   const now = getServerNow(); 
   let newTimers = { ...state.timers };
@@ -1171,7 +1181,7 @@ function finish(moveData) {
       return;
     }
 
-    // 移動先をクリック
+        // 移動先をクリック
     if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
       const fromP = rvState.board[sel.y][sel.x];
       if (!fromP) return;
@@ -1197,6 +1207,8 @@ function finish(moveData) {
         pendingProm = { x, y, moveData };
         document.getElementById('promote-dialog').style.display = 'block';
       } else {
+        // 感想戦での移動音
+        playPieceSound();
         // 先に移動元を消去してから移動先に配置（消失防止）
         const movingPiece = { type: fromP.type, owner: fromP.owner };
         rvState.board[sel.y][sel.x] = null;
@@ -1214,6 +1226,8 @@ function finish(moveData) {
       if (!target) {
         const targetHand = (selH.owner === 'S' ? rvState.handS : rvState.handG);
         if (targetHand && targetHand[selH.idx] === selH.type) {
+          // 感想戦での駒打ち音
+          playPieceSound();
           rvState.board[y][x] = { type: selH.type, owner: selH.owner };
           targetHand.splice(selH.idx, 1);
           selH = null;
@@ -1560,12 +1574,14 @@ function updateTimerDisplay() {
     endProm(); 
   };
   document.getElementById('btn-prom-no').onclick = () => endProm();
-      function endProm() { 
+            function endProm() { 
     const d = pendingProm.moveData; 
     const tx = pendingProm.x;
     const ty = pendingProm.y;
 
     if (isReviewMode) {
+      // 感想戦での成り音
+      playPieceSound();
       // 感想戦：移動元を消し、移動先に駒を置く（成る場合はd.typeが既に書き換わっている）
       rvState.board[ty][tx] = { type: d.type, owner: d.side };
       rvState.board[d.fromY][d.fromX] = null;
