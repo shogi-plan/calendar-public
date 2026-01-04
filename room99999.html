@@ -786,6 +786,20 @@ btnCallStart.onclick = async () => {
     render(); 
     updateKifuList();
     updateTimerDisplay();
+    // 【追加修正】データ更新に伴い、準備ボタンの状態を再評価する
+    get(readyRef).then(rsnap => {
+      const rData = rsnap.val() || { S: false, G: false };
+      const isDuringGame = (state.lastTick !== 0 && !state.winner);
+      if (isDuringGame) {
+        btnReady.disabled = true;
+        btnReady.textContent = "対局中";
+        btnReady.style.background = "#607d8b";
+      } else {
+        btnReady.disabled = false;
+        btnReady.textContent = rData[mySide] ? "準備解除" : "対局準備完了";
+        btnReady.style.background = rData[mySide] ? "#757575" : "#ff9800";
+      }
+    });
   });
   
     // --- 準備完了ステータスの監視 ---
@@ -797,12 +811,16 @@ btnCallStart.onclick = async () => {
     await set(readyRef, readyData);
   };
 
-  onValue(readyRef, (snap) => {
+    onValue(readyRef, (snap) => {
     const data = snap.val() || { S: false, G: false };
     document.getElementById('lamp-S').className = `ready-lamp ${data.S ? 'on' : ''}`;
     document.getElementById('lamp-G').className = `ready-lamp ${data.G ? 'on' : ''}`;
-        // 対局中（lastTickが0以外）はボタンを無効化
-    if (state.lastTick !== 0 && !state.winner) {
+
+    // 対局中かどうかの判定を最新のstateに基づいて行う
+    // lastTickが0、または勝敗が決まっている場合は「準備受付中」状態とする
+    const isDuringGame = (state.lastTick !== 0 && !state.winner);
+
+    if (isDuringGame) {
       btnReady.disabled = true;
       btnReady.textContent = "対局中";
       btnReady.style.background = "#607d8b";
