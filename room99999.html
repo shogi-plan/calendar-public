@@ -780,17 +780,19 @@ btnCallStart.onclick = async () => {
     state.winReason = data.winReason || "";
     state.history = data.history || [];
 
-    if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
+        if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
 
     // モード判定の同期
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
-    if (storedReview && data.winner) { // 勝者がいる場合のみ感想戦モードを許可
+    
+    // 勝者が決まっている かつ すでに感想戦モードがON（ダイアログ後の処理済み）の場合のみ切り替え
+    if (data.winner && storedReview) {
       isReviewMode = true;
       document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
       if (!rvState) syncReviewStateLocally(); 
     } else {
-      // 初期化された場合や対局中の場合
+      // 対局中、または勝敗が決まった直後（まだアラートを閉じていない間）
       isReviewMode = false;
       document.getElementById('btnToggleReview').textContent = "感想戦";
       document.getElementById('review-panel').style.display = 'none';
@@ -1060,14 +1062,20 @@ function finish(moveData) {
     return false;
   };
 
-  function showGameOverPopup(winner, reason = "") {
+    function showGameOverPopup(winner, reason = "") {
     const key = `shown_${roomName}_${state.history.length}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "true");
-    setReviewMode(true);
-    syncReviewStateLocally(); 
-    pushReviewUpdate();
-    setTimeout(() => { alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); }, 200);
+
+    // アラートを表示し、ユーザーが「OK」を押した後に実行される
+    setTimeout(() => { 
+      alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); 
+      
+      // ダイアログを閉じた後に感想戦モードへ移行
+      setReviewMode(true);
+      syncReviewStateLocally(); 
+      pushReviewUpdate();
+    }, 200);
   }
 
     // --- 駒落ち用初期配置生成関数 ---
