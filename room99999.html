@@ -947,18 +947,26 @@ btnCallStart.onclick = async () => {
   const btnSend = document.getElementById('btnSend');
   const btnClearChat = document.getElementById('btnClearChat'); // 消去ボタンを取得
 
-  // 送信処理
+    // 送信処理
   btnSend.onclick = async () => {
     const text = chatInput.value.trim();
     if (!text) return;
     const snap = await get(ref(db, `${roomName}/chatLog`));
     const logs = snap.val() || [];
     const senderName = (mySide === 'S') ? "先手" : "後手";
+
+    // hh:mm:ss 形式の現在時刻を取得
+    const now = new Date();
+    const h = now.getHours().toString().padStart(2, '0');
+    const m = now.getMinutes().toString().padStart(2, '0');
+    const s = now.getSeconds().toString().padStart(2, '0');
+    const timeStr = `${h}:${m}:${s}`;
+
     logs.push({ 
       user: mySide, 
       name: senderName, 
       text: text, 
-      time: new Date().toISOString() 
+      time: timeStr 
     });
     await set(ref(db, `${roomName}/chatLog`), logs);
     chatInput.value = '';
@@ -974,7 +982,7 @@ btnCallStart.onclick = async () => {
   // エンターキー送信対応
   chatInput.onkeydown = (e) => { if(e.key === 'Enter') btnSend.click(); };
 
-    // ログの監視と表示
+      // ログの監視と表示
   onValue(ref(db, `${roomName}/chatLog`), (snap) => {
     const logs = snap.val() || [];
     chatLog.innerHTML = '';
@@ -984,12 +992,20 @@ btnCallStart.onclick = async () => {
       div.className = 'chat-message';
 
       // 自分が書いた内容か他人が書いた内容かでクラスを分岐
-      // (mySideが空の状態でも動作するように比較)
       const isMyMsg = (mySide !== '' && msg.user === mySide);
       const msgClass = isMyMsg ? 'chat-msg-self' : 'chat-msg-other';
       
-      // HTMLを組み立て（名前の表示は無くし、色分け用のspanで囲む）
-      div.innerHTML = `<span class="${msgClass}">${msg.text}</span>`;
+      // 表示用時刻の整形（既存のISO形式データがある場合にも対応）
+      let displayTime = msg.time || "";
+      if (displayTime.includes('T')) {
+        const d = new Date(displayTime);
+        displayTime = d.getHours().toString().padStart(2, '0') + ':' + 
+                      d.getMinutes().toString().padStart(2, '0') + ':' + 
+                      d.getSeconds().toString().padStart(2, '0');
+      }
+
+      // 同一行内のヘッダとして時刻を表示し、全角スペースで区切る
+      div.innerHTML = `<span class="${msgClass}">${displayTime}　${msg.text}</span>`;
       
       chatLog.appendChild(div);
     });
