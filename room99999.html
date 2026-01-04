@@ -470,24 +470,29 @@
     updateDisplayRotation(currentFlip);
   };
 
-    // --- 通話維持用（バックグラウンド対策強化版） ---
+    // --- 通話維持用（バックグラウンド・タイムアウト対策 決定版） ---
   let wakeLock = null;
   let silenceAudio = null;
   let audioCtx = null;
-  let keepAliveInterval = null; // ★追加：生存確認タイマー用
+  let keepAliveInterval = null; 
   const silenceData = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
   async function startKeepAlive() {
     try {
-      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+      // 1. 画面スリープ防止
+      if ('wakeLock' in navigator) {
+        try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
+      }
       
+      // 2. 無音ファイル再生（iOS等のバックグラウンド維持）
       if (!silenceAudio) { 
         silenceAudio = new Audio(silenceData); 
         silenceAudio.loop = true; 
         silenceAudio.volume = 0.01; 
       }
-      await silenceAudio.play();
+      await silenceAudio.play().catch(e => console.warn("Audio play failed", e));
 
+      // 3. Web Audio API によるプロセス維持
       if (!audioCtx) {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
@@ -503,14 +508,16 @@
       }
       if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-      // ★追加：5分(300000ms)おきにFirebaseを微更新して、接続の切断を防ぐ
+      // 4. Firebase接続維持（30秒間隔でサーバー時刻を書き込み、通信を継続させる）
       if (!keepAliveInterval) {
         keepAliveInterval = setInterval(async () => {
-          if (localCallStartPressed) {
-            await update(callStatusRef, { lastActive: new Date().toISOString() });
-            console.log("Ping sent to Firebase to keep connection alive.");
+          if (localCallStartPressed && mySide) {
+            const updateObj = {};
+            updateObj[`lastActive/${mySide}`] = serverTimestamp();
+            await update(callStatusRef, updateObj);
+            console.log("Ping sent to Firebase (30s interval)");
           }
-        }, 300000); 
+        }, 30000); 
       }
 
     } catch (err) { console.warn("Keep-alive Error:", err); }
@@ -521,19 +528,27 @@
     if (silenceAudio) { silenceAudio.pause(); }
     if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
     
-    // ★追加：タイマーを止める
     if (keepAliveInterval) {
       clearInterval(keepAliveInterval);
       keepAliveInterval = null;
     }
   }
 
+  // 画面復帰（タブ切り替えやスリープ解除）時の自動再接続処理
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && localCallStartPressed) {
       if ('wakeLock' in navigator && !wakeLock) {
         try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
       }
       if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      
+      // 画面に戻ってきた際に接続状態を確認し、先手側ならOfferを再送して経路を復旧
+      const snap = await get(callStatusRef);
+      const data = snap.val();
+      if (data && data.status === 'started' && mySide === 'S') {
+        console.log("Recovery: Resending Offer...");
+        sendOffer();
+      }
     }
   });
 
