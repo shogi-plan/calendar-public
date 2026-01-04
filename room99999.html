@@ -1659,7 +1659,7 @@ function updateTimerDisplay() {
     const hType = state.config.handicap || "平手";
     const isHirate = (hType === "平手");
 
-    let kif = "# ----  ぴよ将棋 棋譜ファイル  ----\n";
+    let kif = "# ----  遠タメ将棋 棋譜ファイル  ----\n";
     kif += "棋戦：\n戦型：\n開始日時：\n終了日時：\n";
     
     // 手合割の出力
@@ -1723,7 +1723,7 @@ function updateTimerDisplay() {
     area.select();
     try {
       document.execCommand("copy");
-      alert("ぴよ将棋形式(KIF)でコピーしました。");
+      alert("KIF形式でコピーしました");
     } catch (err) {
       alert("コピー失敗");
     }
