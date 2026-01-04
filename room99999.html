@@ -38,11 +38,14 @@
   box-sizing: border-box;
 }
 
-    #board-container { position: relative; width: 58vw; max-width: 380px; aspect-ratio: 1 / 1; flex-shrink: 1; }
+        #board-container { position: relative; width: 58vw; max-width: 380px; aspect-ratio: 1 / 1; flex-shrink: 1; transition: width 0.2s; }
+    /* 対局中（拡大時）のスタイル */
+    #board-container.playing-size { width: 78vw; max-width: 500px; }
+
     #board { display: grid; grid-template-columns: repeat(9, 11.1111%); grid-template-rows: repeat(9, 11.1111%); border: 1px solid #222; width: 100%; height: 100%; background: var(--board-color); box-sizing: border-box; }
     
-        /* --- 左右に配置する駒台（1列×7行） --- */
-        .hand { 
+    /* --- 左右に配置する駒台（1列×7行） --- */
+    .hand { 
       width: 10vw;               /* 少し幅を狭めて余裕を持たせる */
       max-width: 40px;
       height: 58vw;              /* 盤面の高さに合わせる */
@@ -58,6 +61,14 @@
       position: relative; 
       box-sizing: border-box;
       flex-shrink: 0;
+      transition: width 0.2s, height 0.2s;
+    }
+    /* 対局中（拡大時）のスタイル：盤面に合わせて大きく */
+    .hand.playing-size { 
+      width: 10.5vw; 
+      max-width: 60px; 
+      height: 78vw; 
+      max-height: 500px; 
     }
     .hand::before { 
       content: attr(data-label); 
@@ -402,7 +413,7 @@
     const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
 
   // 駒音の定義
-  const pieceSound = new Audio("spo_ge_syogi_s01.mp3");
+  const pieceSound = new Audio("assets/komaoto.mp3");
   function playPieceSound() {
     pieceSound.currentTime = 0;
     pieceSound.play().catch(e => console.warn("音源の再生に失敗しました:", e));
@@ -424,35 +435,47 @@
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
-  // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
+    // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
   function updateDisplayRotation(isFlipped) {
-  const container = document.getElementById('game-main-inner');
-  const board = document.getElementById('board');
-  const handS = document.getElementById('handS');
-  const handG = document.getElementById('handG');
+    const container = document.getElementById('game-main-inner');
+    const board = document.getElementById('board');
+    const boardContainer = document.getElementById('board-container');
+    const handS = document.getElementById('handS');
+    const handG = document.getElementById('handG');
 
-  // いったん左右の回転状態をリセット
-  handS.classList.remove('left-rotated');
-  handG.classList.remove('left-rotated');
+    // 感想戦モードでない場合のみ、拡大クラスを付与する
+    if (!isReviewMode) {
+      boardContainer.classList.add('playing-size');
+      handS.classList.add('playing-size');
+      handG.classList.add('playing-size');
+    } else {
+      boardContainer.classList.remove('playing-size');
+      handS.classList.remove('playing-size');
+      handG.classList.remove('playing-size');
+    }
 
-  if (isFlipped) {
-    // 後手視点
-    container.insertBefore(handS, container.firstChild); // 左
-    container.appendChild(handG);                         // 右
-    board.style.transform = 'rotate(180deg)';
+    // いったん左右の回転状態をリセット
+    handS.classList.remove('left-rotated');
+    handG.classList.remove('left-rotated');
 
-    // ★左側（handS）を上下反転
-    handS.classList.add('left-rotated');
-  } else {
-    // 先手視点
-    container.insertBefore(handG, container.firstChild); // 左
-    container.appendChild(handS);                         // 右
-    board.style.transform = 'rotate(0deg)';
+    if (isFlipped) {
+      // 後手視点
+      container.insertBefore(handS, container.firstChild); // 左
+      container.appendChild(handG);                         // 右
+      board.style.transform = 'rotate(180deg)';
 
-    // ★左側（handG）を上下反転
-    handG.classList.add('left-rotated');
-  }
-}
+      // ★左側（handS）を上下反転
+      handS.classList.add('left-rotated');
+    } else {
+      // 先手視点
+      container.insertBefore(handG, container.firstChild); // 左
+      container.appendChild(handS);                         // 右
+      board.style.transform = 'rotate(0deg)';
+
+      // ★左側（handG）を上下反転
+      handG.classList.add('left-rotated');
+    }
+  }  
 
     // 初回表示の適用（未選択時は先手視点とする）
   let currentFlip = (mySide === 'G');
@@ -801,7 +824,7 @@ btnCallStart.onclick = async () => {
 
     if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
 
-    // モード判定の同期
+        // モード判定の同期
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
     
     if (data.winner && storedReview) {
@@ -816,6 +839,9 @@ btnCallStart.onclick = async () => {
       viewIdx = state.history.length - 1; 
       syncReviewStateLocally(); 
     }
+
+    // ★追加：サイズ・反転状態を現在のモードに基づいて再適用
+    updateDisplayRotation(currentFlip);
 
     render(); 
     updateKifuList();
