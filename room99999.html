@@ -776,21 +776,24 @@ btnCallStart.onclick = async () => {
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
-    // --- Firebase 将棋データ監視 ---
+     // --- Firebase 将棋データ監視 ---
   let lastInitAt = 0; // 追加：初期化検知用の変数
 
   onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
 
-    // ★追加：初期化（initAtの更新）を検知して、全端末で自分のサイド選択をリセットする
-    if (data.initAt && data.initAt !== lastInitAt) {
+    // ★修正：初期化（initAtの更新）を検知してリセットする。
+    // ただし、ページ読み込み時(lastInitAt === 0)はリセットせず、既存の選択を維持する。
+    if (data.initAt) {
+      if (lastInitAt !== 0 && data.initAt !== lastInitAt) {
+        mySide = '';
+        sessionStorage.removeItem(`mySide_${roomName}`);
+        document.getElementById('mySideSelect').value = '';
+        currentFlip = false; // 先手視点に戻す
+        updateDisplayRotation(false);
+      }
       lastInitAt = data.initAt;
-      mySide = '';
-      sessionStorage.removeItem(`mySide_${roomName}`);
-      document.getElementById('mySideSelect').value = '';
-      currentFlip = false; // 先手視点に戻す
-      updateDisplayRotation(false);
     }
 
     // ★追加：初期化フラグ(lastTick=0)かつ対局未終了なら、感想戦モードを強制解除
