@@ -779,33 +779,37 @@ btnCallStart.onclick = async () => {
      // --- Firebase 将棋データ監視 ---
   let lastInitAt = 0; // 追加：初期化検知用の変数
 
-        onValue(gameRef, (snap) => {
+  onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
 
-    // initAt(対局ID)を最速でstateに格納
+    // ★修正：初期化（initAtの更新）を検知してリセットする。
+    // ただし、ページ読み込み時(lastInitAt === 0)はリセットせず、既存の選択を維持する。
     if (data.initAt) {
-      state.initAt = data.initAt;
       if (lastInitAt !== 0 && data.initAt !== lastInitAt) {
         mySide = '';
         sessionStorage.removeItem(`mySide_${roomName}`);
-        const selEl = document.getElementById('mySideSelect');
-        if (selEl) selEl.value = '';
-        currentFlip = false; 
+        document.getElementById('mySideSelect').value = '';
+        currentFlip = false; // 先手視点に戻す
         updateDisplayRotation(false);
       }
       lastInitAt = data.initAt;
     }
 
+    // ★追加：初期化フラグ(lastTick=0)かつ対局未終了なら、感想戦モードを強制解除
     if (data.lastTick === 0 && !data.winner) {
       isReviewMode = false;
       sessionStorage.removeItem(`isReview_${roomName}`);
       Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
-      rvState = null;
+      rvState = null; // 感想戦の盤面キャッシュを破棄
     }
 
-    const btnRev = document.getElementById('btnToggleReview');
-    if (btnRev) btnRev.disabled = (!data.winner || data.lastTick === 0);
+    // 感想戦ボタンの活性状態を制御（勝者が決まっていない＝対局中なら無効。ただし準備中(lastTick=0)も無効）
+    if (!data.winner || data.lastTick === 0) {
+      document.getElementById('btnToggleReview').disabled = true;
+    } else {
+      document.getElementById('btnToggleReview').disabled = false;
+    }
 
     state.board = JSON.parse(data.board);
     state.handS = data.handS || [];
@@ -813,50 +817,50 @@ btnCallStart.onclick = async () => {
     state.turn = data.turn || 'S';
     state.timers = data.timers || {S:600, G:600};
     state.config = data.config || {main:600, byo:30};
-    state.lastTick = (typeof data.lastTick === 'number') ? data.lastTick : 0;
+
+    if (typeof data.lastTick === 'number') {
+      state.lastTick = data.lastTick;
+    }
     state.winner = data.winner || null;    
     state.winReason = data.winReason || "";
     state.history = data.history || [];
 
-    // モード判定の同期
+    if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
+
+        // モード判定の同期
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
+    
     if (data.winner && storedReview) {
       isReviewMode = true;
-      if (btnRev) btnRev.textContent = "戻る";
+      document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
       if (!rvState) syncReviewStateLocally(); 
     } else {
       isReviewMode = false;
-      if (btnRev) btnRev.textContent = "感想戦";
+      document.getElementById('btnToggleReview').textContent = "感想戦";
       document.getElementById('review-panel').style.display = 'none';
       viewIdx = state.history.length - 1; 
       syncReviewStateLocally(); 
     }
 
+    // ★追加：サイズ・反転状態を現在のモードに基づいて再適用
     updateDisplayRotation(currentFlip);
+
     render(); 
     updateKifuList();
     updateTimerDisplay();
-
-    // 勝者が存在する場合のみポップアップ判定を行う
-    if (state.winner) {
-      showGameOverPopup(state.winner, state.winReason);
-    }
     
     get(readyRef).then(rsnap => {
       const rData = rsnap.val() || { S: false, G: false };
       const isDuringGame = (state.lastTick !== 0 && !state.winner);
-      const btnR = document.getElementById('btnReady');
-      if (btnR) {
-        if (isDuringGame) {
-          btnR.disabled = true;
-          btnR.textContent = "対局中";
-          btnR.style.background = "#607d8b";
-        } else {
-          btnR.disabled = false;
-          btnR.textContent = rData[mySide] ? "準備解除" : "対局準備完了";
-          btnR.style.background = rData[mySide] ? "#757575" : "#ff9800";
-        }
+      if (isDuringGame) {
+        btnReady.disabled = true;
+        btnReady.textContent = "対局中";
+        btnReady.style.background = "#607d8b";
+      } else {
+        btnReady.disabled = false;
+        btnReady.textContent = rData[mySide] ? "準備解除" : "対局準備完了";
+        btnReady.style.background = rData[mySide] ? "#757575" : "#ff9800";
       }
     });
   });
@@ -1043,6 +1047,9 @@ btnCallStart.onclick = async () => {
   }
 
 function finish(moveData) {
+  // すでに勝者が決まっている場合は二重送信を防止するために終了する
+  if (state.winner) return;
+
   const nextTurn = (state.turn === 'S' ? 'G' : 'S');
   
   // 1. 反則判定を先行して行う
@@ -1072,7 +1079,7 @@ function finish(moveData) {
   const now = getServerNow(); 
   let newTimers = { ...state.timers };
   
-  if (state.lastTick !== 0 && !state.winner) {
+  if (state.lastTick !== 0) {
     const elapsedTotal = Math.floor((now - state.lastTick) / 1000);
     const currentMain = state.timers[state.turn];
     if (currentMain < 900000) {
@@ -1080,18 +1087,22 @@ function finish(moveData) {
     }
   }
 
-    if (foulReason) {
+  if (foulReason) {
     state.winner = nextTurn;
     state.winReason = foulReason;
     state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])], type: moveData.type + "(反則)" });
-    // 修正：ここではポップアップを呼ばず、Firebaseの更新通知（onValue）に任せる
   } else {
     if (isMated) { 
       state.winner = state.turn; 
       state.winReason = "詰み"; 
-      // 修正：ここではポップアップを呼ばず、Firebaseの更新通知（onValue）に任せる
     }
-    state.history.push({ ...moveText, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
+    // 時間切れの場合は moveData 自体に winner 等の情報が含まれている可能性があるため
+    // state.winner がまだ null の場合にのみ上書き
+    if (moveData.type === "時間切れ") {
+      state.winner = (moveData.side === 'S' ? 'G' : 'S');
+      state.winReason = "時間切れ";
+    }
+    state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
   }
 
   if (!state.winner) {
@@ -1102,6 +1113,7 @@ function finish(moveData) {
   selH = null; 
   possibleMoves = [];
 
+  // Firebaseへ送信
   set(gameRef, { 
     board: JSON.stringify(state.board), 
     handS: state.handS || [], 
@@ -1126,34 +1138,24 @@ function finish(moveData) {
     return false;
   };
 
-     function showGameOverPopup(winner, reason = "") {
-    if (!winner) return;
-    
-    // state.initAt が確実に存在するか、あるいは history の長さ等で一意のキーを作る
-    const gameId = state.initAt || "0";
-    const historyLen = state.history ? state.history.length : 0;
-    const key = `shown_${roomName}_${gameId}_${historyLen}`;
-    
+        function showGameOverPopup(winner, reason = "") {
+    const key = `shown_${roomName}_${state.history.length}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "true");
 
+    // アラートを表示し、ユーザーが「OK」を押した後に実行される
     setTimeout(() => { 
-      const winnerName = (winner === 'S' ? '先手▲' : '後手△');
-      const reasonText = reason ? `${reason}により、` : "";
+      alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); 
       
-      alert(`${reasonText}${winnerName}の勝ちです！`); 
-      
-      // ポップアップ後に感想戦モードへ移行
+      // ダイアログを閉じた後に感想戦モードへ移行
       setReviewMode(true);
-      if (state.history && state.history.length > 0) {
-        viewIdx = state.history.length - 1;
-      }
       syncReviewStateLocally(); 
+      pushReviewUpdate();
       
+      // ★追加：ダイアログを閉じた直後にレイアウトを再適用して表示崩れを直す
       updateDisplayRotation(currentFlip);
       render();
-      updateKifuList();
-    }, 500);
+    }, 200);
   }
 
     // --- 駒落ち用初期配置生成関数 ---
@@ -1562,53 +1564,6 @@ function render() {
     
     return `${idx}.${side}${isSame ? "同" : x+y}${type}`;
   }
-  
-   // --- 時間切れ判定専用の関数 ---
-  function checkTimeUp(timedOutSide) {
-    // 既に勝敗が決まっている、または感想戦、または準備中は無視
-    if (state.winner || isReviewMode || state.lastTick === 0) return;
-
-    // 「自分の手番」かつ「自分の時間が切れた」時だけ、Firebaseへ書き込みを試みる
-    if (timedOutSide === mySide && state.turn === mySide) {
-      const newWinner = (mySide === 'S' ? 'G' : 'S');
-      const reason = "時間切れ";
-
-      // 棋譜履歴に追加するデータを作成
-      const timeUpMove = {
-        side: mySide,
-        type: "時間切れ",
-        toX: null,
-        toY: null,
-        board: JSON.stringify(state.board),
-        handS: [...(state.handS || [])],
-        handG: [...(state.handG || [])]
-      };
-
-      const newHistory = [...(state.history || []), timeUpMove];
-
-      // ローカル側で即座にロックをかけ、多重送信を防ぐ
-      state.winner = newWinner;
-      state.winReason = reason;
-
-      // サーバーへ勝敗を確定させる
-      update(gameRef, {
-        winner: newWinner,
-        winReason: reason,
-        lastTick: serverTimestamp(),
-        history: newHistory,
-        updatedAt: serverTimestamp()
-      }).then(() => {
-        console.log("Time up recorded successfully.");
-      }).catch((error) => {
-        console.error("Time up update failed:", error);
-      });
-    }
-  }
-
-  // 時間切れ用の棋譜テキスト整形補助
-  function moveTextForTimeUp(m) {
-    return { ...m, type: "時間切れ" };
-  }
 
 function updateTimerDisplay() {
   // Date.now() ではなく補正後の時刻を使用
@@ -1650,10 +1605,17 @@ function updateTimerDisplay() {
           displayStr = `${mark} 秒:${byoRem}`;
           if (byoRem <= 5) isByoAlert = true;
           
-                    // タイムアップ判定
-          // 表示上の秒数が0以下になったら、判定用関数を呼び出す
-          if (byoRem <= 0 && !state.winner && !isReviewMode && state.lastTick !== 0) {
-            checkTimeUp(s);
+          // タイムアップ判定 (修正：相手が落ちていても勝者側が処理できるように mySide 条件を調整)
+          if (byoRem <= 0 && !state.winner) {
+            // 本来は負けた側(s)が自分で送るのがベストだが、
+            // 負けた側がオフラインの場合、勝っている側(mySide !== s)が代行して終了処理を送る。
+            // 観戦者がいない前提（二人対局）なら mySide が空でないことを確認。
+            if (mySide !== "" && (s === mySide || state.turn !== mySide)) {
+              state.winner = (s === 'S' ? 'G' : 'S'); 
+              state.winReason = "時間切れ"; 
+              // 負けた側のサイド(s)として終了データを送信
+              finish({ side: s, type: "時間切れ", toX: null, toY: null }); 
+            }
           }
         }
       }
