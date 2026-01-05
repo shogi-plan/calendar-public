@@ -1052,7 +1052,6 @@ function finish(moveData) {
 
   const nextTurn = (state.turn === 'S' ? 'G' : 'S');
   
-  // 1. 反則判定を先行して行う
   let foulReason = "";
   if (isChecked(state.board, state.turn)) { 
     foulReason = "王手放置"; 
@@ -1064,13 +1063,11 @@ function finish(moveData) {
     if (count > 1) foulReason = "二歩";
   }
 
-  // 2. 詰み判定
   let isMated = false;
   if (!foulReason && state.history.length > 2) {
     if (isCheckmate(state.board, nextTurn, state.handS, state.handG)) isMated = true;
   }
 
-  // ★駒音の再生：反則、詰み、投了、時間切れでない場合のみ鳴らす
   const isGameOverMove = foulReason || isMated || moveData.type === "投了" || moveData.type === "時間切れ";
   if (!isGameOverMove) {
     playPieceSound();
@@ -1096,8 +1093,6 @@ function finish(moveData) {
       state.winner = state.turn; 
       state.winReason = "詰み"; 
     }
-    // 時間切れの場合は moveData 自体に winner 等の情報が含まれている可能性があるため
-    // state.winner がまだ null の場合にのみ上書き
     if (moveData.type === "時間切れ") {
       state.winner = (moveData.side === 'S' ? 'G' : 'S');
       state.winReason = "時間切れ";
@@ -1113,7 +1108,11 @@ function finish(moveData) {
   selH = null; 
   possibleMoves = [];
 
-  // Firebaseへ送信
+  // ★重要：送信前にローカルでもポップアップを呼ぶ
+  if (state.winner) {
+    showGameOverPopup(state.winner, state.winReason);
+  }
+
   set(gameRef, { 
     board: JSON.stringify(state.board), 
     handS: state.handS || [], 
@@ -1138,25 +1137,28 @@ function finish(moveData) {
     return false;
   };
 
-        function showGameOverPopup(winner, reason = "") {
-    const key = `shown_${roomName}_${state.history.length}`;
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, "true");
+    function showGameOverPopup(winner, reason = "") {
+  // すでに表示済みなら何もしない
+  const key = `shown_${roomName}_${state.history.length}_${winner}`;
+  if (sessionStorage.getItem(key)) return;
+  sessionStorage.setItem(key, "true");
 
-    // アラートを表示し、ユーザーが「OK」を押した後に実行される
-    setTimeout(() => { 
-      alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); 
-      
-      // ダイアログを閉じた後に感想戦モードへ移行
-      setReviewMode(true);
-      syncReviewStateLocally(); 
-      pushReviewUpdate();
-      
-      // ★追加：ダイアログを閉じた直後にレイアウトを再適用して表示崩れを直す
-      updateDisplayRotation(currentFlip);
-      render();
-    }, 200);
-  }
+  // 少し待機してから表示（描画の確定を待つ）
+  setTimeout(() => { 
+    const msg = (reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！";
+    alert(msg); 
+    
+    // 感想戦モードへの移行
+    setReviewMode(true);
+    syncReviewStateLocally(); 
+    pushReviewUpdate();
+    
+    // レイアウト再適用
+    updateDisplayRotation(currentFlip);
+    render();
+    updateKifuList();
+  }, 300); // 余裕を持って300msに設定
+}
 
     // --- 駒落ち用初期配置生成関数 ---
   function generateInitialBoard(handicapType, uwateSide) {
@@ -1566,11 +1568,7 @@ function render() {
   }
 
 function updateTimerDisplay() {
-  // Date.now() ではなく補正後の時刻を使用
   const now = getServerNow(); 
-  
-    // 経過秒の計算
-  // 0.5秒程度の余裕(500ms引く)を持たせることで、通信ラグによる「10:01」跳ねを物理的に防ぎます
   const diff = now - state.lastTick;
   const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor(Math.max(0, diff - 200) / 1000);
 
@@ -1585,42 +1583,37 @@ function updateTimerDisplay() {
     const isMainInf = (remMain >= 900000);
     const isByoInf = (state.config.byo >= 900000);
 
+    // 手番側かつ対局中の計算
     if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
-      // 手番側の計算
       if (isMainInf) {
         displayStr = `${mark} 無制限`;
       } else if (remMain > elapsed) {
-        // 持ち時間がある
         const currentRem = remMain - elapsed;
         displayStr = `${mark} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
       } else {
-        // 秒読みフェーズ
         if (isByoInf) {
           displayStr = `${mark} 秒:無制限`;
         } else {
-          // 秒読み計算：(elapsed - remMain) は「持ち時間を使い切ってから何秒経過したか」を示す
           const overTime = Math.max(0, elapsed - remMain);
           const byoRem = Math.max(0, (state.config.byo || 30) - overTime);
-          
           displayStr = `${mark} 秒:${byoRem}`;
           if (byoRem <= 5) isByoAlert = true;
           
-          // タイムアップ判定 (修正：相手が落ちていても勝者側が処理できるように mySide 条件を調整)
+          // --- ここが重要 ---
+          // 自分の番か相手の番かに関わらず、表示上の秒読みが0になったら finish を実行する
           if (byoRem <= 0 && !state.winner) {
-            // 本来は負けた側(s)が自分で送るのがベストだが、
-            // 負けた側がオフラインの場合、勝っている側(mySide !== s)が代行して終了処理を送る。
-            // 観戦者がいない前提（二人対局）なら mySide が空でないことを確認。
-            if (mySide !== "" && (s === mySide || state.turn !== mySide)) {
-              state.winner = (s === 'S' ? 'G' : 'S'); 
-              state.winReason = "時間切れ"; 
-              // 負けた側のサイド(s)として終了データを送信
-              finish({ side: s, type: "時間切れ", toX: null, toY: null }); 
-            }
+              // 自分が「先手」か「後手」として参加している場合のみ実行（観戦者の二重書き込み防止）
+              if (mySide === 'S' || mySide === 'G') {
+                  state.winner = (s === 'S' ? 'G' : 'S'); 
+                  state.winReason = "時間切れ"; 
+                  // finish内部で state.winner がある場合は return するガードがあるため
+                  // どちらのブラウザが先に送っても安全です
+                  finish({ side: s, type: "時間切れ", toX: null, toY: null }); 
+              }
           }
         }
       }
     } else {
-      // 待機側または停止中
       if (isMainInf) {
         displayStr = `${mark} 無制限`;
       } else if (remMain > 0) {
