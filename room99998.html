@@ -1050,24 +1050,28 @@ btnCallStart.onclick = async () => {
   }
 
 function finish(moveData) {
-  // すでに勝者が決まっている場合は二重送信を防止するために終了する
-  if (state.winner) return;
+  // すでに勝者が決まっていて、かつそれが「投了」や「時間切れ」でない場合のみガードする
+  // (投了時は呼び出し元でwinnerをセットしてからfinishを呼ぶため)
+  if (state.winner && moveData.type !== "投了" && moveData.type !== "時間切れ") return;
 
   const nextTurn = (state.turn === 'S' ? 'G' : 'S');
   
   let foulReason = "";
-  if (isChecked(state.board, state.turn)) { 
-    foulReason = "王手放置"; 
-  } else if (moveData.isDrop && moveData.type === 'FU') {
-    let count = 0;
-    for (let y = 0; y < 9; y++) {
-      if (state.board[y][moveData.toX]?.type === 'FU' && state.board[y][moveData.toX]?.owner === state.turn) count++;
+  // 通常の指し手の場合のみ反則チェックを行う
+  if (moveData.type !== "投了" && moveData.type !== "時間切れ") {
+    if (isChecked(state.board, state.turn)) { 
+      foulReason = "王手放置"; 
+    } else if (moveData.isDrop && moveData.type === 'FU') {
+      let count = 0;
+      for (let y = 0; y < 9; y++) {
+        if (state.board[y][moveData.toX]?.type === 'FU' && state.board[y][moveData.toX]?.owner === state.turn) count++;
+      }
+      if (count > 1) foulReason = "二歩";
     }
-    if (count > 1) foulReason = "二歩";
   }
 
   let isMated = false;
-  if (!foulReason && state.history.length > 2) {
+  if (!foulReason && state.history.length > 2 && moveData.type !== "投了" && moveData.type !== "時間切れ") {
     if (isCheckmate(state.board, nextTurn, state.handS, state.handG)) isMated = true;
   }
 
@@ -1100,6 +1104,7 @@ function finish(moveData) {
       state.winner = (moveData.side === 'S' ? 'G' : 'S');
       state.winReason = "時間切れ";
     }
+    // 投了の場合は呼び出し元で既にセットされている state.winner/winReason を使用
     state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
   }
 
@@ -1111,7 +1116,7 @@ function finish(moveData) {
   selH = null; 
   possibleMoves = [];
 
-  // --- 変更箇所：Firebaseへ先に書き込み、完了後にダイアログを表示する ---
+  // Firebaseへ書き込み
   set(gameRef, { 
     board: JSON.stringify(state.board), 
     handS: state.handS || [], 
@@ -1125,7 +1130,6 @@ function finish(moveData) {
     history: state.history,
     updatedAt: serverTimestamp() 
   }).then(() => {
-    // 書き込み完了後にローカルでポップアップを表示
     if (state.winner) {
       showGameOverPopup(state.winner, state.winReason);
     }
@@ -1142,18 +1146,20 @@ function finish(moveData) {
   };
 
   function showGameOverPopup(winner, reason = "") {
-  // すでに表示済みなら何もしない。手数と勝者をキーに含めて厳密に管理。
+  if (!winner) return;
+  
+  // すでに表示済みなら何もしない。
   const key = `shown_${roomName}_${state.history.length}_${winner}`;
   if (sessionStorage.getItem(key)) return;
   sessionStorage.setItem(key, "true");
 
-  // alertがブラウザの動作を止めるため、少し遅延させて描画を確定させる
+  // 描画を確実にするため遅延実行
   setTimeout(() => { 
     const winnerName = (winner === 'S' ? '先手▲' : '後手△');
     const msg = (reason ? `${reason}により、` : "") + `${winnerName}の勝ちです！`;
     alert(msg); 
     
-    // ダイアログを閉じた後に感想戦モードへ移行
+    // 感想戦モードへ移行
     setReviewMode(true);
     syncReviewStateLocally(); 
     pushReviewUpdate();
@@ -1424,10 +1430,6 @@ function render() {
     }
   }
 
-  // 【追加】対局中（開始済みかつ未終了）は先手/後手選択を無効化
-  const isDuringGame = (state.lastTick !== 0 && !state.winner);
-  document.getElementById('mySideSelect').disabled = isDuringGame;
-
   let b, hs, hg;
   if (isReviewMode) {
     b = rvState.board;
@@ -1457,7 +1459,7 @@ function render() {
     }
   }
 
-  const drawH = (id, list, owner) => {
+        const drawH = (id, list, owner) => {
     const el = document.getElementById(id);
     el.innerHTML = '';
     // 駒の種類と表示順序を定義
@@ -1534,7 +1536,7 @@ function render() {
   document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
   document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
   document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
-}
+} // render 終了
 
   // 棋譜リストの更新
   function updateKifuList() {
@@ -1695,25 +1697,20 @@ function updateTimerDisplay() {
     else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
   };
-    document.getElementById('btnResign').onclick = () => {
-    if (state.winner || state.turn !== mySide) return;
-    if (confirm("投了しますか？")) {
-      // ローカルのstateを更新してからfinishを呼ぶ
-      state.winner = (mySide === 'S' ? 'G' : 'S');
-      state.winReason = "投了";
-      // finish内部でFirebaseへのsetとshowGameOverPopupの呼び出しが行われます
-      finish({
-        side: mySide,
-        fromX: null,
-        fromY: null,
-        toX: null,
-        toY: null,
-        type: "投了",
-        isDrop: false,
-        isPromoted: false
-      });
-    }
-  };
+  document.getElementById('btnResign').onclick = () => { 
+  if (state.winner || state.turn !== mySide) return; 
+  if (confirm("投了しますか？")) { 
+    state.winner = (mySide === 'S' ? 'G' : 'S'); 
+    state.winReason = "投了"; 
+    finish({ 
+      side: mySide, 
+      type: "投了", 
+      toX: null, 
+      toY: null, 
+      isDrop: false 
+    }); 
+  } 
+};
 
         document.getElementById('btnKif').onclick = () => {
     const hType = state.config.handicap || "平手";
