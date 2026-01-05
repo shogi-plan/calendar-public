@@ -919,8 +919,8 @@ btnCallStart.onclick = async () => {
       // サーバー時刻を書き込む
       await update(gameRef, { 
         lastTick: serverTimestamp(),
-        // 念のため、初期化時のタイマーも再セットしてズレを防止
-        timers: state.config.main ? {S: state.config.main, G: state.config.main} : {S: 600, G: 600},
+        // 修正箇所：固定値 600 ではなく、設定されている main 時間を使用するように修正
+        timers: { S: state.config.main, G: state.config.main },
         updatedAt: serverTimestamp() 
       });
       await set(readyRef, { S: false, G: false });
