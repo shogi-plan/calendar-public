@@ -779,7 +779,7 @@ btnCallStart.onclick = async () => {
      // --- Firebase 将棋データ監視 ---
   let lastInitAt = 0; // 追加：初期化検知用の変数
 
-  onValue(gameRef, (snap) => {
+    onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
 
@@ -825,9 +825,12 @@ btnCallStart.onclick = async () => {
     state.winReason = data.winReason || "";
     state.history = data.history || [];
 
-    if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
+    // --- 変更箇所：勝敗が決まっている場合は、最優先でポップアップを表示 ---
+    if (state.winner) {
+      showGameOverPopup(state.winner, state.winReason || "");
+    }
 
-        // モード判定の同期
+    // モード判定の同期
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
     
     if (data.winner && storedReview) {
@@ -1108,11 +1111,7 @@ function finish(moveData) {
   selH = null; 
   possibleMoves = [];
 
-  // ★重要：送信前にローカルでもポップアップを呼ぶ
-  if (state.winner) {
-    showGameOverPopup(state.winner, state.winReason);
-  }
-
+  // --- 変更箇所：Firebaseへ先に書き込み、完了後にダイアログを表示する ---
   set(gameRef, { 
     board: JSON.stringify(state.board), 
     handS: state.handS || [], 
@@ -1125,6 +1124,11 @@ function finish(moveData) {
     winReason: state.winReason || "", 
     history: state.history,
     updatedAt: serverTimestamp() 
+  }).then(() => {
+    // 書き込み完了後にローカルでポップアップを表示
+    if (state.winner) {
+      showGameOverPopup(state.winner, state.winReason);
+    }
   });
 }
 
@@ -1137,27 +1141,28 @@ function finish(moveData) {
     return false;
   };
 
-    function showGameOverPopup(winner, reason = "") {
-  // すでに表示済みなら何もしない
+  function showGameOverPopup(winner, reason = "") {
+  // すでに表示済みなら何もしない。手数と勝者をキーに含めて厳密に管理。
   const key = `shown_${roomName}_${state.history.length}_${winner}`;
   if (sessionStorage.getItem(key)) return;
   sessionStorage.setItem(key, "true");
 
-  // 少し待機してから表示（描画の確定を待つ）
+  // alertがブラウザの動作を止めるため、少し遅延させて描画を確定させる
   setTimeout(() => { 
-    const msg = (reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！";
+    const winnerName = (winner === 'S' ? '先手▲' : '後手△');
+    const msg = (reason ? `${reason}により、` : "") + `${winnerName}の勝ちです！`;
     alert(msg); 
     
-    // 感想戦モードへの移行
+    // ダイアログを閉じた後に感想戦モードへ移行
     setReviewMode(true);
     syncReviewStateLocally(); 
     pushReviewUpdate();
     
-    // レイアウト再適用
+    // 画面の更新
     updateDisplayRotation(currentFlip);
     render();
     updateKifuList();
-  }, 300); // 余裕を持って300msに設定
+  }, 500); 
 }
 
     // --- 駒落ち用初期配置生成関数 ---
@@ -1599,16 +1604,20 @@ function updateTimerDisplay() {
           displayStr = `${mark} 秒:${byoRem}`;
           if (byoRem <= 5) isByoAlert = true;
           
-          // --- ここが重要 ---
-          // 自分の番か相手の番かに関わらず、表示上の秒読みが0になったら finish を実行する
+                    // --- ここが重要 ---
+          // 表示上の秒読みが0になったら finish を実行する
           if (byoRem <= 0 && !state.winner) {
-              // 自分が「先手」か「後手」として参加している場合のみ実行（観戦者の二重書き込み防止）
+              // 対局者(mySideがSまたはG)のみ判定を実行
               if (mySide === 'S' || mySide === 'G') {
-                  state.winner = (s === 'S' ? 'G' : 'S'); 
-                  state.winReason = "時間切れ"; 
-                  // finish内部で state.winner がある場合は return するガードがあるため
-                  // どちらのブラウザが先に送っても安全です
-                  finish({ side: s, type: "時間切れ", toX: null, toY: null }); 
+                  // finish 関数を呼び出す。
+                  // 敗者の電源が落ちていても、勝者側からこの関数が呼ばれFirebaseが更新されます。
+                  finish({ 
+                    side: s, 
+                    type: "時間切れ", 
+                    toX: null, 
+                    toY: null,
+                    isDrop: false 
+                  }); 
               }
           }
         }
