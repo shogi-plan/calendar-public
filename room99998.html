@@ -639,7 +639,6 @@
     } catch (e) { console.error("Restart ICE failed:", e); }
   }
 
-  // 修正後
 btnCallStart.onclick = async () => { 
   if (localCallStartPressed || !mySide) return; 
   
@@ -648,11 +647,18 @@ btnCallStart.onclick = async () => {
   updateCallUI(); 
 
   try { 
-    // シグナリング情報の初期化（古い情報を消す）
-    await remove(signalingRef);
+    // 自分が最初の発信者なら、古いシグナリング情報を一掃する
+    const currentSnap = await get(callStatusRef);
+    const currentStatus = currentSnap.val();
+    if (!currentStatus || !currentStatus.users || (!currentStatus.users.S && !currentStatus.users.G)) {
+      await remove(signalingRef);
+    }
 
     await startKeepAlive(); 
     await startLocalStream(); 
+    
+    // PeerConnectionを事前に作成しておく
+    createPeerConnection();
     
     const snap = await get(callStatusRef); 
     let callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } }; 
@@ -674,14 +680,13 @@ btnCallStart.onclick = async () => {
       timestamp: serverTimestamp() 
     }); 
 
-    // 自分が後から入った場合（startedになった場合）、または自分が先手ならOfferを送る
-    // WebRTCの基本として「先手▲(S)」が常にOfferを投げるルールに統一すると安定します
+    // 状態がstarted（二人揃った）かつ、自分が先手(S)ならOfferを送る
     if (newStatus === 'started' && mySide === 'S') {
-      // 相手が準備できるまでわずかに待機
       setTimeout(async () => {
         await sendOffer(); 
-      }, 1000);
+      }, 1500); // 相手のonValue検知時間を考慮して少し長めに待機
     }
+    // 自分が後手(G)で、既にstartedなら、相手(S)からのOfferが飛んでくるのを待つ状態になる
   } catch (e) { 
     console.error("Call Start Error:", e);
     localCallStartPressed = false; 
@@ -744,7 +749,7 @@ btnCallStart.onclick = async () => {
     btnCallEnd.style.opacity = !localCallStartPressed ? "0.5" : "1";
   }
 
-    // --- 通話ステータス監視 (リロード対策版) ---
+        // --- 通話ステータス監視 (リロード対策版) ---
     onValue(callStatusRef, async (snap) => { 
     const data = snap.val(); 
     if (!data) {
@@ -765,18 +770,24 @@ btnCallStart.onclick = async () => {
     const otherSide = (mySide === 'S' ? 'G' : 'S');
     const isOtherRegistered = !!(data.users && data.users[otherSide]);
 
-    // 【重要】自分がFirebase上で登録されているが、ローカルで開始フラグが立っていない場合（リロード等）
-    if (iAmRegisteredOnFirebase && !localCallStartPressed) {
+    // 【修正】自分が開始ボタンを押した、あるいはFirebase上で開始状態なのに、ストリームが動いていない場合に初期化
+    if (iAmRegisteredOnFirebase && (!localCallStartPressed || !localStream)) {
       localCallStartPressed = true;
       updateCallUI(); 
       try {
         await startKeepAlive();
         await startLocalStream();
-        // 自分が先手(S)で、相手もいるなら自分からOffer
-        if (isOtherRegistered && mySide === 'S') {
+        
+        // RTCPeerConnectionの準備を確実に行う
+        createPeerConnection();
+
+        // statusがstarted（両者揃った）かつ、自分が先手(S)ならOfferを送る
+        if (data.status === 'started' && mySide === 'S') {
+          console.log("Both ready. S is sending Offer...");
           setTimeout(sendOffer, 1000);
         }
       } catch (e) {
+        console.error("Auto setup error:", e);
         localCallStartPressed = false;
         updateCallUI();
       }
