@@ -1424,6 +1424,10 @@ function render() {
     }
   }
 
+  // 【追加】対局中（開始済みかつ未終了）は先手/後手選択を無効化
+  const isDuringGame = (state.lastTick !== 0 && !state.winner);
+  document.getElementById('mySideSelect').disabled = isDuringGame;
+
   let b, hs, hg;
   if (isReviewMode) {
     b = rvState.board;
@@ -1453,7 +1457,7 @@ function render() {
     }
   }
 
-        const drawH = (id, list, owner) => {
+  const drawH = (id, list, owner) => {
     const el = document.getElementById(id);
     el.innerHTML = '';
     // 駒の種類と表示順序を定義
@@ -1530,7 +1534,7 @@ function render() {
   document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
   document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
   document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
-} // render 終了
+}
 
   // 棋譜リストの更新
   function updateKifuList() {
@@ -1691,7 +1695,26 @@ function updateTimerDisplay() {
     else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
   };
-  document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
+    document.getElementById('btnResign').onclick = () => {
+    if (state.winner || state.turn !== mySide) return;
+    if (confirm("投了しますか？")) {
+      // ローカルのstateを更新してからfinishを呼ぶ
+      state.winner = (mySide === 'S' ? 'G' : 'S');
+      state.winReason = "投了";
+      // finish内部でFirebaseへのsetとshowGameOverPopupの呼び出しが行われます
+      finish({
+        side: mySide,
+        fromX: null,
+        fromY: null,
+        toX: null,
+        toY: null,
+        type: "投了",
+        isDrop: false,
+        isPromoted: false
+      });
+    }
+  };
+
         document.getElementById('btnKif').onclick = () => {
     const hType = state.config.handicap || "平手";
     const isHirate = (hType === "平手");
