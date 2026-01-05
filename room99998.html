@@ -642,14 +642,14 @@
 btnCallStart.onclick = async () => { 
   if (localCallStartPressed || !mySide) return; 
   
-  // ローカルフラグを即座に立て、UIを更新（連打防止）
   localCallStartPressed = true; 
   updateCallUI(); 
 
   try { 
-    // 自分が最初の発信者なら、古いシグナリング情報を一掃する
+    // 【重要】開始時に古いシグナリングデータを確実に掃除
     const currentSnap = await get(callStatusRef);
     const currentStatus = currentSnap.val();
+    // 誰もいない、あるいは自分が最初の一人目ならシグナリングをクリア
     if (!currentStatus || !currentStatus.users || (!currentStatus.users.S && !currentStatus.users.G)) {
       await remove(signalingRef);
     }
@@ -657,36 +657,30 @@ btnCallStart.onclick = async () => {
     await startKeepAlive(); 
     await startLocalStream(); 
     
-    // PeerConnectionを事前に作成しておく
+    // PeerConnectionの初期化
     createPeerConnection();
     
-    const snap = await get(callStatusRef); 
-    let callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } }; 
-    if (!callData.users) callData.users = { S: false, G: false }; 
-    
-    // 自分のサイドを登録
-    callData.users[mySide] = true; 
-    
-    // 相手も既に登録されているか確認
-    const otherSide = (mySide === 'S' ? 'G' : 'S');
-    const isOtherReady = !!(callData.users[otherSide]);
-    
-    let newStatus = isOtherReady ? 'started' : 'waiting'; 
+    // 自分のオンライン状態をFirebaseへ報告
+    const updates = {};
+    updates[`users/${mySide}`] = true;
+    // 誰かが入った時点でステータスを更新（ロジック簡略化のためupdateを使用）
+    await update(callStatusRef, updates);
 
-    // Firebaseを更新
-    await update(callStatusRef, { 
-      status: newStatus, 
-      users: callData.users, 
-      timestamp: serverTimestamp() 
-    }); 
+    // 最新の状態を再取得して判定
+    const nextSnap = await get(callStatusRef);
+    const nextData = nextSnap.val();
+    const isOtherReady = nextData.users && (mySide === 'S' ? nextData.users.G : nextData.users.S);
 
-    // 状態がstarted（二人揃った）かつ、自分が先手(S)ならOfferを送る
-    if (newStatus === 'started' && mySide === 'S') {
-      setTimeout(async () => {
-        await sendOffer(); 
-      }, 1500); // 相手のonValue検知時間を考慮して少し長めに待機
+    if (isOtherReady) {
+      // 二人揃ったのでステータスをstartedに
+      await update(callStatusRef, { status: 'started' });
+      // 先手がOfferを送る（少し待って相手の準備を待つ）
+      if (mySide === 'S') {
+        setTimeout(sendOffer, 2000);
+      }
+    } else {
+      await update(callStatusRef, { status: 'waiting' });
     }
-    // 自分が後手(G)で、既にstartedなら、相手(S)からのOfferが飛んでくるのを待つ状態になる
   } catch (e) { 
     console.error("Call Start Error:", e);
     localCallStartPressed = false; 
@@ -697,25 +691,29 @@ btnCallStart.onclick = async () => {
 };
 
     // --- 通話終了ボタンの処理 ---
-  btnCallEnd.onclick = async () => { 
-    // 手動終了フラグを立てる（これでリロードが実行されるようになる）
+    btnCallEnd.onclick = async () => { 
     sessionStorage.setItem(`isManualEnd_${roomName}`, 'true');
 
+    // 自分の接続フラグを折る
+    const updates = {};
+    updates[`users/${mySide}`] = false;
+    await update(callStatusRef, updates);
+
+    // 状態を再確認
     const snap = await get(callStatusRef);
-    if (snap.exists()) {
-      let data = snap.val();
-      if (data.users) {
-        data.users[mySide] = false;
-        // 両方のフラグが落ちたら完全に終了（ended）にする
-        if (!data.users.S && !data.users.G) {
-          await update(callStatusRef, { status: 'ended', users: { S: false, G: false } });
-          remove(signalingRef);
-        } else {
-          // 片方が残っているなら待機状態(waiting)に更新
-          await update(callStatusRef, { status: 'waiting', users: data.users });
-        }
+    const data = snap.val();
+    
+    if (data && data.users) {
+      // 両方いなくなったら完全にリセット
+      if (!data.users.S && !data.users.G) {
+        await set(callStatusRef, { status: 'ended', users: { S: false, G: false } });
+        await remove(signalingRef);
+      } else {
+        // 片方残っている場合はwaitingに戻す（これで相手側も終了を検知できる）
+        await update(callStatusRef, { status: 'waiting' });
       }
     }
+    
     handleCallEndInternal(); 
   };
 
@@ -749,42 +747,44 @@ btnCallStart.onclick = async () => {
     btnCallEnd.style.opacity = !localCallStartPressed ? "0.5" : "1";
   }
 
-        // --- 通話ステータス監視 (リロード対策版) ---
-    onValue(callStatusRef, async (snap) => { 
+    // --- 通話ステータス監視 (リロード対策版) ---
+        onValue(callStatusRef, async (snap) => { 
     const data = snap.val(); 
     if (!data) {
       updateCallUI();
       return;
     }
     
-    // statusがended、もしくはusersが空の場合は通話終了処理
-    if (data.status === 'ended' || (data.users && !data.users.S && !data.users.G)) { 
-      if (localCallStartPressed) {
-        handleCallEndInternal();
-      }
-      updateCallUI();
-      return; 
-    } 
-    
     const iAmRegisteredOnFirebase = !!(data.users && mySide && data.users[mySide]);
     const otherSide = (mySide === 'S' ? 'G' : 'S');
     const isOtherRegistered = !!(data.users && data.users[otherSide]);
 
-    // 【修正】自分が開始ボタンを押した、あるいはFirebase上で開始状態なのに、ストリームが動いていない場合に初期化
+    // 【修正】一方が終了した場合の同期処理
+    // 自分が「開始」しているのに、Firebase上で自分がfalse、またはステータスがendedなら終了させる
+    if (localCallStartPressed && (!iAmRegisteredOnFirebase || data.status === 'ended')) {
+      handleCallEndInternal();
+      return;
+    }
+    
+    // 相手が通話から離脱した場合、PeerConnectionを再作成できるように準備（waitingに戻った時など）
+    if (localCallStartPressed && data.status === 'waiting' && !isOtherRegistered) {
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+    }
+
+    // 自動セットアップ（リロード時などの復旧）
     if (iAmRegisteredOnFirebase && (!localCallStartPressed || !localStream)) {
       localCallStartPressed = true;
       updateCallUI(); 
       try {
         await startKeepAlive();
         await startLocalStream();
-        
-        // RTCPeerConnectionの準備を確実に行う
         createPeerConnection();
-
-        // statusがstarted（両者揃った）かつ、自分が先手(S)ならOfferを送る
+        // 相手が既にいて、自分が先手ならOffer
         if (data.status === 'started' && mySide === 'S') {
-          console.log("Both ready. S is sending Offer...");
-          setTimeout(sendOffer, 1000);
+          setTimeout(sendOffer, 2000);
         }
       } catch (e) {
         console.error("Auto setup error:", e);
@@ -794,13 +794,15 @@ btnCallStart.onclick = async () => {
     }
 
     // ステータス表示の更新
-    if (data.status === 'started') {
+    if (data.status === 'started' && isOtherRegistered && iAmRegisteredOnFirebase) {
       callStatusDisplay.textContent = "通話中"; 
     } else if (isOtherRegistered && !iAmRegisteredOnFirebase) {
       callStatusDisplay.textContent = "相手が通話を開始しました";
-      btnCallStart.style.boxShadow = "0 0 10px #4caf50"; // 目立たせる
+      btnCallStart.style.boxShadow = "0 0 10px #4caf50"; 
     } else if (iAmRegisteredOnFirebase && !isOtherRegistered) {
       callStatusDisplay.textContent = "相手の応答待ち...";
+      // 相手がいなくなったのでPCを閉じて待機
+      if (peerConnection) { peerConnection.close(); peerConnection = null; }
     } else {
       callStatusDisplay.textContent = "オフライン";
       btnCallStart.style.boxShadow = "none";
