@@ -582,7 +582,7 @@
     }
   });
 
-  // --- WebRTC / 通話機能（ICE Restart統合） ---
+    // --- WebRTC / 通話機能（ICE Restart統合） ---
   let localStream = null, peerConnection = null, localCallStartPressed = false, isMuted = false;
   const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
   const btnCallStart = document.getElementById('btnCallStart'), btnCallEnd = document.getElementById('btnCallEnd'), btnMute = document.getElementById('btnMute'), callStatusDisplay = document.getElementById('callStatusDisplay'), volumeControl = document.getElementById('volume-control');
@@ -690,7 +690,7 @@ btnCallStart.onclick = async () => {
   } 
 };
 
-        // --- 通話終了ボタンの処理 ---
+    // --- 通話終了ボタンの処理 ---
     btnCallEnd.onclick = async () => { 
     if (!confirm("通話を終了しますか？")) return;
     
@@ -712,9 +712,10 @@ btnCallStart.onclick = async () => {
     handleCallEndInternal(); 
   };
 
-        function handleCallEndInternal() { 
-    // 通話中フラグを落としてボタンを押せるようにする
+    function handleCallEndInternal() { 
+    // 通話中フラグとミュート状態を完全にリセット
     localCallStartPressed = false; 
+    isMuted = false;
     stopKeepAlive(); 
     
     // ネットワーク接続とオーディオストリームを完全に停止
@@ -731,13 +732,15 @@ btnCallStart.onclick = async () => {
     const ra = document.getElementById('remote-audio');
     if (ra) ra.srcObject = null;
 
+    // ミュートボタンの表示をリセット
+    btnMute.textContent = 'ミュート';
+    btnMute.style.background = "#757575";
+
     // UIを「開始前」の状態に更新
     callStatusDisplay.textContent = "オフライン";
     updateCallUI(); 
 
     // 手動終了ボタン（自分で押した場合）
-    // 他機能への影響を最小限にするため、リロードせず状態リセットで対応可能ですが、
-    // 以前の仕様を尊重し、手動終了時はリロードを行います。
     if (sessionStorage.getItem(`isManualEnd_${roomName}`) === 'true') {
       sessionStorage.removeItem(`isManualEnd_${roomName}`);
       window.location.reload(); 
@@ -746,7 +749,7 @@ btnCallStart.onclick = async () => {
 
   // --- 通話ステータス監視 (リロード対策版) ---
     // ★1. ボタンの見た目を更新する関数を新しく追加します
-  function updateCallUI() {
+    function updateCallUI() {
     // localCallStartPressed(通話中フラグ)がtrueなら、開始ボタンを押せなくする
     btnCallStart.disabled = localCallStartPressed;
     // 逆に終了ボタンとミュートボタンは押せるようにする
@@ -756,6 +759,7 @@ btnCallStart.onclick = async () => {
     // 見た目の透明度も調整
     btnCallStart.style.opacity = localCallStartPressed ? "0.5" : "1";
     btnCallEnd.style.opacity = !localCallStartPressed ? "0.5" : "1";
+    btnMute.style.opacity = !localCallStartPressed ? "0.5" : "1";
   }
 
         // --- 通話ステータス監視 (リロード対策版) ---
@@ -796,18 +800,27 @@ btnCallStart.onclick = async () => {
       }
     }
 
-    // 自動セットアップ（リロード時やページを開いた瞬間の復旧用）
-    if (iAmRegisteredOnFirebase && (!localCallStartPressed || !localStream)) {
-      // status が 'ended' の場合は勝手に再開させない
+        // 自動セットアップ（リロード時やページを開いた瞬間の復旧用）
+    // Firebaseに自分が登録されているが、ローカルのストリームがない場合に発動
+    if (iAmRegisteredOnFirebase && !localStream) {
+      // status が 'ended' 以外なら自動復旧を試みる
       if (data.status !== 'ended') {
+        console.log("Detecting active session after reload. Reconnecting...");
         localCallStartPressed = true;
         updateCallUI(); 
         try {
           await startKeepAlive();
           await startLocalStream();
           createPeerConnection();
-          if (data.status === 'started' && mySide === 'S') {
-            setTimeout(sendOffer, 2000);
+          
+          // 相手も既にいる場合はOfferを送受信して経路を復旧
+          if (data.status === 'started') {
+            if (mySide === 'S') {
+              setTimeout(sendOffer, 2000);
+            } else if (mySide === 'G') {
+              // 後手側はOfferが届くのを待つ状態になる
+              console.log("Waiting for Offer from S...");
+            }
           }
         } catch (e) {
           console.error("Auto setup error:", e);
