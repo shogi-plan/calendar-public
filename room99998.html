@@ -692,15 +692,17 @@ btnCallStart.onclick = async () => {
 
         // --- 通話終了ボタンの処理 ---
     btnCallEnd.onclick = async () => { 
+    if (!confirm("通話を終了しますか？")) return;
+    
     // 他の機能に影響を与えないよう通話関連のみ処理
     sessionStorage.setItem(`isManualEnd_${roomName}`, 'true');
 
-    // 1. Firebase上のステータスを「終了」にし、ユーザーフラグを両方折る
-    // これにより、相手側のブラウザも onValue を通じて終了を検知します
-    await set(callStatusRef, { 
+    // 1. Firebase上のステータスを「終了」にする
+    // usersをnullにすることで、両方の「参加中フラグ」を完全に消去します
+    await update(callStatusRef, { 
       status: 'ended', 
-      users: { S: false, G: false },
-      lastActive: { S: null, G: null } 
+      users: null,
+      lastActive: null 
     });
 
     // 2. 残っているシグナリングデータ（Offer/Answer/Candidates）を完全に削除
@@ -710,7 +712,7 @@ btnCallStart.onclick = async () => {
     handleCallEndInternal(); 
   };
 
-    function handleCallEndInternal() { 
+        function handleCallEndInternal() { 
     // 通話中フラグを落としてボタンを押せるようにする
     localCallStartPressed = false; 
     stopKeepAlive(); 
@@ -725,10 +727,15 @@ btnCallStart.onclick = async () => {
       localStream = null; 
     } 
 
+    // リモート音声を止める
+    const ra = document.getElementById('remote-audio');
+    if (ra) ra.srcObject = null;
+
     // UIを「開始前」の状態に更新
+    callStatusDisplay.textContent = "オフライン";
     updateCallUI(); 
 
-    // 手動終了ボタン（自分で押した場合）または同期終了の場合
+    // 手動終了ボタン（自分で押した場合）
     // 他機能への影響を最小限にするため、リロードせず状態リセットで対応可能ですが、
     // 以前の仕様を尊重し、手動終了時はリロードを行います。
     if (sessionStorage.getItem(`isManualEnd_${roomName}`) === 'true') {
@@ -752,9 +759,11 @@ btnCallStart.onclick = async () => {
   }
 
         // --- 通話ステータス監視 (リロード対策版) ---
-    onValue(callStatusRef, async (snap) => { 
+        onValue(callStatusRef, async (snap) => { 
     const data = snap.val(); 
     if (!data) {
+      // 部屋データ自体が消えた場合も、通話中なら終了させる
+      if (localCallStartPressed) handleCallEndInternal();
       updateCallUI();
       return;
     }
@@ -763,10 +772,18 @@ btnCallStart.onclick = async () => {
     const otherSide = (mySide === 'S' ? 'G' : 'S');
     const isOtherRegistered = !!(data.users && data.users[otherSide]);
 
-    // 【重要】どちらかが終了ボタンを押して status が 'ended' になった場合、
-    // または自分がFirebase上で「通話中」でなくなった場合、強制的に終了処理を行う。
-    // これにより「一方が切ったら他方も止まる」挙動を保証します。
-    if (localCallStartPressed && (data.status === 'ended' || !iAmRegisteredOnFirebase)) {
+    // 【修正点】「終了状態」の検知条件を強化
+    // 1. 全体のステータスが 'ended' になった場合
+    // 2. 通話中なのに、Firebase上に自分が登録されていない場合
+    // 3. 通話中(started)なのに、相手が登録から消えた場合（←これが重要）
+    const shouldTerminate = localCallStartPressed && (
+      data.status === 'ended' || 
+      !iAmRegisteredOnFirebase || 
+      (data.status === 'started' && !isOtherRegistered)
+    );
+
+    if (shouldTerminate) {
+      console.log("Call termination condition met. Stopping local stream.");
       handleCallEndInternal();
       return;
     }
