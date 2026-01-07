@@ -481,7 +481,7 @@
   let currentFlip = (mySide === 'G');
   updateDisplayRotation(currentFlip);
 
-  mySideSelect.onchange = (e) => { 
+    mySideSelect.onchange = (e) => { 
     mySide = e.target.value; 
     if (mySide) {
       sessionStorage.setItem(`mySide_${roomName}`, mySide);
@@ -491,6 +491,10 @@
     // 未選択時はとりあえず先手視点（false）
     currentFlip = (mySide === 'G');
     updateDisplayRotation(currentFlip);
+    
+    // 通話ボタンの状態を即座に反映させる
+    updateCallUI();
+    
     render(); 
   };
 
@@ -582,13 +586,20 @@
     }
   });
 
-  // --- WebRTC / 通話機能（ICE Restart統合） ---
+    // --- WebRTC / 通話機能（ICE Restart統合） ---
   let localStream = null, peerConnection = null, localCallStartPressed = false, isMuted = false;
   const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
   const btnCallStart = document.getElementById('btnCallStart'), btnCallEnd = document.getElementById('btnCallEnd'), btnMute = document.getElementById('btnMute'), callStatusDisplay = document.getElementById('callStatusDisplay'), volumeControl = document.getElementById('volume-control');
 
   volumeControl.addEventListener('input', () => { const ra = document.getElementById('remote-audio'); if (ra) ra.volume = parseFloat(volumeControl.value); });
-  btnMute.onclick = () => { if (!localStream) return; isMuted = !isMuted; localStream.getAudioTracks().forEach(t => t.enabled = !isMuted); btnMute.textContent = isMuted ? '解除' : 'ミュート'; btnMute.style.background = isMuted ? "var(--danger-btn)" : "#757575"; };
+    btnMute.onclick = () => {
+    isMuted = !isMuted;
+    if (localStream) {
+      localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+    }
+    btnMute.textContent = isMuted ? '解除' : 'ミュート';
+    btnMute.style.background = isMuted ? "var(--danger-btn)" : "#757575";
+  };
 
   async function startLocalStream() { 
     if (localStream) localStream.getTracks().forEach(t => t.stop()); 
@@ -639,158 +650,221 @@
     } catch (e) { console.error("Restart ICE failed:", e); }
   }
 
-  // 修正後
-btnCallStart.onclick = async () => { 
-  if (localCallStartPressed) return; // 二重押し防止
-  try { 
-    await startKeepAlive(); 
-    await startLocalStream(); 
-    
-    // 1. まず「自分が押した」という状態を確定させる
-    localCallStartPressed = true; 
-    updateCallUI(); 
+  btnCallStart.onclick = async () => {
+    if (localCallStartPressed || !mySide) return;
 
-    const snap = await get(callStatusRef); 
-    let callData = snap.exists() ? snap.val() : { status: 'none', users: { S: false, G: false } }; 
-    if (!callData.users) callData.users = { S: false, G: false }; 
-    
-    // 2. 自分のサイドのフラグだけを立ててFirebaseを更新
-    callData.users[mySide] = true; 
-    let newStatus = (callData.users.S && callData.users.G) ? 'started' : 'waiting'; 
-    if (newStatus === 'started') await sendOffer(); 
+    // 二重クリック防止とUI更新
+    localCallStartPressed = true;
+    updateCallUI();
 
-    await update(callStatusRef, { status: newStatus, users: callData.users, timestamp: new Date().toISOString() }); 
-  } catch (e) { 
-    // エラー時はボタンを再度押せるように戻す
-    localCallStartPressed = false; 
-    updateCallUI(); 
-    stopKeepAlive(); 
-  } 
-};
+    try {
+      // 古いシグナリング情報を一掃
+      const currentSnap = await get(callStatusRef);
+      const currentStatus = currentSnap.val();
+      if (!currentStatus || !currentStatus.users || (!currentStatus.users.S && !currentStatus.users.G)) {
+        await remove(signalingRef);
+      }
 
-    // --- 通話終了ボタンの処理 ---
-  btnCallEnd.onclick = async () => { 
-    // 手動終了フラグを立てる（これでリロードが実行されるようになる）
-    sessionStorage.setItem(`isManualEnd_${roomName}`, 'true');
+      await startKeepAlive();
+      await startLocalStream();
+      createPeerConnection();
 
-    const snap = await get(callStatusRef);
-    if (snap.exists()) {
-      let data = snap.val();
-      if (data.users) {
-        data.users[mySide] = false;
-        // 両方のフラグが落ちたら完全に終了（ended）にする
-        if (!data.users.S && !data.users.G) {
-          await update(callStatusRef, { status: 'ended', users: { S: false, G: false } });
-          remove(signalingRef);
-        } else {
-          // 片方が残っているなら待機状態(waiting)に更新
-          await update(callStatusRef, { status: 'waiting', users: data.users });
+      // Firebaseに参加表明
+      const updates = {};
+      updates[`users/${mySide}`] = true;
+      updates['status'] = 'waiting'; // デフォルトは待機
+      await update(callStatusRef, updates);
+
+      // 相手がいるか確認
+      const nextSnap = await get(callStatusRef);
+      const nextData = nextSnap.val();
+      const otherSide = (mySide === 'S' ? 'G' : 'S');
+      const isOtherReady = !!(nextData.users && nextData.users[otherSide]);
+
+      if (isOtherReady) {
+        await update(callStatusRef, { status: 'started' });
+        if (mySide === 'S') {
+          setTimeout(sendOffer, 1500);
         }
       }
+    } catch (e) {
+      console.error("Call Start Error:", e);
+      handleCallEndInternal();
+      alert("接続に失敗しました。マイク設定を確認してください。");
     }
+  };
+
+      // --- 通話終了ボタンの処理 (確実なクリーンアップ) ---
+  btnCallEnd.onclick = async () => { 
+    if (!confirm("通話を終了しますか？")) return;
+    
+    sessionStorage.setItem(`isManualEnd_${roomName}`, 'true');
+
+    // 1. シグナリングデータを即座に削除（古いOfferなどが残らないように）
+    await remove(signalingRef);
+
+    // 2. 自分の参加フラグをFirebaseから削除し、ステータスをendedにする
+    // users 全体を null にせず、自分のサイドだけを確実に消すことで
+    // 相手側にも「終了」が伝わるようにします
+    const updates = {};
+    updates[`users/${mySide}`] = null;
+    updates['status'] = 'ended';
+    await update(callStatusRef, updates);
+    
+    // 3. ローカルリソース解放
     handleCallEndInternal(); 
   };
 
-  function handleCallEndInternal() { 
-    localCallStartPressed = false; 
-    stopKeepAlive(); 
-    if (peerConnection) { peerConnection.close(); peerConnection = null; } 
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; } 
-    updateCallUI(); 
+     function updateCallUI() {
+    // 1. そもそもサイド（先手・後手）が選ばれていない場合は全ボタン無効
+    if (!mySide) {
+      btnCallStart.disabled = true;
+      btnCallEnd.disabled = true;
+      btnMute.disabled = true;
+      btnCallStart.style.opacity = "0.5";
+      btnCallEnd.style.opacity = "0.5";
+      btnMute.style.opacity = "0.5";
+      return;
+    }
 
-    // 手動終了ボタンが押されていた場合のみ、ページをリロードして初期化する
+    // 2. サイドが選択されている場合の制御
+    // 通話開始ボタン：自分がまだ開始していない(false)なら押せる
+    btnCallStart.disabled = localCallStartPressed;
+    btnCallStart.style.opacity = localCallStartPressed ? "0.5" : "1";
+
+    // 通話終了・ミュートボタン：自分が開始している(true)なら押せる
+    btnCallEnd.disabled = !localCallStartPressed;
+    btnCallEnd.style.opacity = !localCallStartPressed ? "0.5" : "1";
+    
+    btnMute.disabled = !localCallStartPressed;
+    btnMute.style.opacity = !localCallStartPressed ? "0.5" : "1";
+  }
+
+  function handleCallEndInternal() {
+    localCallStartPressed = false;
+    isMuted = false; 
+    stopKeepAlive();
+
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+
+    const ra = document.getElementById('remote-audio');
+    if (ra) ra.srcObject = null;
+
+    btnMute.textContent = 'ミュート';
+    btnMute.style.background = "#757575";
+    
+    callStatusDisplay.textContent = "オフライン";
+    updateCallUI(); // ここでボタン状態を更新
+
     if (sessionStorage.getItem(`isManualEnd_${roomName}`) === 'true') {
       sessionStorage.removeItem(`isManualEnd_${roomName}`);
-      // reloaded_フラグは以前の仕様に合わせて一応残すか、不要なら削除
-      sessionStorage.setItem(`reloaded_${roomName}`, '1'); 
-      window.location.reload(); 
+      window.location.reload();
     }
   }
 
-  // --- 通話ステータス監視 (リロード対策版) ---
-    // ★1. ボタンの見た目を更新する関数を新しく追加します
-  function updateCallUI() {
-    // localCallStartPressed(通話中フラグ)がtrueなら、開始ボタンを押せなくする
-    btnCallStart.disabled = localCallStartPressed;
-    // 逆に終了ボタンとミュートボタンは押せるようにする
-    btnCallEnd.disabled = !localCallStartPressed;
-    btnMute.disabled = !localCallStartPressed;
-
-    // 見た目の透明度も調整
-    btnCallStart.style.opacity = localCallStartPressed ? "0.5" : "1";
-    btnCallEnd.style.opacity = !localCallStartPressed ? "0.5" : "1";
-  }
-
-  // --- 通話ステータス監視 (リロード対策版) ---
-  onValue(callStatusRef, async (snap) => { 
-    const data = snap.val(); 
+    // --- 通話ステータス監視 (リロード・自動復旧強化版) ---
+  onValue(callStatusRef, async (snap) => {
+    const data = snap.val();
     if (!data) {
+      if (localCallStartPressed) handleCallEndInternal();
       updateCallUI();
       return;
     }
-    
-    if (data.status === 'ended') { 
-      if (localCallStartPressed) {
-        handleCallEndInternal();
-      }
-      updateCallUI(); // 終了時も見た目を更新
-      return; 
-    } 
-    
-    const iAmRegisteredOnFirebase = !!(data.users && data.users[mySide]);
-    
-    if (iAmRegisteredOnFirebase && !localCallStartPressed) {
-      localCallStartPressed = true;
-      
-      // ★2. ここで見た目を即座に「通話中」の状態に切り替えます
-      updateCallUI(); 
 
+    const iAmRegisteredOnFirebase = !!(data.users && mySide && data.users[mySide]);
+    const otherSide = (mySide === 'S' ? 'G' : 'S');
+    const isOtherRegistered = !!(data.users && data.users[otherSide]);
+
+    // 【重要】リロード後の自動復旧ロジック
+    if (iAmRegisteredOnFirebase && !localCallStartPressed) {
+      console.log("Reload detected: Restoring call state...");
+      localCallStartPressed = true;
+      updateCallUI();
+      
       try {
         await startKeepAlive();
         await startLocalStream();
-        if (data.status === 'started' || (data.users.S && data.users.G)) {
-          await sendOffer();
+        createPeerConnection();
+        
+        // 相手も既にいる場合は、先手からOfferを送って再接続
+        if (data.status === 'started' && isOtherRegistered) {
+          if (mySide === 'S') {
+            console.log("Recovery: I am S, sending Offer...");
+            setTimeout(sendOffer, 2000);
+          } else {
+            console.log("Recovery: I am G, waiting for Offer...");
+          }
         }
       } catch (e) {
-        console.error("Auto-resume call failed:", e);
-        localCallStartPressed = false;
-        updateCallUI(); // 失敗したら元に戻す
+        console.error("Auto recovery failed:", e);
+        handleCallEndInternal();
       }
     }
 
-    // テキスト表示の更新
-    if (data.status === 'started') {
-      callStatusDisplay.textContent = "通話中"; 
-    } else if (data.status === 'waiting') { 
-      callStatusDisplay.textContent = localCallStartPressed ? "相手の応答待ち..." : "相手が通話を呼んでいます"; 
-    } else { 
-      callStatusDisplay.textContent = "オフライン"; 
+    // 終了条件：自分が開始中なのにFirebaseから消された、またはステータスがended
+    const shouldTerminate = localCallStartPressed && (
+      data.status === 'ended' || 
+      (!iAmRegisteredOnFirebase) // Firebase側の自分が消えたらローカルも止める
+    );
+
+    if (shouldTerminate) {
+      console.log("Call termination triggered by Firebase status.");
+      handleCallEndInternal();
+      return;
     }
 
-    // ★3. 念のため最後にもう一度見た目を確定させます
-    updateCallUI(); 
+    // UI表示の更新
+    if (data.status === 'started' && isOtherRegistered && localCallStartPressed) {
+      callStatusDisplay.textContent = "通話中";
+    } else if (isOtherRegistered && !localCallStartPressed) {
+      callStatusDisplay.textContent = "相手が通話を開始しました";
+      btnCallStart.style.boxShadow = "0 0 10px #4caf50";
+    } else if (localCallStartPressed && !isOtherRegistered) {
+      callStatusDisplay.textContent = "相手の応答待ち...";
+    } else {
+      callStatusDisplay.textContent = "オフライン";
+      btnCallStart.style.boxShadow = "none";
+    }
+    
+    updateCallUI();
   });
 
-  onValue(ref(db, `${roomName}/signaling/offer`), snap => { const offer = snap.val(); if (offer && offer.from !== mySide) sendAnswer(); });
+    onValue(ref(db, `${roomName}/signaling/offer`), snap => { 
+    const offer = snap.val(); 
+    // 相手からのOfferが届き、かつ自分が「通話開始」を押している場合のみAnswerを返す
+    if (offer && offer.from !== mySide && localCallStartPressed) {
+      sendAnswer(); 
+    }
+  });
   onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
   onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
   onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
 
-    // --- Firebase 将棋データ監視 ---
+     // --- Firebase 将棋データ監視 ---
   let lastInitAt = 0; // 追加：初期化検知用の変数
 
-  onValue(gameRef, (snap) => {
+    onValue(gameRef, (snap) => {
     const data = snap.val();
     if (!data) return;
 
-    // ★追加：初期化（initAtの更新）を検知して、全端末で自分のサイド選択をリセットする
-    if (data.initAt && data.initAt !== lastInitAt) {
+    // ★修正：初期化（initAtの更新）を検知してリセットする。
+    // ただし、ページ読み込み時(lastInitAt === 0)はリセットせず、既存の選択を維持する。
+    if (data.initAt) {
+      if (lastInitAt !== 0 && data.initAt !== lastInitAt) {
+        mySide = '';
+        sessionStorage.removeItem(`mySide_${roomName}`);
+        document.getElementById('mySideSelect').value = '';
+        currentFlip = false; // 先手視点に戻す
+        updateDisplayRotation(false);
+      }
       lastInitAt = data.initAt;
-      mySide = '';
-      sessionStorage.removeItem(`mySide_${roomName}`);
-      document.getElementById('mySideSelect').value = '';
-      currentFlip = false; // 先手視点に戻す
-      updateDisplayRotation(false);
     }
 
     // ★追加：初期化フラグ(lastTick=0)かつ対局未終了なら、感想戦モードを強制解除
@@ -822,9 +896,12 @@ btnCallStart.onclick = async () => {
     state.winReason = data.winReason || "";
     state.history = data.history || [];
 
-    if (state.winner) showGameOverPopup(state.winner, state.winReason || "");
+    // --- 変更箇所：勝敗が決まっている場合は、最優先でポップアップを表示 ---
+    if (state.winner) {
+      showGameOverPopup(state.winner, state.winReason || "");
+    }
 
-        // モード判定の同期
+    // モード判定の同期
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
     
     if (data.winner && storedReview) {
@@ -1044,27 +1121,31 @@ btnCallStart.onclick = async () => {
   }
 
 function finish(moveData) {
+  // すでに勝者が決まっていて、かつそれが「投了」や「時間切れ」でない場合のみガードする
+  // (投了時は呼び出し元でwinnerをセットしてからfinishを呼ぶため)
+  if (state.winner && moveData.type !== "投了" && moveData.type !== "時間切れ") return;
+
   const nextTurn = (state.turn === 'S' ? 'G' : 'S');
   
-  // 1. 反則判定を先行して行う
   let foulReason = "";
-  if (isChecked(state.board, state.turn)) { 
-    foulReason = "王手放置"; 
-  } else if (moveData.isDrop && moveData.type === 'FU') {
-    let count = 0;
-    for (let y = 0; y < 9; y++) {
-      if (state.board[y][moveData.toX]?.type === 'FU' && state.board[y][moveData.toX]?.owner === state.turn) count++;
+  // 通常の指し手の場合のみ反則チェックを行う
+  if (moveData.type !== "投了" && moveData.type !== "時間切れ") {
+    if (isChecked(state.board, state.turn)) { 
+      foulReason = "王手放置"; 
+    } else if (moveData.isDrop && moveData.type === 'FU') {
+      let count = 0;
+      for (let y = 0; y < 9; y++) {
+        if (state.board[y][moveData.toX]?.type === 'FU' && state.board[y][moveData.toX]?.owner === state.turn) count++;
+      }
+      if (count > 1) foulReason = "二歩";
     }
-    if (count > 1) foulReason = "二歩";
   }
 
-  // 2. 詰み判定
   let isMated = false;
-  if (!foulReason && state.history.length > 2) {
+  if (!foulReason && state.history.length > 2 && moveData.type !== "投了" && moveData.type !== "時間切れ") {
     if (isCheckmate(state.board, nextTurn, state.handS, state.handG)) isMated = true;
   }
 
-  // ★駒音の再生：反則、詰み、投了、時間切れでない場合のみ鳴らす
   const isGameOverMove = foulReason || isMated || moveData.type === "投了" || moveData.type === "時間切れ";
   if (!isGameOverMove) {
     playPieceSound();
@@ -1073,7 +1154,7 @@ function finish(moveData) {
   const now = getServerNow(); 
   let newTimers = { ...state.timers };
   
-  if (state.lastTick !== 0 && !state.winner) {
+  if (state.lastTick !== 0) {
     const elapsedTotal = Math.floor((now - state.lastTick) / 1000);
     const currentMain = state.timers[state.turn];
     if (currentMain < 900000) {
@@ -1090,6 +1171,11 @@ function finish(moveData) {
       state.winner = state.turn; 
       state.winReason = "詰み"; 
     }
+    if (moveData.type === "時間切れ") {
+      state.winner = (moveData.side === 'S' ? 'G' : 'S');
+      state.winReason = "時間切れ";
+    }
+    // 投了の場合は呼び出し元で既にセットされている state.winner/winReason を使用
     state.history.push({ ...moveData, board: JSON.stringify(state.board), handS: [...(state.handS || [])], handG: [...(state.handG || [])] });
   }
 
@@ -1101,6 +1187,7 @@ function finish(moveData) {
   selH = null; 
   possibleMoves = [];
 
+  // Firebaseへ書き込み
   set(gameRef, { 
     board: JSON.stringify(state.board), 
     handS: state.handS || [], 
@@ -1113,6 +1200,10 @@ function finish(moveData) {
     winReason: state.winReason || "", 
     history: state.history,
     updatedAt: serverTimestamp() 
+  }).then(() => {
+    if (state.winner) {
+      showGameOverPopup(state.winner, state.winReason);
+    }
   });
 }
 
@@ -1125,25 +1216,31 @@ function finish(moveData) {
     return false;
   };
 
-        function showGameOverPopup(winner, reason = "") {
-    const key = `shown_${roomName}_${state.history.length}`;
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, "true");
+  function showGameOverPopup(winner, reason = "") {
+  if (!winner) return;
+  
+  // すでに表示済みなら何もしない。
+  const key = `shown_${roomName}_${state.history.length}_${winner}`;
+  if (sessionStorage.getItem(key)) return;
+  sessionStorage.setItem(key, "true");
 
-    // アラートを表示し、ユーザーが「OK」を押した後に実行される
-    setTimeout(() => { 
-      alert((reason ? `${reason}により、` : "") + (winner === 'S' ? '先手▲' : '後手△') + "の勝ちです！"); 
-      
-      // ダイアログを閉じた後に感想戦モードへ移行
-      setReviewMode(true);
-      syncReviewStateLocally(); 
-      pushReviewUpdate();
-      
-      // ★追加：ダイアログを閉じた直後にレイアウトを再適用して表示崩れを直す
-      updateDisplayRotation(currentFlip);
-      render();
-    }, 200);
-  }
+  // 描画を確実にするため遅延実行
+  setTimeout(() => { 
+    const winnerName = (winner === 'S' ? '先手▲' : '後手△');
+    const msg = (reason ? `${reason}により、` : "") + `${winnerName}の勝ちです！`;
+    alert(msg); 
+    
+    // 感想戦モードへ移行
+    setReviewMode(true);
+    syncReviewStateLocally(); 
+    pushReviewUpdate();
+    
+    // 画面の更新
+    updateDisplayRotation(currentFlip);
+    render();
+    updateKifuList();
+  }, 500); 
+}
 
     // --- 駒落ち用初期配置生成関数 ---
   function generateInitialBoard(handicapType, uwateSide) {
@@ -1553,11 +1650,7 @@ function render() {
   }
 
 function updateTimerDisplay() {
-  // Date.now() ではなく補正後の時刻を使用
   const now = getServerNow(); 
-  
-    // 経過秒の計算
-  // 0.5秒程度の余裕(500ms引く)を持たせることで、通信ラグによる「10:01」跳ねを物理的に防ぎます
   const diff = now - state.lastTick;
   const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor(Math.max(0, diff - 200) / 1000);
 
@@ -1572,36 +1665,41 @@ function updateTimerDisplay() {
     const isMainInf = (remMain >= 900000);
     const isByoInf = (state.config.byo >= 900000);
 
+    // 手番側かつ対局中の計算
     if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
-      // 手番側の計算
       if (isMainInf) {
         displayStr = `${mark} 無制限`;
       } else if (remMain > elapsed) {
-        // 持ち時間がある
         const currentRem = remMain - elapsed;
         displayStr = `${mark} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
       } else {
-        // 秒読みフェーズ
         if (isByoInf) {
           displayStr = `${mark} 秒:無制限`;
         } else {
-          // 秒読み計算：(elapsed - remMain) は「持ち時間を使い切ってから何秒経過したか」を示す
           const overTime = Math.max(0, elapsed - remMain);
           const byoRem = Math.max(0, (state.config.byo || 30) - overTime);
-          
           displayStr = `${mark} 秒:${byoRem}`;
           if (byoRem <= 5) isByoAlert = true;
           
-          // タイムアップ判定
-          if (byoRem <= 0 && s === mySide && !state.winner) {
-            state.winner = (mySide === 'S' ? 'G' : 'S'); 
-            state.winReason = "時間切れ"; 
-            finish({ side: s, type: "時間切れ", toX: null, toY: null }); 
+                    // --- ここが重要 ---
+          // 表示上の秒読みが0になったら finish を実行する
+          if (byoRem <= 0 && !state.winner) {
+              // 対局者(mySideがSまたはG)のみ判定を実行
+              if (mySide === 'S' || mySide === 'G') {
+                  // finish 関数を呼び出す。
+                  // 敗者の電源が落ちていても、勝者側からこの関数が呼ばれFirebaseが更新されます。
+                  finish({ 
+                    side: s, 
+                    type: "時間切れ", 
+                    toX: null, 
+                    toY: null,
+                    isDrop: false 
+                  }); 
+              }
           }
         }
       }
     } else {
-      // 待機側または停止中
       if (isMainInf) {
         displayStr = `${mark} 無制限`;
       } else if (remMain > 0) {
@@ -1670,7 +1768,21 @@ function updateTimerDisplay() {
     else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
   };
-  document.getElementById('btnResign').onclick = () => { if (state.winner || state.turn !== mySide) return; if (confirm("投了しますか？")) { state.winner = (mySide === 'S' ? 'G' : 'S'); state.winReason = "投了"; finish({ side: mySide, type: "投了" }); } };
+  document.getElementById('btnResign').onclick = () => { 
+  if (state.winner || state.turn !== mySide) return; 
+  if (confirm("投了しますか？")) { 
+    state.winner = (mySide === 'S' ? 'G' : 'S'); 
+    state.winReason = "投了"; 
+    finish({ 
+      side: mySide, 
+      type: "投了", 
+      toX: null, 
+      toY: null, 
+      isDrop: false 
+    }); 
+  } 
+};
+
         document.getElementById('btnKif').onclick = () => {
     const hType = state.config.handicap || "平手";
     const isHirate = (hType === "平手");
@@ -1751,6 +1863,25 @@ function updateTimerDisplay() {
     const h = (turn === 'S' ? handS : handG) || []; for (let type of [...new Set(h)]) for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (!board[y][x]) { const tb = JSON.parse(JSON.stringify(board)); tb[y][x] = { type, owner: turn }; if (!isChecked(tb, turn)) return false; }
     return true;
   }
+  
+      // ページを閉じる・リロードする際にFirebase上の自分の参加状態を解除する
+  window.addEventListener('beforeunload', () => {
+    if (mySide && localCallStartPressed) {
+      // リロード時にシグナリングを一旦クリアし、再接続時にゴミが残らないようにする
+      const myUserRef = ref(db, `${roomName}/callStatus/users/${mySide}`);
+      // 同期的な書き込みを試みる
+      set(myUserRef, null);
+      
+      // 先手だった場合はOfferも消しておく
+      if (mySide === 'S') {
+        remove(ref(db, `${roomName}/signaling/offer`));
+      }
+    }
+  });
+
+  // ページ読み込み完了時にUIの状態を一度強制更新する
+  updateCallUI();
+  
 </script>
 </body>
 </html>
