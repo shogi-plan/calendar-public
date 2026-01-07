@@ -650,50 +650,54 @@
     } catch (e) { console.error("Restart ICE failed:", e); }
   }
 
-    btnCallStart.onclick = async () => {
-    if (localCallStartPressed || !mySide) return;
-
-    // 二重クリック防止とUI更新
-    localCallStartPressed = true;
-    updateCallUI();
+      btnCallStart.onclick = async () => {
+    if (localCallStartPressed || !mySide) {
+      alert("先手または後手を選択してから通話を開始してください。");
+      return;
+    }
 
     try {
-      // 開始前にまず自分に関連するシグナリングをクリアしてクリーンな状態にする
-      await remove(ref(db, `${roomName}/signaling/candidates/${mySide}`));
-      if (mySide === 'S') {
-        await remove(ref(db, `${roomName}/signaling/offer`));
-      } else {
-        await remove(ref(db, `${roomName}/signaling/answer`));
-      }
-
-      await startKeepAlive();
+      // 1. まずマイク使用許可を取得（ここでキャンセルされたら開始しない）
       await startLocalStream();
+      await startKeepAlive();
+
+      // 2. UI状態を確定
+      localCallStartPressed = true;
+      updateCallUI();
+
+      // 3. シグナリングデータを一度完全にリセット（古いデータの混入防止）
+      // 先手・後手に関わらず、開始した側が一度経路情報を掃除する
+      await remove(signalingRef);
+
       createPeerConnection();
 
-      // Firebaseに参加表明
+      // 4. Firebaseに参加表明
       const updates = {};
       updates[`users/${mySide}`] = true;
       updates['status'] = 'waiting'; 
       await update(callStatusRef, updates);
 
-      // 相手がいるか確認
+      // 5. 相手がいるか確認
       const nextSnap = await get(callStatusRef);
       const nextData = nextSnap.val();
       const otherSide = (mySide === 'S' ? 'G' : 'S');
       const isOtherReady = !!(nextData.users && nextData.users[otherSide]);
 
       if (isOtherReady) {
-        // 両者揃った場合のみ started にする
+        // 両者揃った場合
         await update(callStatusRef, { status: 'started' });
-        // 先手(S)がOfferを投げる。少し余裕を持つ
+        // 先手(S)がOfferを投げる。Answer側の準備時間を考慮し3秒待機
         if (mySide === 'S') {
-          setTimeout(sendOffer, 2000);
+          console.log("S-side: Preparing to send offer...");
+          setTimeout(sendOffer, 3000);
         }
+      } else {
+        console.log("Waiting for opponent to join call...");
       }
     } catch (e) {
       console.error("Call Start Error:", e);
       handleCallEndInternal();
-      alert("接続に失敗しました。マイク設定を確認してください。");
+      alert("通話を開始できませんでした。マイクの許可を確認してください。");
     }
   };
 
@@ -743,36 +747,48 @@
     btnMute.style.opacity = !localCallStartPressed ? "0.5" : "1";
   }
 
-  function handleCallEndInternal() {
+    function handleCallEndInternal() {
+    // ローカル変数の完全初期化
     localCallStartPressed = false;
     isMuted = false; 
     stopKeepAlive();
 
+    // WebRTCリソースの解放
     if (peerConnection) {
       peerConnection.close();
       peerConnection = null;
     }
     if (localStream) {
-      localStream.getTracks().forEach(t => t.stop());
+      localStream.getTracks().forEach(t => {
+        t.enabled = true; // トラック自体を有効に戻してから停止
+        t.stop();
+      });
       localStream = null;
     }
 
+    // オーディオ要素の解除
     const ra = document.getElementById('remote-audio');
-    if (ra) ra.srcObject = null;
+    if (ra) {
+      ra.srcObject = null;
+      ra.pause();
+    }
 
+    // UI表示のリセット（ミュート解除状態に戻す）
     btnMute.textContent = 'ミュート';
     btnMute.style.background = "#757575";
+    btnMute.disabled = true;
     
     callStatusDisplay.textContent = "オフライン";
-    updateCallUI(); // ここでボタン状態を更新
+    updateCallUI(); 
 
+    // 手動終了時のみリロード
     if (sessionStorage.getItem(`isManualEnd_${roomName}`) === 'true') {
       sessionStorage.removeItem(`isManualEnd_${roomName}`);
       window.location.reload();
     }
   }
 
-    // --- 通話ステータス監視 (リロード・自動復旧強化版) ---
+    // --- 通話ステータス監視 (安定性重視・リロード時は完全初期化) ---
   onValue(callStatusRef, async (snap) => {
     const data = snap.val();
     if (!data) {
@@ -781,50 +797,25 @@
       return;
     }
 
-    const iAmRegisteredOnFirebase = !!(data.users && mySide && data.users[mySide]);
     const otherSide = (mySide === 'S' ? 'G' : 'S');
     const isOtherRegistered = !!(data.users && data.users[otherSide]);
+    const iAmRegisteredOnFirebase = !!(data.users && mySide && data.users[mySide]);
 
-        // 【重要】リロード後の自動復旧ロジック
+    // 自分がFirebase上で登録されているのに、ブラウザのローカル変数 localCallStartPressed が false の場合
+    // ＝リロード直後であることを示す。この場合はFirebase上の情報を一度リセットする。
     if (iAmRegisteredOnFirebase && !localCallStartPressed) {
-      console.log("Reload detected: Restoring call state...");
-      localCallStartPressed = true;
-      updateCallUI();
-      
-      try {
-        await startKeepAlive();
-        await startLocalStream();
-        
-        // リロード時は一度古いシグナリング情報を自分側からリセット
-        if (mySide === 'S') {
-          await remove(ref(db, `${roomName}/signaling/offer`));
-        } else {
-          await remove(ref(db, `${roomName}/signaling/answer`));
-        }
-
-        createPeerConnection();
-        
-        // 相手も既にいる場合は、少し待ってからOfferを送る（相手の準備を待つため）
-        if (data.status === 'started' && isOtherRegistered) {
-          if (mySide === 'S') {
-            console.log("Recovery: I am S, sending Offer...");
-            setTimeout(sendOffer, 3000); 
-          }
-        }
-      } catch (e) {
-        console.error("Auto recovery failed:", e);
-        handleCallEndInternal();
-      }
+      console.log("Cleanup leftover Firebase session after reload.");
+      const updates = {};
+      updates[`users/${mySide}`] = null;
+      // 相手がいなければステータスも戻す
+      if (!isOtherRegistered) updates['status'] = 'offline';
+      await update(callStatusRef, updates);
+      return; 
     }
 
-    // 終了条件：自分が開始中なのにFirebaseから消された、またはステータスがended
-    const shouldTerminate = localCallStartPressed && (
-      data.status === 'ended' || 
-      (!iAmRegisteredOnFirebase) // Firebase側の自分が消えたらローカルも止める
-    );
-
-    if (shouldTerminate) {
-      console.log("Call termination triggered by Firebase status.");
+    // 終了検知：相手がいなくなった、またはステータスが ended になった場合
+    if (localCallStartPressed && data.status === 'ended') {
+      console.log("Call ended by remote signal.");
       handleCallEndInternal();
       return;
     }
@@ -833,10 +824,12 @@
     if (data.status === 'started' && isOtherRegistered && localCallStartPressed) {
       callStatusDisplay.textContent = "通話中";
     } else if (isOtherRegistered && !localCallStartPressed) {
-      callStatusDisplay.textContent = "相手が通話を開始しました";
+      callStatusDisplay.textContent = "相手が待機中...";
       btnCallStart.style.boxShadow = "0 0 10px #4caf50";
     } else if (localCallStartPressed && !isOtherRegistered) {
       callStatusDisplay.textContent = "相手の応答待ち...";
+    } else if (localCallStartPressed) {
+      callStatusDisplay.textContent = "接続準備完了";
     } else {
       callStatusDisplay.textContent = "オフライン";
       btnCallStart.style.boxShadow = "none";
