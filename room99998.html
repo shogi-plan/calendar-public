@@ -1842,19 +1842,18 @@ function updateTimerDisplay() {
     return true;
   }
   
-    // --- ブラウザリロード・破棄時の通話強制終了 ---
+  // --- ブラウザリロード・破棄時の通話強制終了 ---
   window.addEventListener('beforeunload', (event) => {
     // 通話中の場合のみ、Firebase側のステータスを「終了」に書き換えて相手に通知する
     if (localCallStartPressed) {
-      // 1. Firebaseのステータスを更新（同期実行に近い形で行う）
-      // 注意: beforeunload内での非同期処理(await)は完了が保証されませんが、
-      // updateは比較的軽量なため、多くのブラウザで送信されます。
+      // ダイアログを表示させず、ステータス更新の通信だけを試みる
       update(callStatusRef, { 
         status: 'ended', 
         users: null 
       });
       remove(signalingRef);
     }
+  });
 
   // ページ読み込み完了時にUIの状態を一度強制更新する
   updateCallUI();
