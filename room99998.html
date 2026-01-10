@@ -646,13 +646,20 @@ btnCallStart.onclick = async () => {
   updateCallUI(); 
 
   try { 
-    // 【重要】開始時に古いシグナリングデータを確実に掃除
+    // 開始前に、まず自分のステータスをFirebase上で確定させる（掃除ロジックに消されないようにする）
+    const updates = {};
+    updates[`users/${mySide}`] = true;
+    
     const currentSnap = await get(callStatusRef);
     const currentStatus = currentSnap.val();
-    // 誰もいない、あるいは自分が最初の一人目ならシグナリングをクリア
+    
+    // 自分が最初の一人目なら、古いステータスやシグナリングを完全にリセット
     if (!currentStatus || !currentStatus.users || (!currentStatus.users.S && !currentStatus.users.G)) {
       await remove(signalingRef);
+      updates['status'] = 'waiting';
     }
+    
+    await update(callStatusRef, updates);
 
     await startKeepAlive(); 
     await startLocalStream(); 
@@ -660,26 +667,17 @@ btnCallStart.onclick = async () => {
     // PeerConnectionの初期化
     createPeerConnection();
     
-    // 自分のオンライン状態をFirebaseへ報告
-    const updates = {};
-    updates[`users/${mySide}`] = true;
-    // 誰かが入った時点でステータスを更新（ロジック簡略化のためupdateを使用）
-    await update(callStatusRef, updates);
-
-    // 最新の状態を再取得して判定
+    // 最新の状態を再取得して、相手が既にいれば通話開始
     const nextSnap = await get(callStatusRef);
     const nextData = nextSnap.val();
     const isOtherReady = nextData.users && (mySide === 'S' ? nextData.users.G : nextData.users.S);
 
     if (isOtherReady) {
-      // 二人揃ったのでステータスをstartedに
       await update(callStatusRef, { status: 'started' });
-      // 先手がOfferを送る（少し待って相手の準備を待つ）
+      // 相手の準備完了を待つために少しディレイ
       if (mySide === 'S') {
         setTimeout(sendOffer, 2000);
       }
-    } else {
-      await update(callStatusRef, { status: 'waiting' });
     }
   } catch (e) { 
     console.error("Call Start Error:", e);
@@ -762,8 +760,8 @@ btnCallStart.onclick = async () => {
     btnMute.style.opacity = !localCallStartPressed ? "0.5" : "1";
   }
 
-      // --- 通話ステータス監視 (リロード・相手離脱連動版) ---
-  onValue(callStatusRef, async (snap) => { 
+  // --- 通話ステータス監視 (リロード・相手離脱連動版) ---
+    onValue(callStatusRef, async (snap) => { 
     const data = snap.val(); 
     if (!data) {
       if (localCallStartPressed) handleCallEndInternal();
@@ -775,34 +773,31 @@ btnCallStart.onclick = async () => {
     const otherSide = (mySide === 'S' ? 'G' : 'S');
     const isOtherRegistered = !!(data.users && data.users[otherSide]);
 
-    // リロード等によりステータスが ended になった場合、または相手が消えた場合に初期化
+    // 通話終了を検知すべき条件
     const shouldTerminate = localCallStartPressed && (
       data.status === 'ended' || 
       (data.status === 'started' && !isOtherRegistered) ||
-      !iAmRegisteredOnFirebase
+      (data.status === 'waiting' && !iAmRegisteredOnFirebase)
     );
 
     if (shouldTerminate) {
-      console.log("Call termination detected. Cleaning up...");
+      console.log("Call termination detected.");
       handleCallEndInternal();
       return;
     }
     
-    // 相手が離脱して待機中になった場合
-    if (localCallStartPressed && data.status === 'waiting' && !isOtherRegistered) {
-      if (peerConnection) {
-        try { peerConnection.close(); } catch(e){}
-        peerConnection = null;
-      }
-    }
-
-    // 【重要】リロード後の「自動復旧」ロジックを削除（方針変更：リロード＝終了のため）
-    // 代わりに、Firebase上に自分のゴミデータが残っている場合は掃除する
-    if (!localCallStartPressed && iAmRegisteredOnFirebase) {
+    // 自分が「開始」を押していないのに、Firebaseに自分のフラグが残っている場合のみ掃除
+    // statusがendedの時は全体リセット中なので、個別の掃除は行わない（無限ループ防止）
+    if (!localCallStartPressed && iAmRegisteredOnFirebase && data.status !== 'ended') {
+      console.log("Cleaning up my stale registration...");
       const updates = {};
       updates[`users/${mySide}`] = null;
-      if (!isOtherRegistered) updates['status'] = 'offline';
+      // 誰もいなくなるならステータスもオフラインへ
+      if (!isOtherRegistered) {
+        updates['status'] = 'offline';
+      }
       update(callStatusRef, updates);
+      return; // 掃除実行時は一回抜ける
     }
 
     // UI表示の更新
