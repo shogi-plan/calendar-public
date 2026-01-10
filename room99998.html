@@ -1856,11 +1856,6 @@ function updateTimerDisplay() {
       remove(signalingRef);
     }
 
-    // ユーザーに確認ダイアログを表示
-    event.preventDefault();
-    event.returnValue = '';
-  });
-
   // ページ読み込み完了時にUIの状態を一度強制更新する
   updateCallUI();
   
