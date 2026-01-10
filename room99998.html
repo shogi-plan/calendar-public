@@ -712,7 +712,7 @@ btnCallStart.onclick = async () => {
     handleCallEndInternal(); 
   };
 
-    function handleCallEndInternal() { 
+      function handleCallEndInternal() { 
     // 通話中フラグとミュート状態を完全にリセット
     localCallStartPressed = false; 
     isMuted = false;
@@ -720,7 +720,7 @@ btnCallStart.onclick = async () => {
     
     // ネットワーク接続とオーディオストリームを完全に停止
     if (peerConnection) { 
-      peerConnection.close(); 
+      try { peerConnection.close(); } catch(e){}
       peerConnection = null; 
     } 
     if (localStream) { 
@@ -740,7 +740,7 @@ btnCallStart.onclick = async () => {
     callStatusDisplay.textContent = "オフライン";
     updateCallUI(); 
 
-    // 手動終了ボタン（自分で押した場合）
+    // 手動終了ボタン（自分で押した場合）またはリロードによる初期化フラグがある場合
     if (sessionStorage.getItem(`isManualEnd_${roomName}`) === 'true') {
       sessionStorage.removeItem(`isManualEnd_${roomName}`);
       window.location.reload(); 
@@ -762,11 +762,10 @@ btnCallStart.onclick = async () => {
     btnMute.style.opacity = !localCallStartPressed ? "0.5" : "1";
   }
 
-        // --- 通話ステータス監視 (リロード対策版) ---
-        onValue(callStatusRef, async (snap) => { 
+      // --- 通話ステータス監視 (リロード・相手離脱連動版) ---
+  onValue(callStatusRef, async (snap) => { 
     const data = snap.val(); 
     if (!data) {
-      // 部屋データ自体が消えた場合も、通話中なら終了させる
       if (localCallStartPressed) handleCallEndInternal();
       updateCallUI();
       return;
@@ -776,58 +775,34 @@ btnCallStart.onclick = async () => {
     const otherSide = (mySide === 'S' ? 'G' : 'S');
     const isOtherRegistered = !!(data.users && data.users[otherSide]);
 
-    // 【修正点】「終了状態」の検知条件を強化
-    // 1. 全体のステータスが 'ended' になった場合
-    // 2. 通話中なのに、Firebase上に自分が登録されていない場合
-    // 3. 通話中(started)なのに、相手が登録から消えた場合（←これが重要）
+    // リロード等によりステータスが ended になった場合、または相手が消えた場合に初期化
     const shouldTerminate = localCallStartPressed && (
       data.status === 'ended' || 
-      !iAmRegisteredOnFirebase || 
-      (data.status === 'started' && !isOtherRegistered)
+      (data.status === 'started' && !isOtherRegistered) ||
+      !iAmRegisteredOnFirebase
     );
 
     if (shouldTerminate) {
-      console.log("Call termination condition met. Stopping local stream.");
+      console.log("Call termination detected. Cleaning up...");
       handleCallEndInternal();
       return;
     }
     
-    // 相手が通話から離脱(waiting)した場合、PeerConnectionを掃除して待機状態へ
+    // 相手が離脱して待機中になった場合
     if (localCallStartPressed && data.status === 'waiting' && !isOtherRegistered) {
       if (peerConnection) {
-        peerConnection.close();
+        try { peerConnection.close(); } catch(e){}
         peerConnection = null;
       }
     }
 
-        // 自動セットアップ（リロード時やページを開いた瞬間の復旧用）
-    // Firebaseに自分が登録されているが、ローカルのストリームがない場合に発動
-    if (iAmRegisteredOnFirebase && !localStream) {
-      // status が 'ended' 以外なら自動復旧を試みる
-      if (data.status !== 'ended') {
-        console.log("Detecting active session after reload. Reconnecting...");
-        localCallStartPressed = true;
-        updateCallUI(); 
-        try {
-          await startKeepAlive();
-          await startLocalStream();
-          createPeerConnection();
-          
-          // 相手も既にいる場合はOfferを送受信して経路を復旧
-          if (data.status === 'started') {
-            if (mySide === 'S') {
-              setTimeout(sendOffer, 2000);
-            } else if (mySide === 'G') {
-              // 後手側はOfferが届くのを待つ状態になる
-              console.log("Waiting for Offer from S...");
-            }
-          }
-        } catch (e) {
-          console.error("Auto setup error:", e);
-          localCallStartPressed = false;
-          updateCallUI();
-        }
-      }
+    // 【重要】リロード後の「自動復旧」ロジックを削除（方針変更：リロード＝終了のため）
+    // 代わりに、Firebase上に自分のゴミデータが残っている場合は掃除する
+    if (!localCallStartPressed && iAmRegisteredOnFirebase) {
+      const updates = {};
+      updates[`users/${mySide}`] = null;
+      if (!isOtherRegistered) updates['status'] = 'offline';
+      update(callStatusRef, updates);
     }
 
     // UI表示の更新
@@ -839,7 +814,6 @@ btnCallStart.onclick = async () => {
     } else if (iAmRegisteredOnFirebase && !isOtherRegistered) {
       callStatusDisplay.textContent = "相手の応答待ち...";
     } else {
-      // 終了時や未開始時
       callStatusDisplay.textContent = "オフライン";
       btnCallStart.style.boxShadow = "none";
     }
@@ -1694,11 +1668,9 @@ function updateTimerDisplay() {
           
                     // --- ここが重要 ---
           // 表示上の秒読みが0になったら finish を実行する
-          if (byoRem <= 0 && !state.winner) {
-              // 対局者(mySideがSまたはG)のみ判定を実行
+          // 通話の初期化処理などで pendingProm がある場合は待つ
+          if (byoRem <= 0 && !state.winner && !pendingProm) {
               if (mySide === 'S' || mySide === 'G') {
-                  // finish 関数を呼び出す。
-                  // 敗者の電源が落ちていても、勝者側からこの関数が呼ばれFirebaseが更新されます。
                   finish({ 
                     side: s, 
                     type: "時間切れ", 
@@ -1874,6 +1846,29 @@ function updateTimerDisplay() {
     const h = (turn === 'S' ? handS : handG) || []; for (let type of [...new Set(h)]) for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (!board[y][x]) { const tb = JSON.parse(JSON.stringify(board)); tb[y][x] = { type, owner: turn }; if (!isChecked(tb, turn)) return false; }
     return true;
   }
+  
+    // --- ブラウザリロード・破棄時の通話強制終了 ---
+  window.addEventListener('beforeunload', (event) => {
+    // 通話中の場合のみ、Firebase側のステータスを「終了」に書き換えて相手に通知する
+    if (localCallStartPressed) {
+      // 1. Firebaseのステータスを更新（同期実行に近い形で行う）
+      // 注意: beforeunload内での非同期処理(await)は完了が保証されませんが、
+      // updateは比較的軽量なため、多くのブラウザで送信されます。
+      update(callStatusRef, { 
+        status: 'ended', 
+        users: null 
+      });
+      remove(signalingRef);
+    }
+
+    // ユーザーに確認ダイアログを表示
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
+  // ページ読み込み完了時にUIの状態を一度強制更新する
+  updateCallUI();
+  
 </script>
 </body>
 </html>
