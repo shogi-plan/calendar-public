@@ -55,13 +55,17 @@
       box-sizing: border-box; 
     }
     
-    /* 駒画像のスタイル定義 */
+        /* 駒画像のスタイル定義 */
     .piece-img {
-      width: 100%;
-      height: 100%;
+      /* マス目に対して少しだけ余白(92%)を持たせると綺麗に収まります */
+      width: 92%;
+      height: 92%;
       background-image: url('assets/piece.png');
-      background-size: 800% 400%; /* 8列×4行のスプライト */
+      /* 8列×4行のスプライト */
+      background-size: 800% 400%; 
       background-repeat: no-repeat;
+      /* マスの中央に配置 */
+      margin: auto;
     }
 
     .piece { 
@@ -1433,7 +1437,7 @@ function render() {
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-  // 盤面の描画
+    // 盤面の描画
   for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
@@ -1444,9 +1448,11 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const rotClass = isOpposite ? 'opposite' : '';
         const pos = PIECE_POS[p.type];
-        // スプライト画像内の位置を計算（横8分割、縦4分割）
-        const bgX = (100 / 7) * pos.x;
-        const bgY = (100 / 3) * pos.y;
+        
+        // background-positionの計算をより精密に行う（toFixedを使用）
+        // 横(x)は8枚なので間隔は 100/7、縦(y)は4枚なので間隔は 100/3
+        const bgX = (pos.x * (100 / 7)).toFixed(4);
+        const bgY = (pos.y * (100 / 3)).toFixed(4);
         
         c.innerHTML = `<div class="piece ${rotClass}">
           <div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>
@@ -1477,8 +1483,12 @@ function render() {
       
       const type = existingTypes[i]; // 上から順に駒を割り当て
 
-      if (type) {
+            if (type) {
         const s = document.createElement('span');
+        // 持ち駒の枠内でも中央に寄せるための指定
+        s.style.display = "flex";
+        s.style.alignItems = "center";
+        s.style.justifyContent = "center";
         
         // 持ち駒も画像で表示するための位置計算
         const PIECE_POS = {
@@ -1486,12 +1496,12 @@ function render() {
           'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
         };
         const pos = PIECE_POS[type];
-        const bgX = (100 / 7) * pos.x;
-        const bgY = (100 / 3) * pos.y;
+        const bgX = (pos.x * (100 / 7)).toFixed(4);
+        const bgY = (pos.y * (100 / 3)).toFixed(4);
         
         // 持ち駒用スパンの中に画像を配置
-        s.innerHTML = `<div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div>`;
-        
+        s.innerHTML = `<div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>`;
+
         // 枚数ラベル
         if (counts[type] > 1) {
           const c = document.createElement('div');
