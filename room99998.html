@@ -52,20 +52,20 @@
       max-width: 500px; 
     }
 
-        #board { 
+          #board { 
       display: grid; 
       grid-template-columns: repeat(9, 1fr); 
       grid-template-rows: repeat(9, 1fr); 
       border: 1px solid #222; 
       width: 100%; 
       height: 100%; 
-      /* 画像が歪まないよう contain にし、中央配置 */
+      /* 画像をマス目の枠（グリッド）に完全に一致させる */
       background-image: url('assets/light_878x960.png');
-      background-size: contain;
+      background-size: 100% 100%; /* containから100% 100%に変更して隙間を排除 */
       background-repeat: no-repeat;
       background-position: center;
       box-sizing: border-box; 
-      background-color: var(--board-color); /* 画像の背後を盤の色で埋める */
+      background-color: var(--board-color);
     }
 
         .cell {
@@ -1541,7 +1541,7 @@ function render() {
       
       const isPossible = possibleMoves.some(m => m.x === x && m.y === y);
       
-      // クラスの付け替え（背景色制御）
+      // クラスの付け替え
       c.className = 'cell';
       if (sel?.x === x && sel?.y === y) c.classList.add('selected');
       if (isPossible) c.classList.add('possible');
@@ -1550,12 +1550,12 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 座標計算。8枚×4枚の画像を正確に参照
+        // 座標計算。100% / (列数-1) または (行数-1) で正確に指定
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
-        // 構造をクリーンにし、oppositeクラスで回転を制御
-        c.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}">
+        // Flexboxの中央配置を維持しつつ、ズレを抑制
+        c.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}" style="width:92%; height:92%;">
           <div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>
         </div>`;
       } else {
@@ -1592,8 +1592,7 @@ function render() {
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
-        // 持ち駒も盤面と同じ piece クラスを使用して配置を統一
-        s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
+        s.innerHTML = `<div class="piece" style="width:92%; height:92%;"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
