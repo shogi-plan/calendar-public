@@ -132,41 +132,44 @@
     .chat-msg-other { color: #1b5e20; background: #e8f5e9; border-radius: 3px; padding: 2px 4px; }
     .chat-name { font-weight: bold; margin-right: 5px; display: none; } /* 名前の表示を非表示に設定 */
     
-     /* --- 持ち駒エリア（復活） --- */
+          /* --- 持ち駒エリア（改良版） --- */
     .hand {
       display: flex;
       flex-direction: column;
-      width: 45px;
+      /* 盤面(878:960)の横幅1列分に近い比率で幅を自動計算 */
+      width: calc((58vw / 9)); 
+      max-width: calc(380px / 9);
       background: #d7b59a;
-      border: 2px solid #5d4037;
+      border: 1px solid #5d4037;
       border-radius: 4px;
-      padding: 2px;
+      padding: 1px;
       box-sizing: border-box;
-      gap: 2px;
-      align-self: stretch;
+      gap: 1px;
+      align-self: stretch; /* 高さを盤面コンテナに合わせる */
       justify-content: flex-start;
       z-index: 5;
     }
-    /* 対局時のサイズ調整 */
+    /* 対局時のサイズ調整（盤面が大きくなるのに合わせて幅も調整） */
     #board-container.playing-size { 
       width: 78vw; 
       max-width: 500px; 
     }
     .hand.playing-size {
-      width: 11vw;
-      max-width: 60px;
+      width: calc(78vw / 9);
+      max-width: calc(500px / 9);
     }
-    /* 駒を置くためのスロット */
+    /* 駒を置くためのスロット：盤面と駒サイズを合わせる */
     .hand-slot {
       width: 100%;
       aspect-ratio: 1 / 1;
-      background: rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
       border-radius: 2px;
       position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
     }
+
     /* 持ち駒の枚数表示 */
     .hand-count {
       position: absolute;
@@ -1550,9 +1553,10 @@ function render() {
     }
   }
 
-    const drawH = (id, list, owner) => {
+        const drawH = (id, list, owner) => {
     const el = document.getElementById(id);
     el.innerHTML = '';
+    // 駒台に表示する優先順位
     const HAND_ORDER = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
     
     const counts = {};
@@ -1561,7 +1565,7 @@ function render() {
     // 存在する駒の種類だけを抽出
     const existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
-    // 最大7スロット分描画（駒がなくても枠を維持してレイアウト崩れを防ぐ）
+    // 駒台の高さに合わせて、常に7スロット分（駒種最大数）を生成して均等配置する
     for (let i = 0; i < 7; i++) {
       const slot = document.createElement('div');
       slot.className = 'hand-slot';
@@ -1574,28 +1578,34 @@ function render() {
         s.style.display = "flex";
         s.style.alignItems = "center";
         s.style.justifyContent = "center";
+        s.style.cursor = "pointer";
+        s.style.position = "relative";
         
         const pos = PIECE_POS[type];
+        // 盤面と同じ計算式でスプライト画像を表示
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
-        s.innerHTML = `<div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:90%; height:90%;"></div>`;
+        // 盤面とサイズを合わせる（95%）
+        s.innerHTML = `<div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:95%; height:95%;"></div>`;
 
+        // 2枚以上の場合は枚数を表示
         if (counts[type] > 1) {
           const c = document.createElement('div');
           c.className = 'hand-count';
-          c.textContent = `${counts[type]}`; // 枚数を表示
+          c.textContent = `${counts[type]}`;
           slot.appendChild(c);
         }
 
         const firstIdx = list.indexOf(type);
+        // 選択中のハイライト
         if (selH && selH.type === type && selH.owner === owner) {
           s.classList.add('selected-piece');
         }
 
         s.onclick = (e) => {
           e.stopPropagation();
-          // 対局モードでのガード
+          // 感想戦以外かつ、自分の手番でない場合は無視
           if (!isReviewMode) {
             if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
           }
