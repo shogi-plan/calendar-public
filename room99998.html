@@ -38,53 +38,62 @@
   box-sizing: border-box;
 }
 
-        #board-container { position: relative; width: 58vw; max-width: 380px; aspect-ratio: 1 / 1; flex-shrink: 1; transition: width 0.2s; }
-    /* 対局中（拡大時）のスタイル */
-    #board-container.playing-size { width: 78vw; max-width: 500px; }
+        /* アスペクト比を画像の 878:960 に合わせて調整 */
+    #board-container { 
+      position: relative; 
+      width: 58vw; 
+      max-width: 380px; 
+      aspect-ratio: 878 / 960; 
+      flex-shrink: 1; 
+      transition: width 0.2s; 
+    }
+    #board-container.playing-size { 
+      width: 78vw; 
+      max-width: 500px; 
+    }
 
-        #board { 
+    #board { 
       display: grid; 
-      grid-template-columns: repeat(9, 11.1111%); 
-      grid-template-rows: repeat(9, 11.1111%); 
+      grid-template-columns: repeat(9, 1fr); 
+      grid-template-rows: repeat(9, 1fr); 
       border: 1px solid #222; 
       width: 100%; 
       height: 100%; 
-      /* 画像パスを assets 配下に変更 */
       background-image: url('assets/light_878x960.png');
-      background-size: cover;
+      background-size: 100% 100%;
       box-sizing: border-box; 
     }
     
-     /* 駒画像のスタイル定義 */
-      .piece-img {
-      width: 100%;  /* 90%から100%に変更してセル一杯に広げる */
-      height: 100%; /* 確実に高さを確保 */
-      background-image: url('assets/piece.png');
-      background-size: 800% 400%; 
-      background-repeat: no-repeat;
-      display: block;
+    .cell {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      cursor: pointer;
+      box-sizing: border-box;
+      /* 子要素を中央に配置する設定を強化 */
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .piece { 
+      position: absolute;
+      inset: 0; /* マス目いっぱいに広げる */
       z-index: 10; 
-      /* クリックを下の .cell に通すために必須 */
       pointer-events: none; 
       display: flex;
       align-items: center; 
       justify-content: center; 
-      width: 100%;
-      height: 100%;
     }
 
-    /* マス自体のスタイルを補強 */
-    .cell {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      cursor: pointer;
+    .piece-img {
+      /* マス目に対して少しだけ余白を持たせる（ズレ防止と見た目のため） */
+      width: 95%;
+      height: 95%;
+      background-image: url('assets/piece.png');
+      background-size: 800% 400%; 
+      background-repeat: no-repeat;
+      display: block;
     }
 
     .cell.selected {
@@ -1436,14 +1445,14 @@ function render() {
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-      // 盤面の描画
+  // 盤面の描画
   for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
       
-      // クラス名の更新（選択中、または移動可能先）
       const isPossible = possibleMoves.some(m => m.x === x && m.y === y);
+      // セルの選択状態と移動可能ハイライトのみ更新
       c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''} ${isPossible ? 'possible' : ''}`;
 
       if (p) {
@@ -1451,59 +1460,52 @@ function render() {
         const rotClass = isOpposite ? 'opposite' : '';
         const pos = PIECE_POS[p.type];
         
+        // 100/7 と 100/3 はスプライト画像の枚数に基づく固定値
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
-        // innerHTMLを空にしてから追加（残骸が残らないように）
+        // 構造を単純化して position: absolute による中央配置を補助
         c.innerHTML = `<div class="piece ${rotClass}">
           <div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>
         </div>`;
+      } else if (isPossible) {
+        // 移動可能地点のドット
+        c.innerHTML = '<div style="width:10px;height:10px;background:rgba(0,0,0,0.2);border-radius:50%;pointer-events:none;"></div>';
       } else {
-        c.innerHTML = isPossible ? '<div style="width:10px;height:10px;background:rgba(0,0,0,0.2);border-radius:50%;"></div>' : '';
+        c.innerHTML = '';
       }
     }
   }
 
-      const drawH = (id, list, owner) => {
+  const drawH = (id, list, owner) => {
     const el = document.getElementById(id);
     el.innerHTML = '';
-    // 駒の種類と表示順序を定義
     const HAND_ORDER = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
     
-    // 現在持っている駒を枚数集計
     const counts = {};
     (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
 
-    // 持っている駒の種類だけを、定義した順序で抽出
     const existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
-    // 常に7つのスロットを作成し、持っている駒を上から順に詰めて表示
     for (let i = 0; i < 7; i++) {
       const slot = document.createElement('div');
       slot.className = 'hand-slot';
-      
-      const type = existingTypes[i]; // 上から順に駒を割り当て
+      const type = existingTypes[i];
 
-            if (type) {
+      if (type) {
         const s = document.createElement('span');
-        // 持ち駒の枠内でも中央に寄せるための指定
         s.style.display = "flex";
         s.style.alignItems = "center";
         s.style.justifyContent = "center";
+        s.style.width = "100%";
+        s.style.height = "100%";
         
-        // 持ち駒も画像で表示するための位置計算
-        const PIECE_POS = {
-          'OU': {x:0, y:0}, 'HI': {x:1, y:0}, 'KA': {x:2, y:0}, 'KI': {x:3, y:0}, 'GI': {x:4, y:0}, 'KE': {x:5, y:0}, 'KY': {x:6, y:0}, 'FU': {x:7, y:0},
-          'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
-        };
         const pos = PIECE_POS[type];
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
-        // 持ち駒用スパンの中に画像を配置
-        s.innerHTML = `<div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>`;
+        s.innerHTML = `<div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div>`;
 
-        // 枚数ラベル
         if (counts[type] > 1) {
           const c = document.createElement('div');
           c.className = 'hand-count';
@@ -1511,7 +1513,6 @@ function render() {
           slot.appendChild(c);
         }
 
-        // 選択処理
         const firstIdx = list.indexOf(type);
         if (selH && selH.type === type && selH.owner === owner) {
           s.classList.add('selected-piece');
@@ -1555,7 +1556,8 @@ function render() {
   document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
   document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
   document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
-} // render 終了
+}
+// render 終了
 
   // 棋譜リストの更新
   function updateKifuList() {
