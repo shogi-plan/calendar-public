@@ -132,12 +132,86 @@
     .chat-msg-other { color: #1b5e20; background: #e8f5e9; border-radius: 3px; padding: 2px 4px; }
     .chat-name { font-weight: bold; margin-right: 5px; display: none; } /* 名前の表示を非表示に設定 */
     
+     /* --- 持ち駒エリア（復活） --- */
+    .hand {
+      display: flex;
+      flex-direction: column;
+      width: 45px;
+      background: #d7b59a;
+      border: 2px solid #5d4037;
+      border-radius: 4px;
+      padding: 2px;
+      box-sizing: border-box;
+      gap: 2px;
+      align-self: stretch;
+      justify-content: flex-start;
+      z-index: 5;
+    }
+    /* 対局時のサイズ調整 */
+    #board-container.playing-size { 
+      width: 78vw; 
+      max-width: 500px; 
+    }
+    .hand.playing-size {
+      width: 11vw;
+      max-width: 60px;
+    }
+    /* 駒を置くためのスロット */
+    .hand-slot {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* 持ち駒の枚数表示 */
+    .hand-count {
+      position: absolute;
+      bottom: -1px;
+      right: -1px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      font-size: 9px;
+      padding: 0 2px;
+      border-radius: 2px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    /* 持ち駒選択中のハイライト */
+    .selected-piece {
+      background-color: rgba(255, 152, 0, 0.6);
+      box-shadow: 0 0 5px orange;
+    }
     /* 左側の持ち駒エリアを上下反転させる */
-.hand.left-rotated {
-  transform: rotate(180deg);
-}
+    .hand.left-rotated {
+      transform: rotate(180deg);
+    }
 
-    /* 追加：設定ボタンとダイアログのスタイル */
+    /* --- 感想戦パネルのレイアウト補正 --- */
+    #review-panel {
+      display: none;
+      flex-direction: column;
+      width: 18vw;
+      max-width: 120px;
+      height: 100%;
+      background: #ccc;
+      border: 1px solid #999;
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .kifu-list { 
+      flex-grow: 1; 
+      overflow-y: auto; 
+      background: #fafafa; 
+      font-size: 9px; 
+      padding: 0; 
+      margin: 0; 
+      height: 150px; /* 最小高さを確保 */
+    }
+
     :root { --setting-btn: #607d8b; }
     #btnSetting { background: var(--setting-btn); color: white; }
     #setting-dialog { 
@@ -397,22 +471,25 @@
   mySideSelect.value = mySide;
 
       // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
-  function updateDisplayRotation(isFlipped) {
+    function updateDisplayRotation(isFlipped) {
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
     const boardContainer = document.getElementById('board-container');
     const handS = document.getElementById('handS');
     const handG = document.getElementById('handG');
+    const reviewPanel = document.getElementById('review-panel');
 
-    // 感想戦モードでない場合のみ、拡大クラスを付与する
+    // モードに応じてクラスを付け替え
     if (!isReviewMode) {
       boardContainer.classList.add('playing-size');
       handS.classList.add('playing-size');
       handG.classList.add('playing-size');
+      reviewPanel.style.display = 'none'; // 対局中は隠す
     } else {
       boardContainer.classList.remove('playing-size');
       handS.classList.remove('playing-size');
       handG.classList.remove('playing-size');
+      reviewPanel.style.display = 'flex'; // 感想戦は表示
     }
 
     // いったん左右の回転状態をリセット
@@ -420,23 +497,19 @@
     handG.classList.remove('left-rotated');
 
     if (isFlipped) {
-      // 後手視点
-      container.insertBefore(handS, container.firstChild); // 左
-      container.appendChild(handG);                         // 右
+      // 後手視点：左に先手駒、右に後手駒
+      container.insertBefore(handS, boardContainer); 
+      container.appendChild(handG);
       board.style.transform = 'rotate(180deg)';
-
-      // ★左側（handS）を上下反転
       handS.classList.add('left-rotated');
     } else {
-      // 先手視点
-      container.insertBefore(handG, container.firstChild); // 左
-      container.appendChild(handS);                         // 右
+      // 先手視点：左に後手駒、右に先手駒
+      container.insertBefore(handG, boardContainer);
+      container.appendChild(handS);
       board.style.transform = 'rotate(0deg)';
-
-      // ★左側（handG）を上下反転
       handG.classList.add('left-rotated');
     }
-  }  
+  }
 
     // 初回表示の適用（未選択時は先手視点とする）
   let currentFlip = (mySide === 'G');
@@ -1477,7 +1550,7 @@ function render() {
     }
   }
 
-  const drawH = (id, list, owner) => {
+    const drawH = (id, list, owner) => {
     const el = document.getElementById(id);
     el.innerHTML = '';
     const HAND_ORDER = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
@@ -1485,31 +1558,33 @@ function render() {
     const counts = {};
     (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
 
+    // 存在する駒の種類だけを抽出
     const existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
+    // 最大7スロット分描画（駒がなくても枠を維持してレイアウト崩れを防ぐ）
     for (let i = 0; i < 7; i++) {
       const slot = document.createElement('div');
       slot.className = 'hand-slot';
       const type = existingTypes[i];
 
       if (type) {
-        const s = document.createElement('span');
+        const s = document.createElement('div');
+        s.style.width = "100%";
+        s.style.height = "100%";
         s.style.display = "flex";
         s.style.alignItems = "center";
         s.style.justifyContent = "center";
-        s.style.width = "100%";
-        s.style.height = "100%";
         
         const pos = PIECE_POS[type];
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
-        s.innerHTML = `<div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div>`;
+        s.innerHTML = `<div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:90%; height:90%;"></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
           c.className = 'hand-count';
-          c.textContent = `×${counts[type]}`;
+          c.textContent = `${counts[type]}`; // 枚数を表示
           slot.appendChild(c);
         }
 
@@ -1520,6 +1595,7 @@ function render() {
 
         s.onclick = (e) => {
           e.stopPropagation();
+          // 対局モードでのガード
           if (!isReviewMode) {
             if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
           }
