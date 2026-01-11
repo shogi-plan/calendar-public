@@ -55,27 +55,40 @@
       box-sizing: border-box; 
     }
     
-        /* 駒画像のスタイル定義 */
-    .piece-img {
-      /* マス目に対して少しだけ余白(92%)を持たせると綺麗に収まります */
-      width: 92%;
-      height: 92%;
+     /* 駒画像のスタイル定義 */
+      .piece-img {
+      width: 100%;  /* 90%から100%に変更してセル一杯に広げる */
+      height: 100%; /* 確実に高さを確保 */
       background-image: url('assets/piece.png');
-      /* 8列×4行のスプライト */
       background-size: 800% 400%; 
       background-repeat: no-repeat;
-      /* マスの中央に配置 */
-      margin: auto;
+      display: block;
     }
 
     .piece { 
       z-index: 10; 
+      /* クリックを下の .cell に通すために必須 */
       pointer-events: none; 
       display: flex;
       align-items: center; 
       justify-content: center; 
       width: 100%;
       height: 100%;
+    }
+
+    /* マス自体のスタイルを補強 */
+    .cell {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .cell.selected {
+      background-color: rgba(255, 152, 0, 0.5); /* 選択中のマスを強調 */
     }
 
     .piece.opposite { transform: rotate(180deg); }
@@ -1022,13 +1035,14 @@ btnCallStart.onclick = async () => {
     if (bool) pushReviewUpdate();
   }
 
-  const cells = [];
+    const cells = [];
   for (let y = 0; y < 9; y++) {
     cells[y] = [];
     for (let x = 0; x < 9; x++) {
       const c = document.createElement('div');
       c.className = 'cell';
-      c.onclick = () => handleCellClick(x, y);
+      // 修正：クリック時に正しく座標が渡るように
+      c.addEventListener('click', () => handleCellClick(x, y));
       boardEl.appendChild(c);
       cells[y][x] = c;
     }
@@ -1245,8 +1259,11 @@ function finish(moveData) {
   }
 
     function handleCellClick(x, y) {
+  // --- 1. 感想戦モードのロジック ---
   if (isReviewMode) {
     const target = rvState.board[y][x];
+    
+    // 選択済みの同じマスをクリックしたら解除
     if (sel && sel.x === x && sel.y === y) {
       sel = null;
       possibleMoves = [];
@@ -1254,24 +1271,17 @@ function finish(moveData) {
       return;
     }
 
-        // 移動先をクリック
+    // 移動先をクリックした場合
     if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
       const fromP = rvState.board[sel.y][sel.x];
       if (!fromP) return;
 
       const moveData = {
-        side: fromP.owner,
-        fromX: sel.x,
-        fromY: sel.y,
-        toX: x,
-        toY: y,
-        type: fromP.type,
-        isDrop: false,
-        isPromoted: false
+        side: fromP.owner, fromX: sel.x, fromY: sel.y,
+        toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false
       };
       const promLine = (fromP.owner === 'S') ? [0, 1, 2] : [6, 7, 8];
 
-      // 駒取り処理
       if (target && target.owner !== fromP.owner) {
         (fromP.owner === 'S' ? rvState.handS : rvState.handG).push(UNPROMOTE_MAP[target.type] || target.type);
       }
@@ -1280,9 +1290,7 @@ function finish(moveData) {
         pendingProm = { x, y, moveData };
         document.getElementById('promote-dialog').style.display = 'block';
       } else {
-        // 感想戦での移動音
         playPieceSound();
-        // 先に移動元を消去してから移動先に配置（消失防止）
         const movingPiece = { type: fromP.type, owner: fromP.owner };
         rvState.board[sel.y][sel.x] = null;
         rvState.board[y][x] = movingPiece;
@@ -1294,43 +1302,41 @@ function finish(moveData) {
       return;
     }
 
-    // 持ち駒を打つ
+    // 持ち駒を打つ場合
     if (selH) {
       if (!target) {
         const targetHand = (selH.owner === 'S' ? rvState.handS : rvState.handG);
         if (targetHand && targetHand[selH.idx] === selH.type) {
-          // 感想戦での駒打ち音
           playPieceSound();
           rvState.board[y][x] = { type: selH.type, owner: selH.owner };
           targetHand.splice(selH.idx, 1);
           selH = null;
           pushReviewUpdate();
-          render();
-        } else {
-          selH = null;
-          render();
         }
-      } else {
-        selH = null;
-        render();
       }
+      selH = null;
+      render();
       return;
     }
 
-    // 駒を選択
+    // 新しく駒を選択
     if (target) {
       sel = { x, y };
       possibleMoves = getRawMoves(x, y, rvState.board, target.owner);
-      render();
+    } else {
+      sel = null;
+      possibleMoves = [];
     }
+    render();
     return;
   }
 
-  // --- 以下、対局モード ---
-  if (state.lastTick === 0) return;
-  if (state.winner || state.turn !== mySide || pendingProm) return;
+  // --- 2. 対局モードのロジック ---
+  if (state.lastTick === 0 || state.winner || state.turn !== mySide || pendingProm) return;
 
   const target = state.board[y][x];
+
+  // 選択済みの同じマスをクリックしたら解除
   if (sel && sel.x === x && sel.y === y) {
     sel = null;
     possibleMoves = [];
@@ -1338,29 +1344,21 @@ function finish(moveData) {
     return;
   }
 
-  // 移動先をクリック
+  // 移動先をクリックした場合
   if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
     const fromP = state.board[sel.y][sel.x];
     if (!fromP) return;
 
     const moveData = {
-      side: mySide,
-      fromX: sel.x,
-      fromY: sel.y,
-      toX: x,
-      toY: y,
-      type: fromP.type,
-      isDrop: false,
-      isPromoted: false
+      side: mySide, fromX: sel.x, fromY: sel.y,
+      toX: x, toY: y, type: fromP.type, isDrop: false, isPromoted: false
     };
     const promLine = (mySide === 'S') ? [0, 1, 2] : [6, 7, 8];
 
-    // 駒取り
     if (target && target.owner !== mySide) {
       const h = (mySide === 'S' ? state.handS : state.handG) || [];
       h.push(UNPROMOTE_MAP[target.type] || target.type);
-      if (mySide === 'S') state.handS = h;
-      else state.handG = h;
+      if (mySide === 'S') state.handS = h; else state.handG = h;
     }
 
     if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
@@ -1384,7 +1382,7 @@ function finish(moveData) {
     return;
   }
 
-  // 持ち駒を打つ
+  // 持ち駒を打つ場合
   if (selH) {
     if (!target) {
       const targetHand = (mySide === 'S' ? state.handS : state.handG);
@@ -1392,24 +1390,25 @@ function finish(moveData) {
         state.board[y][x] = { type: selH.type, owner: mySide };
         targetHand.splice(selH.idx, 1);
         finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true });
-      } else {
-        selH = null;
-        render();
+        return;
       }
-    } else {
-      selH = null;
-      render();
     }
+    selH = null;
+    render();
     return;
   }
 
-  // 駒を選択
+  // 新しく駒を選択
   if (target && target.owner === mySide) {
     sel = { x, y };
     possibleMoves = getRawMoves(x, y, state.board, mySide);
-    render();
+  } else {
+    sel = null;
+    possibleMoves = [];
   }
-} // handleCellClick 終了
+  render();
+}
+ // handleCellClick 終了
 
 function render() {
   if (isReviewMode && !rvState) {
@@ -1437,28 +1436,30 @@ function render() {
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-    // 盤面の描画
+      // 盤面の描画
   for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
-      c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''}`;
+      
+      // クラス名の更新（選択中、または移動可能先）
+      const isPossible = possibleMoves.some(m => m.x === x && m.y === y);
+      c.className = `cell ${sel?.x===x && sel?.y===y ? 'selected' : ''} ${isPossible ? 'possible' : ''}`;
 
       if (p) {
         const isOpposite = (p.owner === 'G');
         const rotClass = isOpposite ? 'opposite' : '';
         const pos = PIECE_POS[p.type];
         
-        // background-positionの計算をより精密に行う（toFixedを使用）
-        // 横(x)は8枚なので間隔は 100/7、縦(y)は4枚なので間隔は 100/3
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
+        // innerHTMLを空にしてから追加（残骸が残らないように）
         c.innerHTML = `<div class="piece ${rotClass}">
           <div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>
         </div>`;
       } else {
-        c.innerHTML = '';
+        c.innerHTML = isPossible ? '<div style="width:10px;height:10px;background:rgba(0,0,0,0.2);border-radius:50%;"></div>' : '';
       }
     }
   }
