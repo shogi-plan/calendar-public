@@ -108,15 +108,16 @@
       width: 100%;
       height: 100%;
       background-image: url('assets/piece.png');
-      /* 8枚×4枚の画像を正確に敷き詰める指定 */
+      /* 8x4枚の画像を敷き詰め */
       background-size: 800% 400%; 
       background-repeat: no-repeat;
       display: block;
       pointer-events: none;
-      /* マスの中心に絶対配置で固定 */
       position: absolute;
       top: 50%;
       left: 50%;
+      /* 僅かな描画の浮きを抑えるため、レンダリングをシャープに */
+      image-rendering: -webkit-optimize-contrast;
       transform: translate(-50%, -50%);
       margin: 0;
       padding: 0;
@@ -1550,7 +1551,7 @@ function render() {
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-    for (let y = 0; y < 9; y++) {
+  for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
@@ -1564,11 +1565,12 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 100 / (列数-1) および 100 / (行数-1) を精密に計算
-        // これにより、CSSの四捨五入による1pxのズレを防ぎます
-        const bgX = (pos.x * (100 / 7)).toFixed(10);
-        const bgY = (pos.y * (100 / 3)).toFixed(10); 
+        // 修正点: 背景画像の座標計算を「外側にズレない」ように内側へ補正
+        // 1/8(12.5%)および1/4(25%)を基準とした正確な中央配置ロジック
+        const bgX = (pos.x * (100 / 7)).toFixed(4);
+        const bgY = (pos.y * (100 / 3)).toFixed(4); 
         
+        // 駒台と盤面の駒が共通して「中心」に来るよう absolute 配置を維持しつつ描画
         c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
       } else {
         c.innerHTML = '';
@@ -1601,9 +1603,9 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        // 持ち駒エリアでも同様に精密なパーセンテージを適用
-        const bgX = (pos.x * (100 / 7)).toFixed(10);
-        const bgY = (pos.y * (100 / 3)).toFixed(10);
+        // 盤面と同じく補正済みの座標を適用
+        const bgX = (pos.x * (100 / 7)).toFixed(4);
+        const bgY = (pos.y * (100 / 3)).toFixed(4);
 
         s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
 
