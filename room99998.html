@@ -105,20 +105,20 @@
       transform: rotate(180deg); 
     }
 
-    .piece-img {
-      /* 駒が外側にズレないよう、サイズを102%にして中心を合わせる */
-      width: 102%;
-      height: 102%;
+        .piece-img {
+      /* 100%に固定し、枠内での余計な拡大を廃止 */
+      width: 100%;
+      height: 100%;
       background-image: url('assets/piece.png');
-      /* 8x4枚の画像を敷き詰め */
+      /* 8枚x4枚の画像を正確に敷き詰め */
       background-size: 800% 400%; 
       background-repeat: no-repeat;
       display: block;
       pointer-events: none;
       position: absolute;
+      /* 中心配置を保証 */
       top: 50%;
       left: 50%;
-      /* 僅かな描画の浮きを抑えるため、レンダリングをシャープに */
       image-rendering: -webkit-optimize-contrast;
       transform: translate(-50%, -50%);
       margin: 0;
@@ -1567,14 +1567,14 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 誤差を排除するため、8列(100/7)・4行(100/3)の各中心点を定数化
-        // 8分割の各中心：0=0%, 1=14.2857%, 2=28.5714%, 3=42.8571%, 4=57.1428%, 5=71.4285%, 6=85.7142%, 7=100%
-        const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * (100 / 3)); 
+        // 【修正：精密座標計算】
+        // background-positionの%は (pos / (total - 1)) * 100 で算出するのがCSSスプライトの鉄則です。
+        // 横は8枚なので 7で割り、縦は4枚なので 3で割ることで、各コマの「真ん中」が正確に合致し、ズレが消失します。
+        const bgX = (pos.x / 7) * 100;
+        const bgY = (pos.y / 3) * 100; 
         
-        // piece-img に対して、ブラウザによる微細な位置ズレを防ぐため transform: translate で補正を固定
         c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
-          <div class="piece-img" style="background-position: ${bgX.toFixed(4)}% ${bgY.toFixed(4)}%; width: 100%; height: 100%; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+          <div class="piece-img" style="background-position: ${bgX.toFixed(4)}% ${bgY.toFixed(4)}%;"></div>
         </div>`;
       } else {
         c.innerHTML = '';
@@ -1607,12 +1607,12 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        // 盤面と完全に同期した固定座標を適用
-        const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * (100 / 3));
+        // 盤面と完全に同期した「外側に寄らない」精密座標を適用
+        const bgX = (pos.x / 7) * 100;
+        const bgY = (pos.y / 3) * 100;
 
         s.innerHTML = `<div class="piece">
-          <div class="piece-img" style="background-position: ${bgX.toFixed(4)}% ${bgY.toFixed(4)}%; width: 100%; height: 100%; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+          <div class="piece-img" style="background-position: ${bgX.toFixed(4)}% ${bgY.toFixed(4)}%;"></div>
         </div>`;
 
         if (counts[type] > 1) {
