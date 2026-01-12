@@ -52,11 +52,9 @@
       max-width: 500px; 
     }
 
-        #board { 
-      display: grid; 
-      /* 各マスの幅を 1fr (等分割) に変更し、ブラウザの計算誤差を吸収 */
-      grid-template-columns: repeat(9, 1fr); 
-      grid-template-rows: repeat(9, 1fr); 
+    #board { 
+      position: relative; /* 子要素(cell)を絶対座標で置くため */
+      display: block; 
       border: none; 
       width: 100%; 
       height: 100%; 
@@ -68,16 +66,13 @@
       background-color: var(--board-color);
       padding: 0 !important;
       margin: 0 !important;
-      gap: 0;
-      /* 盤面自体のズレを防止するため stretch を指定 */
-      justify-content: stretch;
-      align-content: stretch;
     }
 
     .cell {
-      width: 100%;
-      height: 100%;
-      position: relative;
+      /* 100/9 = 11.1111% で厳密に配置 */
+      width: 11.1111%;
+      height: 11.1111%;
+      position: absolute;
       cursor: pointer;
       border: none;
       box-sizing: border-box;
@@ -86,7 +81,6 @@
       justify-content: center !important;
       overflow: hidden; 
       margin: 0 !important;
-      /* padding: 1px を削除。これが駒を押し潰す原因。 */
       padding: 0 !important; 
       line-height: 0 !important;
       font-size: 0 !important;
@@ -528,16 +522,19 @@
     handS.classList.remove('left-rotated');
     handG.classList.remove('left-rotated');
 
-    if (isFlipped) {
+        if (isFlipped) {
       // 後手視点：左に先手駒、右に後手駒
       container.insertBefore(handS, boardContainer); 
       container.appendChild(handG);
+      // transform-origin を中心に設定
+      board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(180deg)';
       handS.classList.add('left-rotated');
     } else {
       // 先手視点：左に後手駒、右に先手駒
       container.insertBefore(handG, boardContainer);
       container.appendChild(handS);
+      board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(0deg)';
       handG.classList.add('left-rotated');
     }
@@ -1149,13 +1146,15 @@ btnCallStart.onclick = async () => {
     if (bool) pushReviewUpdate();
   }
 
-    const cells = [];
+  const cells = [];
   for (let y = 0; y < 9; y++) {
     cells[y] = [];
     for (let x = 0; x < 9; x++) {
       const c = document.createElement('div');
       c.className = 'cell';
-      // 修正：クリック時に正しく座標が渡るように
+      // 絶対座標で位置を固定（計算誤差を排除）
+      c.style.left = (x * 11.1111) + "%";
+      c.style.top = (y * 11.1111) + "%";
       c.addEventListener('click', () => handleCellClick(x, y));
       boardEl.appendChild(c);
       cells[y][x] = c;
