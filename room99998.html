@@ -52,7 +52,7 @@
       max-width: 500px; 
     }
 
-        #board { 
+    #board { 
       display: grid; 
       /* 各マスの幅を 100%/9 に厳密に固定 */
       grid-template-columns: repeat(9, calc(100% / 9)); 
@@ -74,22 +74,21 @@
       align-items: center;
     }
 
-        .cell {
+    .cell {
       width: 100%;
       height: 100%;
       position: relative;
       cursor: pointer;
       border: none;
       box-sizing: border-box;
-      /* 重要：子要素を完全に中央へロック */
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
       overflow: hidden; 
       margin: 0 !important;
-      padding: 0 !important;
-      line-height: 1; /* 0から1へ変更して配置を安定化 */
-      font-size: 0;
+      padding: 1px !important; /* 微調整用の余白を固定 */
+      line-height: 0 !important;
+      font-size: 0 !important;
     }
 
     .piece { 
@@ -105,6 +104,7 @@
       padding: 0 !important;
       flex-shrink: 0;
       transform-origin: center center;
+      line-height: 0 !important;
     }
 
     .piece.opposite { 
@@ -1547,7 +1547,7 @@ function render() {
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-  for (let y = 0; y < 9; y++) {
+    for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
@@ -1560,12 +1560,11 @@ function render() {
       if (p) {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
-        // 計算精度を100%均等に (1/7 = 14.2857..., 1/3 = 33.333...)
         const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * (100 / 1)); // 33.33%は 100/3 だが、spriteの高さ設定に合わせる
+        const bgY = (pos.y * 33.33333333); 
         
-        // 絶対に空白を入れない1行のテンプレート文字列
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:100%;height:100%;display:flex;justify-content:center;align-items:center;padding:0;margin:0;"><div class="piece-img" style="background-position:${bgX}% ${bgY === 0 ? 0 : 33.33333333}%;width:95%;height:95%;background-size:800% 400%;flex-shrink:0;"></div></div>`;
+        // 完全に空白を排除した1行のタグ構成。画像サイズを100%にし、セルのpaddingで制御。
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:100%;height:100%;"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;width:100%;height:100%;background-size:800% 400%;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
@@ -1600,8 +1599,8 @@ function render() {
         const bgX = (pos.x * (100 / 7));
         const bgY = (pos.y * (100 / 1));
 
-        // 駒台側も同様に空白を完全除去
-        s.innerHTML = `<div class="piece" style="width:100%;height:100%;display:flex;justify-content:center;align-items:center;padding:0;margin:0;"><div class="piece-img" style="background-position:${bgX}% ${bgY === 0 ? 0 : 33.33333333}%;width:95%;height:95%;background-size:800% 400%;flex-shrink:0;"></div></div>`;
+        // 駒台側もタグ間の空白を排除し、サイズ計算を統一
+        s.innerHTML = `<div class="piece" style="width:100%;height:100%;"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;width:100%;height:100%;background-size:800% 400%;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
