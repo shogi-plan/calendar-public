@@ -477,10 +477,11 @@
   const callStatusRef = ref(db, `${roomName}/callStatus`);
   const signalingRef = ref(db, `${roomName}/signaling`);
   const readyRef = ref(db, `${roomName}/readyStatus`); // 追加
+  const configLockRef = ref(db, `${roomName}/configLock`); // 設定排他制御用
 
   let isCountingDown = false; // 追加：カウントダウン中フラグ
 
-    const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
+  const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
 
   // 駒音の定義
   const pieceSound = new Audio("assets/komaoto.mp3");
@@ -1324,9 +1325,44 @@ function finish(moveData) {
     return board;
   }
 
-  // 設定ダイアログの開閉
-  document.getElementById('btnSetting').onclick = () => { document.getElementById('setting-dialog').style.display = 'block'; };
-  document.getElementById('btnSettingCancel').onclick = () => { document.getElementById('setting-dialog').style.display = 'none'; };
+  // 設定ダイアログの開閉（排他エラー処理付き）
+  document.getElementById('btnSetting').onclick = async () => {
+    // 1. このブラウザ用の仮IDを生成（未選択ユーザーでも識別可能にするため）
+    if (!sessionStorage.getItem(`configUser_${roomName}`)) {
+      sessionStorage.setItem(`configUser_${roomName}`, Math.random().toString(36).substring(2, 10));
+    }
+    const myConfigID = sessionStorage.getItem(`configUser_${roomName}`);
+
+    // 2. Firebaseから現在のロック状態を取得
+    const snap = await get(configLockRef);
+    const lock = snap.val();
+    const now = getServerNow();
+
+    // 3. 他の人が開いているかチェック（有効期限3分以内の有効なロックがあるか）
+    if (lock && lock.sessionID !== myConfigID && (now - lock.timestamp) < 180000) {
+      let lockerName = "他の利用者";
+      if (lock.side === 'S') lockerName = "先手▲";
+      if (lock.side === 'G') lockerName = "後手△";
+      
+      alert(`現在、設定画面が開かれています（操作中：${lockerName}）。\n終了するまでお待ちください。`);
+      return;
+    }
+
+    // 4. 自分が操作中としてロックを取得（または更新）
+    await set(configLockRef, {
+      sessionID: myConfigID,
+      side: mySide || 'none', // 未選択の場合は 'none'
+      timestamp: serverTimestamp()
+    });
+
+  document.getElementById('setting-dialog').style.display = 'block';
+  };
+  
+  document.getElementById('btnSettingCancel').onclick = async () => {
+    // ロックを解除して閉じる
+    await remove(configLockRef);
+    document.getElementById('setting-dialog').style.display = 'none';
+  };
 
     // 設定適用ボタン
   document.getElementById('btnSettingSave').onclick = async () => {
@@ -1368,10 +1404,12 @@ function finish(moveData) {
     sessionStorage.removeItem(`mySide_${roomName}`);
     mySideSelect.value = '';
     
+    // 5. ロックを解除して閉じる
+    await remove(configLockRef);
     document.getElementById('setting-dialog').style.display = 'none';
     render();
   };
-  
+
   function syncReviewStateLocally() { 
     if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; 
     const hist = state.history[viewIdx]; 
@@ -1939,6 +1977,11 @@ function updateTimerDisplay() {
         users: null 
       });
       remove(signalingRef);
+    }
+
+    // 設定画面を開いたまま閉じようとした場合、ロックを解放
+    if (document.getElementById('setting-dialog').style.display === 'block') {
+      remove(configLockRef);
     }
   });
 
