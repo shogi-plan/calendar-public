@@ -52,11 +52,11 @@
       max-width: 500px; 
     }
 
-    #board { 
+        #board { 
       display: grid; 
-      /* 各マスの幅を 100%/9 に厳密に固定 */
-      grid-template-columns: repeat(9, calc(100% / 9)); 
-      grid-template-rows: repeat(9, calc(100% / 9)); 
+      /* 各マスの幅を 1fr (等分割) に変更し、ブラウザの計算誤差を吸収 */
+      grid-template-columns: repeat(9, 1fr); 
+      grid-template-rows: repeat(9, 1fr); 
       border: none; 
       width: 100%; 
       height: 100%; 
@@ -68,10 +68,10 @@
       background-color: var(--board-color);
       padding: 0 !important;
       margin: 0 !important;
-      /* ブラウザのサブピクセルレンダリング誤差を防ぐ設定 */
-      gap: 0px;
-      justify-items: center;
-      align-items: center;
+      gap: 0;
+      /* 盤面自体のズレを防止するため stretch を指定 */
+      justify-content: stretch;
+      align-content: stretch;
     }
 
     .cell {
@@ -86,14 +86,16 @@
       justify-content: center !important;
       overflow: hidden; 
       margin: 0 !important;
-      padding: 1px !important; /* 微調整用の余白を固定 */
+      /* padding: 1px を削除。これが駒を押し潰す原因。 */
+      padding: 0 !important; 
       line-height: 0 !important;
       font-size: 0 !important;
     }
 
     .piece { 
-      width: 100%; 
-      height: 100%;
+      /* 駒のサイズをセルの 92% 程度にし、潰れを防止しつつ中央に配置 */
+      width: 92%; 
+      height: 92%;
       z-index: 10; 
       pointer-events: none; 
       display: flex !important;
@@ -112,9 +114,9 @@
     }
 
     .piece-img {
-      /* 重要：95%サイズに統一し、absolute配置で中央に固定 */
-      width: 95%;
-      height: 95%;
+      /* 親要素 (piece) のサイズに 100% 追従させる */
+      width: 100%;
+      height: 100%;
       background-image: url('assets/piece.png');
       background-size: 800% 400%; 
       background-repeat: no-repeat;
@@ -1547,7 +1549,7 @@ function render() {
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-    for (let y = 0; y < 9; y++) {
+  for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
@@ -1561,10 +1563,10 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * 33.33333333); 
+        const bgY = (pos.y * (100 / 3)); 
         
-        // 完全に空白を排除した1行のタグ構成。画像サイズを100%にし、セルのpaddingで制御。
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:100%;height:100%;"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;width:100%;height:100%;background-size:800% 400%;"></div></div>`;
+        // 修正：innerHTML内のinline-styleを削除しCSSに委ねる。タグ間の不要な余白も排除。
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
@@ -1597,10 +1599,10 @@ function render() {
         
         const pos = PIECE_POS[type];
         const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * (100 / 1));
+        const bgY = (pos.y * (100 / 3)); // 座標計算を盤面と統一
 
-        // 駒台側もタグ間の空白を排除し、サイズ計算を統一
-        s.innerHTML = `<div class="piece" style="width:100%;height:100%;"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;width:100%;height:100%;background-size:800% 400%;"></div></div>`;
+        // 修正：駒台の駒も盤面と同じクラス構造を使用
+        s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
