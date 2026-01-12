@@ -66,9 +66,9 @@
       background-size: 100% 100%; 
       background-repeat: no-repeat;
       background-position: center;
-      /* 重要：paddingを小さくして、グリッドを外側に広げ、背景のマス目と同期させます */
-      /* 878x960の標準的な盤面画像に合わせ、上下左右の余白を最適化しました */
-      padding: 1.2% 0.8% 2.2% 0.8% !important; 
+      /* デバッグ修正：上方向のズレを解消するためtopを増やし、外側のズレを解消するため左右を増やしました */
+      /* 上: 1.8%, 左右: 1.5%, 下: 3.5% で画像内のマス目と位置を同期 */
+      padding: 1.8% 1.5% 3.5% 1.5% !important; 
       box-sizing: border-box; 
       background-color: var(--board-color);
       margin: 0 !important;
@@ -94,9 +94,9 @@
     }
 
     .piece { 
-      /* 駒の描画範囲を拡大し、マス目との隙間を適正化 */
-      width: 96%; 
-      height: 96%;
+      /* 駒のサイズを92%に微調整し、マスの境界線との干渉を防ぎます */
+      width: 92%; 
+      height: 92%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
@@ -128,8 +128,22 @@
       padding: 0;
     }
 
-    .cell.selected {
+        .cell.selected {
       background-color: rgba(255, 152, 0, 0.5); /* 選択中のマスを強調 */
+    }
+
+    /* 修正後：移動可能マスの中心にガイドを表示し、配置のズレを確認しやすくします */
+    .cell.possible::after {
+      content: "";
+      width: 20%;
+      height: 20%;
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
     }
 
     .piece.opposite { transform: rotate(180deg); }
