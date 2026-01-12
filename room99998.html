@@ -71,7 +71,7 @@
       padding: 0.5px;
     }
 
-      .cell {
+            .cell {
       width: 100%;
       height: 100%;
       position: relative;
@@ -79,25 +79,26 @@
       /* 修正：ボーダーによる計算ズレを防ぐためborderを明示的に0にする */
       border: none;
       box-sizing: border-box;
-      /* 子要素をFlexboxで完全に中央へ */
+      /* 修正：駒をマスの中央に厳密に配置 */
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden; 
+      overflow: visible; 
     }
 
     .piece { 
-      /* 修正：サイズをわずかに小さくし、中央配置を安定させる */
-      width: 92%; 
-      height: 92%;
+      /* 修正：マスの中心を基準点として固定 */
+      width: 96%; 
+      height: 96%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
       align-items: center; 
       justify-content: center;
       transition: transform 0.1s;
-      /* 修正：意図しないオフセットを排除 */
-      margin: auto;
+      /* 修正：marginによる微細なズレを防ぐため0に固定 */
+      margin: 0;
+      flex-shrink: 0;
     }
 
     /* 後手駒の回転：軸がズレないよう単純な rotate のみに */
@@ -1557,13 +1558,13 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 修正：計算式を微調整し、より厳格な中央揃えを適用
-        const bgX = (pos.x * (100 / 7)).toFixed(4);
-        const bgY = (pos.y * (100 / 3)).toFixed(4);
+        // 背景位置の計算をより正確にするため100%から駒種数を引いた値で割る
+        const bgX = (pos.x * (100 / 7)).toFixed(6);
+        const bgY = (pos.y * (100 / 3)).toFixed(6);
         
-        // 修正：外側のコンテナ(piece)にmargin: autoを付与し、中央固定を強化
-        c.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}" style="width:92%; height:92%; margin:auto;">
-          <div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div>
+        // 修正：内部の余白を一切排除し、完全に中央集約
+        c.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}">
+          <div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>
         </div>`;
       } else {
         c.innerHTML = '';
@@ -1596,10 +1597,10 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        const bgX = (pos.x * (100 / 7)).toFixed(4);
-        const bgY = (pos.y * (100 / 3)).toFixed(4);
+        const bgX = (pos.x * (100 / 7)).toFixed(6);
+        const bgY = (pos.y * (100 / 3)).toFixed(6);
         
-        s.innerHTML = `<div class="piece" style="width:92%; height:92%; margin:auto;"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div></div>`;
+        s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
