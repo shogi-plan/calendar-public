@@ -52,27 +52,32 @@
       max-width: 500px; 
     }
 
-        #board { 
+    #board { 
       position: relative; 
       display: grid; 
-      /* grid-template-columns/rows で厳密に9分割することで誤差を排除 */
+      /* 厳密に9分割 */
       grid-template-columns: repeat(9, 1fr);
       grid-template-rows: repeat(9, 1fr);
       border: none; 
       width: 100%; 
       height: 100%; 
       background-image: url('assets/light_878x960.png');
+      /* 背景画像は要素全体に広げる */
       background-size: 100% 100%; 
       background-repeat: no-repeat;
       background-position: center;
+      /* 重要：paddingを設定して、グリッド（駒が置かれる範囲）を内側のマス目に合わせる */
+      /* 878x960の標準的な比率に合わせ、上下に約3%、左右に約2%の余白を設けます */
+      padding: 3.2% 2% 4% 2% !important; 
       box-sizing: border-box; 
       background-color: var(--board-color);
-      padding: 0 !important;
       margin: 0 !important;
+      /* 駒が枠外にはみ出さないように制御 */
+      overflow: hidden; 
     }
 
     .cell {
-      /* absolute指定を削除し、Gridアイテムとして配置 */
+      /* Gridの子要素として100%広がる */
       width: 100%;
       height: 100%;
       position: relative;
@@ -82,7 +87,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: visible; /* 駒がわずかにはみ出しても切れないようにする */
+      /* マスの中でのズレを防ぐ */
+      overflow: hidden; 
       margin: 0;
       padding: 0;
     }
@@ -1550,7 +1556,8 @@ function render() {
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-    for (let y = 0; y < 9; y++) {
+  // 盤面描画
+  for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
@@ -1564,12 +1571,13 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 100 / (列数-1) および 100 / (行数-1) を精密に計算
-        // これにより、CSSの四捨五入による1pxのズレを防ぎます
+        // スプライト画像内の座標計算（8x4枚の画像を正確に参照）
+        // 0から始まるインデックスを最大値で割ることで、0%〜100%の正確な位置を算出
         const bgX = (pos.x * (100 / 7)).toFixed(10);
         const bgY = (pos.y * (100 / 3)).toFixed(10); 
         
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
+        // 駒本体を表示。transformの干渉を避けるため構造を維持
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:92%; height:92%;"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
@@ -1601,11 +1609,10 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        // 持ち駒エリアでも同様に精密なパーセンテージを適用
         const bgX = (pos.x * (100 / 7)).toFixed(10);
         const bgY = (pos.y * (100 / 3)).toFixed(10);
 
-        s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
+        s.innerHTML = `<div class="piece" style="width:90%; height:90%;"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
