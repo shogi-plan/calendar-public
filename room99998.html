@@ -74,7 +74,7 @@
       align-items: center;
     }
 
-        .cell {
+    .cell {
       width: 100%;
       height: 100%;
       position: relative;
@@ -86,14 +86,14 @@
       justify-content: center !important;
       overflow: hidden; 
       margin: 0 !important;
-      padding: 0 !important; /* 余計な1pxを削除してズレを防止 */
+      padding: 1px !important; /* 微調整用の余白を固定 */
       line-height: 0 !important;
       font-size: 0 !important;
     }
 
     .piece { 
-      width: 95%; /* セルに対して少し小さくして中心に配置 */
-      height: 95%;
+      width: 100%; 
+      height: 100%;
       z-index: 10; 
       pointer-events: none; 
       display: flex !important;
@@ -112,10 +112,11 @@
     }
 
     .piece-img {
-      width: 100%; /* pieceの中いっぱいに表示 */
-      height: 100%;
+      /* 重要：95%サイズに統一し、absolute配置で中央に固定 */
+      width: 95%;
+      height: 95%;
       background-image: url('assets/piece.png');
-      background-size: 800% 200%; /* y方向の400%を200%（2段）に修正し画像のズレを補正 */
+      background-size: 800% 400%; 
       background-repeat: no-repeat;
       display: block;
       pointer-events: none;
@@ -1541,13 +1542,12 @@ function render() {
     hg = state.handG;
   }
 
-  // 駒の位置定義（xは0-7の8列、yは0-1の2段であることを前提に計算）
   const PIECE_POS = {
     'OU': {x:0, y:0}, 'HI': {x:1, y:0}, 'KA': {x:2, y:0}, 'KI': {x:3, y:0}, 'GI': {x:4, y:0}, 'KE': {x:5, y:0}, 'KY': {x:6, y:0}, 'FU': {x:7, y:0},
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-  for (let y = 0; y < 9; y++) {
+    for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
@@ -1560,14 +1560,11 @@ function render() {
       if (p) {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
-        // x方向は8枚なので 100/7、y方向は2段なので 100/1 で計算を安定させる
         const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * 100); 
+        const bgY = (pos.y * 33.33333333); 
         
-        // pieceクラス自体のサイズはCSSで制御するため、内側の構造を安定化
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
-          <div class="piece-img" style="background-position:${bgX}% ${bgY}%; background-size:800% 200%;"></div>
-        </div>`;
+        // 完全に空白を排除した1行のタグ構成。画像サイズを100%にし、セルのpaddingで制御。
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:100%;height:100%;"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;width:100%;height:100%;background-size:800% 400%;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
@@ -1590,8 +1587,8 @@ function render() {
 
       if (type) {
         const s = document.createElement('div');
-        s.style.width = "95%";
-        s.style.height = "95%";
+        s.style.width = "100%";
+        s.style.height = "100%";
         s.style.display = "flex";
         s.style.alignItems = "center";
         s.style.justifyContent = "center";
@@ -1600,11 +1597,10 @@ function render() {
         
         const pos = PIECE_POS[type];
         const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * 100);
+        const bgY = (pos.y * (100 / 1));
 
-        s.innerHTML = `<div class="piece">
-          <div class="piece-img" style="background-position:${bgX}% ${bgY}%; background-size:800% 200%;"></div>
-        </div>`;
+        // 駒台側もタグ間の空白を排除し、サイズ計算を統一
+        s.innerHTML = `<div class="piece" style="width:100%;height:100%;"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;width:100%;height:100%;background-size:800% 400%;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
