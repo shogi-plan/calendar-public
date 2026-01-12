@@ -52,9 +52,12 @@
       max-width: 500px; 
     }
 
-    #board { 
-      position: relative; /* 子要素(cell)を絶対座標で置くため */
-      display: block; 
+        #board { 
+      position: relative; 
+      display: grid; 
+      /* grid-template-columns/rows で厳密に9分割することで誤差を排除 */
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(9, 1fr);
       border: none; 
       width: 100%; 
       height: 100%; 
@@ -69,38 +72,32 @@
     }
 
     .cell {
-      /* 100/9 = 11.1111% で厳密に配置 */
-      width: 11.1111%;
-      height: 11.1111%;
-      position: absolute;
+      /* absolute指定を削除し、Gridアイテムとして配置 */
+      width: 100%;
+      height: 100%;
+      position: relative;
       cursor: pointer;
       border: none;
       box-sizing: border-box;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      overflow: hidden; 
-      margin: 0 !important;
-      padding: 0 !important; 
-      line-height: 0 !important;
-      font-size: 0 !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: visible; /* 駒がわずかにはみ出しても切れないようにする */
+      margin: 0;
+      padding: 0;
     }
 
     .piece { 
-      /* 駒のサイズをセルの 92% 程度にし、潰れを防止しつつ中央に配置 */
-      width: 92%; 
-      height: 92%;
+      /* 駒の描画範囲を固定 */
+      width: 90%; 
+      height: 90%;
       z-index: 10; 
       pointer-events: none; 
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       transition: transform 0.1s;
-      margin: 0 !important;
-      padding: 0 !important;
-      flex-shrink: 0;
-      transform-origin: center center;
-      line-height: 0 !important;
+      position: relative;
     }
 
     .piece.opposite { 
@@ -108,7 +105,6 @@
     }
 
     .piece-img {
-      /* 親要素 (piece) のサイズに 100% 追従させる */
       width: 100%;
       height: 100%;
       background-image: url('assets/piece.png');
@@ -116,7 +112,8 @@
       background-repeat: no-repeat;
       display: block;
       pointer-events: none;
-      flex-shrink: 0;
+      /* 駒画像の微調整が必要な場合、ここでtransformを使って中央補正が可能 */
+      transform: scale(1.05); /* セル内での駒の存在感を微調整 */
     }
 
     .cell.selected {
@@ -1146,15 +1143,14 @@ btnCallStart.onclick = async () => {
     if (bool) pushReviewUpdate();
   }
 
-  const cells = [];
+    const cells = [];
+  boardEl.innerHTML = ''; // 二重描画防止
   for (let y = 0; y < 9; y++) {
     cells[y] = [];
     for (let x = 0; x < 9; x++) {
       const c = document.createElement('div');
       c.className = 'cell';
-      // 絶対座標で位置を固定（計算誤差を排除）
-      c.style.left = (x * 11.1111) + "%";
-      c.style.top = (y * 11.1111) + "%";
+      // CSS Gridを使用するため、個別の座標指定(left/top)は削除
       c.addEventListener('click', () => handleCellClick(x, y));
       boardEl.appendChild(c);
       cells[y][x] = c;
@@ -1558,14 +1554,15 @@ function render() {
       if (sel?.x === x && sel?.y === y) c.classList.add('selected');
       if (isPossible) c.classList.add('possible');
 
-      if (p) {
+            if (p) {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
+        // 厳密な座標計算（100 / (枚数 - 1) * index）
         const bgX = (pos.x * (100 / 7));
         const bgY = (pos.y * (100 / 3)); 
         
-        // 修正：innerHTML内のinline-styleを削除しCSSに委ねる。タグ間の不要な余白も排除。
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;"></div></div>`;
+        // タグの構成を極限までシンプルに保ち、余計な空白改行を排除
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position:${bgX.toFixed(4)}% ${bgY.toFixed(4)}%;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
