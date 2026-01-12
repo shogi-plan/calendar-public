@@ -113,8 +113,12 @@
       background-repeat: no-repeat;
       display: block;
       pointer-events: none;
-      /* 駒をマスの中心に固定するためのマージン調整 */
-      margin: auto;
+      /* マスの中心に絶対配置で固定 */
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      margin: 0;
       padding: 0;
     }
 
@@ -1546,7 +1550,7 @@ function render() {
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
   };
 
-  for (let y = 0; y < 9; y++) {
+    for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
@@ -1560,8 +1564,8 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 修正：座標計算の分母を「(要素数-1) × 100」として計算し、小数第10位まで固定。
-        // これにより、右端や下端の駒でも画像が1pxもズレることなく中心に配置されます。
+        // 100 / (列数-1) および 100 / (行数-1) を精密に計算
+        // これにより、CSSの四捨五入による1pxのズレを防ぎます
         const bgX = (pos.x * (100 / 7)).toFixed(10);
         const bgY = (pos.y * (100 / 3)).toFixed(10); 
         
@@ -1597,7 +1601,7 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        // 持ち駒エリアでも同様の精密計算を適用
+        // 持ち駒エリアでも同様に精密なパーセンテージを適用
         const bgX = (pos.x * (100 / 7)).toFixed(10);
         const bgY = (pos.y * (100 / 3)).toFixed(10);
 
