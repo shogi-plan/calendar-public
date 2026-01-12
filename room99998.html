@@ -54,40 +54,26 @@
 
     #board { 
       position: relative; 
+      display: grid; 
+      /* 厳密に9分割 */
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(9, 1fr);
+      border: none; 
       width: 100%; 
       height: 100%; 
       background-image: url('assets/light_878x960.png');
+      /* 背景画像は要素全体に広げる */
       background-size: 100% 100%; 
       background-repeat: no-repeat;
       background-position: center;
+      /* 重要：paddingを設定して、グリッド（駒が置かれる範囲）を内側のマス目に合わせる */
+      /* 878x960の標準的な比率に合わせ、上下に約3%、左右に約2%の余白を設けます */
+      padding: 3.2% 2% 4% 2% !important; 
+      box-sizing: border-box; 
       background-color: var(--board-color);
       margin: 0 !important;
+      /* 駒が枠外にはみ出さないように制御 */
       overflow: hidden; 
-    }
-
-    /* 盤面の画像内にある「マス目部分」だけを定義するラッパー */
-    #board-grid-wrapper {
-      position: absolute;
-      /* 画像内の実際のマス目範囲をパーセントで指定（ここを調整してズレを消す） */
-      top: 3.3%;
-      bottom: 5.3%;
-      left: 1.5%;
-      right: 1.5%;
-      display: grid;
-      grid-template-columns: repeat(9, 1fr);
-      grid-template-rows: repeat(9, 1fr);
-      pointer-events: none; /* 下の.cellのクリックを邪魔しない */
-    }
-
-    .cell {
-      width: 100%;
-      height: 100%;
-      position: relative;
-      cursor: pointer;
-      pointer-events: auto; /* クリックを有効化 */
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     .cell {
@@ -108,9 +94,9 @@
     }
 
     .piece { 
-      /* 駒のサイズを92%に微調整し、マスの境界線との干渉を防ぎます */
-      width: 92%; 
-      height: 92%;
+      /* 駒の描画範囲を固定 */
+      width: 90%; 
+      height: 90%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
@@ -142,22 +128,8 @@
       padding: 0;
     }
 
-        .cell.selected {
+    .cell.selected {
       background-color: rgba(255, 152, 0, 0.5); /* 選択中のマスを強調 */
-    }
-
-    /* 修正後：移動可能マスの中心にガイドを表示し、配置のズレを確認しやすくします */
-    .cell.possible::after {
-      content: "";
-      width: 20%;
-      height: 20%;
-      background: rgba(0, 0, 0, 0.15);
-      border-radius: 50%;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
     }
 
     .piece.opposite { transform: rotate(180deg); }
@@ -307,7 +279,7 @@
       font-weight: bold;
       pointer-events: none;
     }
-        #countdown-text {
+    #countdown-text {
       font-size: 15vw; /* 画面幅に合わせる */
       white-space: nowrap; /* 絶対に折り返さない */
       text-shadow: 0 0 20px rgba(255,255,255,0.5);
@@ -418,9 +390,7 @@
   <div id="game-main-inner" style="display: flex; flex-direction: row; align-items: flex-start; gap: 2px;">
     <div class="hand" id="handG" data-label="△後手"></div>
     <div id="board-container">
-      <div id="board">
-        <div id="board-grid-wrapper" hidefocus="true"></div>
-      </div>
+      <div id="board"></div>
       <div id="promote-dialog">
         <div style="margin-bottom:15px; font-weight:bold; font-size:16px;">成りますか？</div>
         <div style="display: flex; gap: 15px; justify-content: center;">
@@ -535,15 +505,14 @@
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
-  // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
-  function updateDisplayRotation(isFlipped) {
+      // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
+    function updateDisplayRotation(isFlipped) {
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
     const boardContainer = document.getElementById('board-container');
     const handS = document.getElementById('handS');
     const handG = document.getElementById('handG');
     const reviewPanel = document.getElementById('review-panel');
-    const gridWrapper = document.getElementById('board-grid-wrapper');
 
     // モードに応じてクラスを付け替え
     if (!isReviewMode) {
@@ -562,36 +531,21 @@
     handS.classList.remove('left-rotated');
     handG.classList.remove('left-rotated');
 
-    if (isFlipped) {
+        if (isFlipped) {
       // 後手視点：左に先手駒、右に後手駒
       container.insertBefore(handS, boardContainer); 
       container.appendChild(handG);
-      
-      // 盤面の回転
+      // transform-origin を中心に設定
       board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(180deg)';
       handS.classList.add('left-rotated');
-
-      // 反転時は、画像内の「上下の余白比率」を入れ替えてズレを補正する
-      if (gridWrapper) {
-        gridWrapper.style.top = "5.3%";    /* 通常時の bottom の値 */
-        gridWrapper.style.bottom = "3.3%"; /* 通常時の top の値 */
-      }
     } else {
       // 先手視点：左に後手駒、右に先手駒
       container.insertBefore(handG, boardContainer);
       container.appendChild(handS);
-      
-      // 盤面の回転を戻す
       board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(0deg)';
       handG.classList.add('left-rotated');
-
-      // 通常時の画像内余白（CSSの初期値と合わせる）
-      if (gridWrapper) {
-        gridWrapper.style.top = "3.3%";
-        gridWrapper.style.bottom = "5.3%";
-      }
     }
   }
 
@@ -1201,26 +1155,16 @@ btnCallStart.onclick = async () => {
     if (bool) pushReviewUpdate();
   }
 
-  // --- 盤面セルの初期設定（修正後：grid-wrapperに対して生成） ---
-  const cells = [];
-  const gridWrapper = document.getElementById('board-grid-wrapper');
-  
-  // 透明なグリッドレイヤー内をクリアしてから生成
-  gridWrapper.innerHTML = ''; 
-
+    const cells = [];
+  boardEl.innerHTML = ''; // 二重描画防止
   for (let y = 0; y < 9; y++) {
     cells[y] = [];
     for (let x = 0; x < 9; x++) {
       const c = document.createElement('div');
       c.className = 'cell';
-      
-      // クリックイベントの登録
-      c.addEventListener('click', () => {
-        handleCellClick(x, y);
-      });
-      
-      // 重要：boardEl ではなく gridWrapper に追加します
-      gridWrapper.appendChild(c);
+      // CSS Gridを使用するため、個別の座標指定(left/top)は削除
+      c.addEventListener('click', () => handleCellClick(x, y));
+      boardEl.appendChild(c);
       cells[y][x] = c;
     }
   }
@@ -1632,10 +1576,8 @@ function render() {
         const bgX = (pos.x * (100 / 7)).toFixed(10);
         const bgY = (pos.y * (100 / 3)).toFixed(10); 
         
-                // 駒本体を表示。個別のwidth指定を削除し、CSSの .piece クラスの指定を優先させます
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
-                         <div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div>
-                       </div>`;
+        // 駒本体を表示。transformの干渉を避けるため構造を維持
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:92%; height:92%;"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
