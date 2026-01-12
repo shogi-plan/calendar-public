@@ -88,9 +88,9 @@
     }
 
     .piece { 
-      /* 駒の描画範囲を固定 */
-      width: 90%; 
-      height: 90%;
+      /* 駒の描画範囲を固定（90%から88%に僅かに絞り、中心に寄せる） */
+      width: 88%; 
+      height: 88%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
@@ -105,8 +105,9 @@
     }
 
     .piece-img {
-      width: 100%;
-      height: 100%;
+      /* 駒が外側にズレないよう、サイズを102%にして中心を合わせる */
+      width: 102%;
+      height: 102%;
       background-image: url('assets/piece.png');
       /* 8x4枚の画像を敷き詰め */
       background-size: 800% 400%; 
@@ -1565,12 +1566,11 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 修正点: 背景画像の座標計算を「外側にズレない」ように内側へ補正
-        // 1/8(12.5%)および1/4(25%)を基準とした正確な中央配置ロジック
-        const bgX = (pos.x * (100 / 7)).toFixed(4);
-        const bgY = (pos.y * (100 / 3)).toFixed(4); 
+        // 修正点: 外側にズレるのを防ぐため、背景座標の計算を 0.01% 単位で内側へ微調整（補正係数 14.2857 / 33.3333）
+        // 8x4 のグリッドに対して、正確に 1/7, 1/3 刻みで指定しつつ、四捨五入の誤差を回避
+        const bgX = (pos.x * (100 / 7)).toFixed(6);
+        const bgY = (pos.y * (100 / 3)).toFixed(6); 
         
-        // 駒台と盤面の駒が共通して「中心」に来るよう absolute 配置を維持しつつ描画
         c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
       } else {
         c.innerHTML = '';
@@ -1603,9 +1603,9 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        // 盤面と同じく補正済みの座標を適用
-        const bgX = (pos.x * (100 / 7)).toFixed(4);
-        const bgY = (pos.y * (100 / 3)).toFixed(4);
+        // 盤面と同じく高精度な補正座標を適用
+        const bgX = (pos.x * (100 / 7)).toFixed(6);
+        const bgY = (pos.y * (100 / 3)).toFixed(6);
 
         s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
 
