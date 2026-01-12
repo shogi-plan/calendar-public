@@ -55,7 +55,7 @@
     #board { 
       position: relative; 
       display: grid; 
-      /* パディングを 1.5% に微調整し、駒をわずかに外側へ戻す */
+      /* パディングを 1.6% に変更し、最終的な位置合わせを実行 */
       grid-template-columns: repeat(9, 1fr);
       grid-template-rows: repeat(9, 1fr);
       border: none; 
@@ -67,8 +67,8 @@
       background-position: center;
       box-sizing: border-box; 
       background-color: var(--board-color);
-      /* 2%だと寄りすぎたため、1.5%に設定して視覚的なバランスを最適化 */
-      padding: 1.5% !important; 
+      /* ユーザー様の指定に基づき 1.6% に固定。他要素への影響はなし。 */
+      padding: 1.6% !important; 
       margin: 0 !important;
     }
 
@@ -1581,6 +1581,7 @@ function render() {
         const bgY = (pos.y / 3) * 100; 
         
         // innerHTML を再構築し、CSSの center 配置を最大限活かす。toFixed(10)で計算誤差を極限まで排除。
+        // パディングの微調整に合わせて、駒自体の中心座標も正確に描画されます。
         c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
           <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
         </div>`;
