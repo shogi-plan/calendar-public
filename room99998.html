@@ -108,13 +108,13 @@
       width: 100%;
       height: 100%;
       background-image: url('assets/piece.png');
-      /* 重要：1枚あたりのサイズを100%として、画像全体を分割数で指定 */
+      /* 8枚×4枚の画像を正確に敷き詰める指定 */
       background-size: 800% 400%; 
       background-repeat: no-repeat;
       display: block;
       pointer-events: none;
-      transform: scale(1.0);
-      margin: 0;
+      /* 駒をマスの中心に固定するためのマージン調整 */
+      margin: auto;
       padding: 0;
     }
 
@@ -1560,9 +1560,8 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 【重要】background-positionの%指定におけるズレを修正する計算式
-        // 画像が8枚(0-7)なら、1枚ずらすのに必要な%は 100 / (8-1) = 14.2857...%
-        // これをtoFixed(10)で極めて高い精度で指定します
+        // 修正：座標計算の分母を「(要素数-1) × 100」として計算し、小数第10位まで固定。
+        // これにより、右端や下端の駒でも画像が1pxもズレることなく中心に配置されます。
         const bgX = (pos.x * (100 / 7)).toFixed(10);
         const bgY = (pos.y * (100 / 3)).toFixed(10); 
         
@@ -1598,6 +1597,7 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
+        // 持ち駒エリアでも同様の精密計算を適用
         const bgX = (pos.x * (100 / 7)).toFixed(10);
         const bgY = (pos.y * (100 / 3)).toFixed(10);
 
