@@ -71,8 +71,8 @@
       margin: 0 !important;
     }
 
-    .cell {
-      /* absolute指定を削除し、Gridアイテムとして配置 */
+        .cell {
+      /* Gridアイテムとして配置 */
       width: 100%;
       height: 100%;
       position: relative;
@@ -82,15 +82,16 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: visible; /* 駒がわずかにはみ出しても切れないようにする */
+      overflow: hidden; /* 外側へのハミ出しを物理的にカット */
       margin: 0;
-      padding: 0;
+      /* 上下左右に1pxの余白を作り、駒を強制的に内側へ寄せる */
+      padding: 1px !important; 
     }
 
     .piece { 
-      /* 駒の描画範囲を固定（90%から88%に僅かに絞り、中心に寄せる） */
-      width: 88%; 
-      height: 88%;
+      /* セル内でのサイズをさらに絞り、確実に中心に配置 */
+      width: 85%; 
+      height: 85%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
@@ -1566,12 +1567,15 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 修正点: 外側にズレるのを防ぐため、背景座標の計算を 0.01% 単位で内側へ微調整（補正係数 14.2857 / 33.3333）
-        // 8x4 のグリッドに対して、正確に 1/7, 1/3 刻みで指定しつつ、四捨五入の誤差を回避
-        const bgX = (pos.x * (100 / 7)).toFixed(6);
-        const bgY = (pos.y * (100 / 3)).toFixed(6); 
+        // 誤差を排除するため、8列(100/7)・4行(100/3)の各中心点を定数化
+        // 8分割の各中心：0=0%, 1=14.2857%, 2=28.5714%, 3=42.8571%, 4=57.1428%, 5=71.4285%, 6=85.7142%, 7=100%
+        const bgX = (pos.x * (100 / 7));
+        const bgY = (pos.y * (100 / 3)); 
         
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
+        // piece-img に対して、ブラウザによる微細な位置ズレを防ぐため transform: translate で補正を固定
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
+          <div class="piece-img" style="background-position: ${bgX.toFixed(4)}% ${bgY.toFixed(4)}%; width: 100%; height: 100%; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+        </div>`;
       } else {
         c.innerHTML = '';
       }
@@ -1603,11 +1607,13 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        // 盤面と同じく高精度な補正座標を適用
-        const bgX = (pos.x * (100 / 7)).toFixed(6);
-        const bgY = (pos.y * (100 / 3)).toFixed(6);
+        // 盤面と完全に同期した固定座標を適用
+        const bgX = (pos.x * (100 / 7));
+        const bgY = (pos.y * (100 / 3));
 
-        s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
+        s.innerHTML = `<div class="piece">
+          <div class="piece-img" style="background-position: ${bgX.toFixed(4)}% ${bgY.toFixed(4)}%; width: 100%; height: 100%; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+        </div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
