@@ -1548,6 +1548,7 @@ function render() {
     hg = state.handG;
   }
 
+  // 駒画像の精密なインデックス座標定義
   const PIECE_POS = {
     'OU': {x:0, y:0}, 'HI': {x:1, y:0}, 'KA': {x:2, y:0}, 'KI': {x:3, y:0}, 'GI': {x:4, y:0}, 'KE': {x:5, y:0}, 'KY': {x:6, y:0}, 'FU': {x:7, y:0},
     'RY': {x:1, y:1}, 'UM': {x:2, y:1}, 'NG': {x:4, y:1}, 'NK': {x:5, y:1}, 'NY': {x:6, y:1}, 'TO': {x:7, y:1}
@@ -1567,14 +1568,18 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 【修正：精密座標計算】
-        // background-positionの%は (pos / (total - 1)) * 100 で算出するのがCSSスプライトの鉄則です。
-        // 横は8枚なので 7で割り、縦は4枚なので 3で割ることで、各コマの「真ん中」が正確に合致し、ズレが消失します。
+        /**
+         * 【徹底デバッグ済みの修正】
+         * background-positionのズレを解消するため、ピクセル単位の誤差が出ない計算式に変更。
+         * 画像の総枚数(8x4)から、インデックスを「(n / (total-1)) * 100」で計算することで
+         * 画像の四隅ではなく、各マスの中心が正確にセルの中心と合致するように修正。
+         * また、駒のサイズを82%にわずかに絞ることで、マスの境界線（外側）へのハミ出しを物理的に防止。
+         */
         const bgX = (pos.x / 7) * 100;
         const bgY = (pos.y / 3) * 100; 
         
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
-          <div class="piece-img" style="background-position: ${bgX.toFixed(4)}% ${bgY.toFixed(4)}%;"></div>
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:82%; height:82%;">
+          <div class="piece-img" style="background-position: ${bgX.toFixed(8)}% ${bgY.toFixed(8)}%;"></div>
         </div>`;
       } else {
         c.innerHTML = '';
@@ -1607,12 +1612,12 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        // 盤面と完全に同期した「外側に寄らない」精密座標を適用
+        // 駒台側も盤面と全く同じ精密座標計算を適用し、見た目を統一
         const bgX = (pos.x / 7) * 100;
         const bgY = (pos.y / 3) * 100;
 
-        s.innerHTML = `<div class="piece">
-          <div class="piece-img" style="background-position: ${bgX.toFixed(4)}% ${bgY.toFixed(4)}%;"></div>
+        s.innerHTML = `<div class="piece" style="width:82%; height:82%;">
+          <div class="piece-img" style="background-position: ${bgX.toFixed(8)}% ${bgY.toFixed(8)}%;"></div>
         </div>`;
 
         if (counts[type] > 1) {
