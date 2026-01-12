@@ -74,22 +74,21 @@
       align-items: center;
     }
 
-    .cell {
+        .cell {
       width: 100%;
       height: 100%;
       position: relative;
       cursor: pointer;
       border: none;
       box-sizing: border-box;
-      /* セル内での中心配置をより強固に */
+      /* 重要：子要素を完全に中央へロック */
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
-      overflow: visible; 
+      overflow: hidden; 
       margin: 0 !important;
       padding: 0 !important;
-      /* 駒が中央に来るようにテキスト配置設定をリセット */
-      line-height: 0;
+      line-height: 1; /* 0から1へ変更して配置を安定化 */
       font-size: 0;
     }
 
@@ -105,27 +104,23 @@
       margin: 0 !important;
       padding: 0 !important;
       flex-shrink: 0;
-      /* 修正：回転軸を中心にする設定を継承 */
       transform-origin: center center;
     }
 
     .piece.opposite { 
       transform: rotate(180deg); 
-      transform-origin: center center;
     }
 
-        .piece-img {
-      /* 修正：画像を94%サイズに固定し、Flexboxで中央固定。
-         92%だと画像によっては少し小さく見え、余白がズレて見えるため、
-         ブラウザのアンチエイリアスに強い94.4%前後を狙う */
-      width: 94%;
-      height: 94%;
+    .piece-img {
+      /* 重要：95%サイズに統一し、absolute配置で中央に固定 */
+      width: 95%;
+      height: 95%;
       background-image: url('assets/piece.png');
       background-size: 800% 400%; 
       background-repeat: no-repeat;
       display: block;
-      margin: 0; /* JS側のflex-centerで中央にするためmarginは0 */
       pointer-events: none;
+      flex-shrink: 0;
     }
 
     .cell.selected {
@@ -1556,7 +1551,6 @@ function render() {
     for (let x = 0; x < 9; x++) {
       const c = cells[y][x];
       const p = b[y][x];
-      
       const isPossible = possibleMoves.some(m => m.x === x && m.y === y);
       
       c.className = 'cell';
@@ -1566,14 +1560,12 @@ function render() {
       if (p) {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
+        // 計算精度を100%均等に (1/7 = 14.2857..., 1/3 = 33.333...)
+        const bgX = (pos.x * (100 / 7));
+        const bgY = (pos.y * (100 / 1)); // 33.33%は 100/3 だが、spriteの高さ設定に合わせる
         
-        // 背景画像の座標計算をより精密に
-        const bgX = (pos.x * (100 / 7)).toFixed(8);
-        const bgY = (pos.y * (100 / 3)).toFixed(8);
-        
-        // 修正：ズレの最大の原因である「タグ間の空白」を、innerHTMLの中で一切改行せず1行で構築。
-        // さらに、親のcellに依存しないよう、piece自体に絶対的な中央配置を強制する。
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:100%;height:100%;display:flex;justify-content:center;align-items:center;"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;width:94%;height:94%;background-size:800% 400%;margin:auto;"></div></div>`;
+        // 絶対に空白を入れない1行のテンプレート文字列
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:100%;height:100%;display:flex;justify-content:center;align-items:center;padding:0;margin:0;"><div class="piece-img" style="background-position:${bgX}% ${bgY === 0 ? 0 : 33.33333333}%;width:95%;height:95%;background-size:800% 400%;flex-shrink:0;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
@@ -1605,11 +1597,11 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        const bgX = (pos.x * (100 / 7)).toFixed(8);
-        const bgY = (pos.y * (100 / 3)).toFixed(8);
-        
-        // 修正：駒台側も改行を完全に排除し、画像を94%サイズに。
-        s.innerHTML = `<div class="piece" style="width:100%;height:100%;display:flex;justify-content:center;align-items:center;"><div class="piece-img" style="background-position:${bgX}% ${bgY}%;width:94%;height:94%;background-size:800% 400%;margin:auto;"></div></div>`;
+        const bgX = (pos.x * (100 / 7));
+        const bgY = (pos.y * (100 / 1));
+
+        // 駒台側も同様に空白を完全除去
+        s.innerHTML = `<div class="piece" style="width:100%;height:100%;display:flex;justify-content:center;align-items:center;padding:0;margin:0;"><div class="piece-img" style="background-position:${bgX}% ${bgY === 0 ? 0 : 33.33333333}%;width:95%;height:95%;background-size:800% 400%;flex-shrink:0;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
