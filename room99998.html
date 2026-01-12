@@ -54,26 +54,33 @@
 
     #board { 
       position: relative; 
-      display: grid; 
-      /* 厳密に9分割 */
-      grid-template-columns: repeat(9, 1fr);
-      grid-template-rows: repeat(9, 1fr);
+      /* Gridレイアウトを解除。内部のラッパーで制御する形に変更 */
+      display: block; 
       border: none; 
       width: 100%; 
       height: 100%; 
       background-image: url('assets/light_878x960.png');
-      /* 背景画像は要素全体に広げる */
       background-size: 100% 100%; 
       background-repeat: no-repeat;
       background-position: center;
-      /* デバッグ修正：上方向のズレを解消するためtopを増やし、外側のズレを解消するため左右を増やしました */
-      /* 上: 1.8%, 左右: 1.5%, 下: 3.5% で画像内のマス目と位置を同期 */
-      padding: 1.8% 1.5% 3.5% 1.5% !important; 
-      box-sizing: border-box; 
       background-color: var(--board-color);
       margin: 0 !important;
-      /* 駒が枠外にはみ出さないように制御 */
       overflow: hidden; 
+      box-sizing: border-box;
+    }
+
+    /* 盤面画像内の「実際のマス目」があるエリア */
+    #board-grid-wrapper {
+      position: absolute;
+      /* 画像内のマス目範囲を%で指定（ここがズレ防止の肝） */
+      /* 先手視点: 上3.3%, 下5.3%, 左右1.8% */
+      top: 3.3%;
+      bottom: 5.3%;
+      left: 1.8%;
+      right: 1.8%;
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(9, 1fr);
     }
 
     .cell {
@@ -404,8 +411,9 @@
   <div id="game-main-inner" style="display: flex; flex-direction: row; align-items: flex-start; gap: 2px;">
     <div class="hand" id="handG" data-label="△後手"></div>
     <div id="board-container">
-      <div id="board"></div>
-      <div id="promote-dialog">
+      <div id="board">
+        <div id="board-grid-wrapper"></div>
+      </div> <div id="promote-dialog">
         <div style="margin-bottom:15px; font-weight:bold; font-size:16px;">成りますか？</div>
         <div style="display: flex; gap: 15px; justify-content: center;">
           <button id="btn-prom-yes" style="background:var(--danger-btn); color:white; padding: 12px 20px; font-size: 16px;">成る</button>
@@ -519,40 +527,46 @@
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
-      // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
-    function updateDisplayRotation(isFlipped) {
+  // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
+  function updateDisplayRotation(isFlipped) {
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
     const boardContainer = document.getElementById('board-container');
     const handS = document.getElementById('handS');
     const handG = document.getElementById('handG');
     const reviewPanel = document.getElementById('review-panel');
+    const gridWrapper = document.getElementById('board-grid-wrapper');
 
     // モードに応じてクラスを付け替え
     if (!isReviewMode) {
       boardContainer.classList.add('playing-size');
       handS.classList.add('playing-size');
       handG.classList.add('playing-size');
-      reviewPanel.style.display = 'none'; // 対局中は隠す
+      reviewPanel.style.display = 'none'; 
     } else {
       boardContainer.classList.remove('playing-size');
       handS.classList.remove('playing-size');
       handG.classList.remove('playing-size');
-      reviewPanel.style.display = 'flex'; // 感想戦は表示
+      reviewPanel.style.display = 'flex';
     }
 
     // いったん左右の回転状態をリセット
     handS.classList.remove('left-rotated');
     handG.classList.remove('left-rotated');
 
-        if (isFlipped) {
+    if (isFlipped) {
       // 後手視点：左に先手駒、右に後手駒
       container.insertBefore(handS, boardContainer); 
       container.appendChild(handG);
-      // transform-origin を中心に設定
       board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(180deg)';
       handS.classList.add('left-rotated');
+      
+      // 反転時は画像内の上下余白比率も入れ替える
+      if (gridWrapper) {
+        gridWrapper.style.top = "5.3%";
+        gridWrapper.style.bottom = "3.3%";
+      }
     } else {
       // 先手視点：左に後手駒、右に先手駒
       container.insertBefore(handG, boardContainer);
@@ -560,10 +574,18 @@
       board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(0deg)';
       handG.classList.add('left-rotated');
-    }
-  }
 
-    // 初回表示の適用（未選択時は先手視点とする）
+      // 通常時の画像内余白
+      if (gridWrapper) {
+        gridWrapper.style.top = "3.3%";
+        gridWrapper.style.bottom = "5.3%";
+      }
+    }
+  } // ここで関数を終了させる
+
+  // --- 以降、グローバルスコープ（関数外）の処理 ---
+  
+  // 初回表示の適用（未選択時は先手視点とする）
   let currentFlip = (mySide === 'G');
   updateDisplayRotation(currentFlip);
 
@@ -1169,16 +1191,16 @@ btnCallStart.onclick = async () => {
     if (bool) pushReviewUpdate();
   }
 
-    const cells = [];
-  boardEl.innerHTML = ''; // 二重描画防止
+  const cells = [];
+  // const を削除し、直接要素を操作するように修正
+  document.getElementById('board-grid-wrapper').innerHTML = ''; 
   for (let y = 0; y < 9; y++) {
     cells[y] = [];
     for (let x = 0; x < 9; x++) {
       const c = document.createElement('div');
       c.className = 'cell';
-      // CSS Gridを使用するため、個別の座標指定(left/top)は削除
       c.addEventListener('click', () => handleCellClick(x, y));
-      boardEl.appendChild(c);
+      document.getElementById('board-grid-wrapper').appendChild(c);
       cells[y][x] = c;
     }
   }
