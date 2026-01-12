@@ -52,34 +52,32 @@
       max-width: 500px; 
     }
 
-      #board { 
+          #board { 
       display: grid; 
       grid-template-columns: repeat(9, 1fr); 
       grid-template-rows: repeat(9, 1fr); 
-      /* 修正：外枠の線をなくし、背景画像の境界に合わせる */
       border: none; 
       width: 100%; 
       height: 100%; 
-      /* 画像をマス目の枠（グリッド）に完全に一致させる */
       background-image: url('assets/light_878x960.png');
       background-size: 100% 100%; 
       background-repeat: no-repeat;
       background-position: center;
       box-sizing: border-box; 
       background-color: var(--board-color);
-      /* 修正：盤面全体をわずかに内側に寄せる（スマホでの端切れ防止） */
-      padding: 0.5px;
+      /* 0.5pxのような微細なパディングを排除し、目盛りとグリッドを完全一致させる */
+      padding: 0;
+      margin: 0;
     }
 
-            .cell {
+    .cell {
       width: 100%;
       height: 100%;
       position: relative;
       cursor: pointer;
-      /* 修正：ボーダーによる計算ズレを防ぐためborderを明示的に0にする */
       border: none;
       box-sizing: border-box;
-      /* 修正：駒をマスの中央に厳密に配置 */
+      /* 駒をマスの中心線上に正確に配置するためのFlex設定 */
       display: flex;
       align-items: center;
       justify-content: center;
@@ -87,23 +85,24 @@
     }
 
     .piece { 
-      /* 修正：マスの中心を基準点として固定 */
-      width: 96%; 
-      height: 96%;
+      /* 駒がマス目ギリギリだとズレが目立つため、90%程度に保ちつつ中央固定 */
+      width: 90%; 
+      height: 90%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
       align-items: center; 
       justify-content: center;
       transition: transform 0.1s;
-      /* 修正：marginによる微細なズレを防ぐため0に固定 */
       margin: 0;
+      padding: 0;
       flex-shrink: 0;
     }
 
-    /* 後手駒の回転：軸がズレないよう単純な rotate のみに */
     .piece.opposite { 
+      /* 回転軸を中央(center)に明示的に固定 */
       transform: rotate(180deg); 
+      transform-origin: center center;
     }
 
     .piece-img {
@@ -112,8 +111,10 @@
       background-image: url('assets/piece.png');
       background-size: 800% 400%; 
       background-repeat: no-repeat;
-      background-position: center;
+      /* centerではなく明示的な0%指定を基本とし、JS側でbackground-positionを微調整 */
+      background-position: 0% 0%;
       display: block;
+      margin: 0;
     }
 
     .cell.selected {
@@ -1549,7 +1550,7 @@ function render() {
       
       const isPossible = possibleMoves.some(m => m.x === x && m.y === y);
       
-      // クラスの付け替え
+      // クラスのリセットと設定
       c.className = 'cell';
       if (sel?.x === x && sel?.y === y) c.classList.add('selected');
       if (isPossible) c.classList.add('possible');
@@ -1558,14 +1559,13 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 背景位置の計算をより正確にするため100%から駒種数を引いた値で割る
-        const bgX = (pos.x * (100 / 7)).toFixed(6);
-        const bgY = (pos.y * (100 / 3)).toFixed(6);
+        // 精密な位置計算: 8枚（横）と4枚（縦）のグリッドを0-100%に割り振る
+        // 分母を(枚数-1)にすることで、端の駒が画像端にピッタリ合うように計算
+        const bgX = (pos.x * (100 / 7)).toFixed(8);
+        const bgY = (pos.y * (100 / 3)).toFixed(8);
         
-        // 修正：内部の余白を一切排除し、完全に中央集約
-        c.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}">
-          <div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>
-        </div>`;
+        // 駒本体を表示。innerHTMLの構築を最小限にし、余計な空白文字によるズレを防ぐ
+        c.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
@@ -1597,8 +1597,8 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        const bgX = (pos.x * (100 / 7)).toFixed(6);
-        const bgY = (pos.y * (100 / 3)).toFixed(6);
+        const bgX = (pos.x * (100 / 7)).toFixed(8);
+        const bgY = (pos.y * (100 / 3)).toFixed(8);
         
         s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
 
