@@ -108,12 +108,11 @@
       width: 100%;
       height: 100%;
       background-image: url('assets/piece.png');
-      /* 横8枚、縦4枚の画像なので、sizeは800% 400% で正しい */
+      /* 重要：1枚あたりのサイズを100%として、画像全体を分割数で指定 */
       background-size: 800% 400%; 
       background-repeat: no-repeat;
       display: block;
       pointer-events: none;
-      /* scaleを1.0にし、位置ズレの要因を排除 */
       transform: scale(1.0);
       margin: 0;
       padding: 0;
@@ -1557,16 +1556,17 @@ function render() {
       if (sel?.x === x && sel?.y === y) c.classList.add('selected');
       if (isPossible) c.classList.add('possible');
 
-            if (p) {
+      if (p) {
         const isOpposite = (p.owner === 'G');
-                const pos = PIECE_POS[p.type];
-        // 背景位置の計算を 100 / (列数-1) * index に厳密に合わせる
-        // 横は8列(0-7)なので 100/7、縦は4行(0-3)なので 100/3
-        const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * (100 / 3)); 
+        const pos = PIECE_POS[p.type];
         
-        // innerHTMLを構築。余白が入らないよう1行で記述
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div></div>`;
+        // 【重要】background-positionの%指定におけるズレを修正する計算式
+        // 画像が8枚(0-7)なら、1枚ずらすのに必要な%は 100 / (8-1) = 14.2857...%
+        // これをtoFixed(10)で極めて高い精度で指定します
+        const bgX = (pos.x * (100 / 7)).toFixed(10);
+        const bgY = (pos.y * (100 / 3)).toFixed(10); 
+        
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
       } else {
         c.innerHTML = '';
       }
@@ -1597,12 +1597,11 @@ function render() {
         s.style.cursor = "pointer";
         s.style.position = "relative";
         
-                const pos = PIECE_POS[type];
-        const bgX = (pos.x * (100 / 7));
-        const bgY = (pos.y * (100 / 3));
+        const pos = PIECE_POS[type];
+        const bgX = (pos.x * (100 / 7)).toFixed(10);
+        const bgY = (pos.y * (100 / 3)).toFixed(10);
 
-        // 盤面と同じく精度の高い座標を指定
-        s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div></div>`;
+        s.innerHTML = `<div class="piece"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
