@@ -66,9 +66,9 @@
       background-size: 100% 100%; 
       background-repeat: no-repeat;
       background-position: center;
-      /* 重要：paddingを設定して、グリッド（駒が置かれる範囲）を内側のマス目に合わせる */
-      /* 878x960の標準的な比率に合わせ、上下に約3%、左右に約2%の余白を設けます */
-      padding: 3.2% 2% 4% 2% !important; 
+      /* 重要：paddingを小さくして、グリッドを外側に広げ、背景のマス目と同期させます */
+      /* 878x960の標準的な盤面画像に合わせ、上下左右の余白を最適化しました */
+      padding: 1.2% 0.8% 2.2% 0.8% !important; 
       box-sizing: border-box; 
       background-color: var(--board-color);
       margin: 0 !important;
@@ -94,9 +94,9 @@
     }
 
     .piece { 
-      /* 駒の描画範囲を固定 */
-      width: 90%; 
-      height: 90%;
+      /* 駒の描画範囲を拡大し、マス目との隙間を適正化 */
+      width: 96%; 
+      height: 96%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
@@ -1576,8 +1576,10 @@ function render() {
         const bgX = (pos.x * (100 / 7)).toFixed(10);
         const bgY = (pos.y * (100 / 3)).toFixed(10); 
         
-        // 駒本体を表示。transformの干渉を避けるため構造を維持
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:92%; height:92%;"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div></div>`;
+                // 駒本体を表示。個別のwidth指定を削除し、CSSの .piece クラスの指定を優先させます
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
+                         <div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div>
+                       </div>`;
       } else {
         c.innerHTML = '';
       }
