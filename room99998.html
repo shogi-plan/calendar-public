@@ -55,7 +55,7 @@
     #board { 
       position: relative; 
       display: grid; 
-      /* パディングを 1.0% に設定。駒の可動範囲を最大級に広げます。 */
+      /* パディングを 0% に設定。理論上の最大広域配置です。 */
       grid-template-columns: repeat(9, 1fr);
       grid-template-rows: repeat(9, 1fr);
       border: none; 
@@ -67,8 +67,8 @@
       background-position: center;
       box-sizing: border-box; 
       background-color: var(--board-color);
-      /* ユーザー様の指定に基づき 1.0% に固定。 */
-      padding: 1.0% !important; 
+      /* パディングを完全に撤廃。これで変化がなければ他の要因を探ります。 */
+      padding: 0 !important; 
       margin: 0 !important;
     }
 
@@ -1580,7 +1580,7 @@ function render() {
         const bgX = (pos.x / 7) * 100;
         const bgY = (pos.y / 3) * 100; 
         
-        // innerHTML を再構築。1.0% のパディングに合わせて、駒の中心が罫線に合致するよう再描画。
+        // innerHTML を再構築。パディング 0% の状態に合わせて描画します。
         c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
           <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
         </div>`;
