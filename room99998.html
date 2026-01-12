@@ -52,45 +52,52 @@
       max-width: 500px; 
     }
 
-          #board { 
+      #board { 
       display: grid; 
       grid-template-columns: repeat(9, 1fr); 
       grid-template-rows: repeat(9, 1fr); 
-      border: 1px solid #222; 
+      /* 修正：外枠の線をなくし、背景画像の境界に合わせる */
+      border: none; 
       width: 100%; 
       height: 100%; 
       /* 画像をマス目の枠（グリッド）に完全に一致させる */
       background-image: url('assets/light_878x960.png');
-      background-size: 100% 100%; /* containから100% 100%に変更して隙間を排除 */
+      background-size: 100% 100%; 
       background-repeat: no-repeat;
       background-position: center;
       box-sizing: border-box; 
       background-color: var(--board-color);
+      /* 修正：盤面全体をわずかに内側に寄せる（スマホでの端切れ防止） */
+      padding: 0.5px;
     }
 
-        .cell {
+      .cell {
       width: 100%;
       height: 100%;
       position: relative;
       cursor: pointer;
+      /* 修正：ボーダーによる計算ズレを防ぐためborderを明示的に0にする */
+      border: none;
       box-sizing: border-box;
       /* 子要素をFlexboxで完全に中央へ */
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden; /* マス目からはみ出さない */
+      overflow: hidden; 
     }
 
     .piece { 
-      /* position: absolute を廃止し、Flexの自然な配置に任せる */
-      width: 95%; /* 盤の線に被らないよう微調整 */
-      height: 95%;
+      /* 修正：サイズをわずかに小さくし、中央配置を安定させる */
+      width: 92%; 
+      height: 92%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
       align-items: center; 
       justify-content: center;
       transition: transform 0.1s;
+      /* 修正：意図しないオフセットを排除 */
+      margin: auto;
     }
 
     /* 後手駒の回転：軸がズレないよう単純な rotate のみに */
@@ -1550,13 +1557,13 @@ function render() {
         const isOpposite = (p.owner === 'G');
         const pos = PIECE_POS[p.type];
         
-        // 座標計算。100% / (列数-1) または (行数-1) で正確に指定
+        // 修正：計算式を微調整し、より厳格な中央揃えを適用
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
-        // Flexboxの中央配置を維持しつつ、ズレを抑制
-        c.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}" style="width:92%; height:92%;">
-          <div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div>
+        // 修正：外側のコンテナ(piece)にmargin: autoを付与し、中央固定を強化
+        c.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}" style="width:92%; height:92%; margin:auto;">
+          <div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div>
         </div>`;
       } else {
         c.innerHTML = '';
@@ -1592,7 +1599,7 @@ function render() {
         const bgX = (pos.x * (100 / 7)).toFixed(4);
         const bgY = (pos.y * (100 / 3)).toFixed(4);
         
-        s.innerHTML = `<div class="piece" style="width:92%; height:92%;"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%;"></div></div>`;
+        s.innerHTML = `<div class="piece" style="width:92%; height:92%; margin:auto;"><div class="piece-img" style="background-position: ${bgX}% ${bgY}%; width:100%; height:100%;"></div></div>`;
 
         if (counts[type] > 1) {
           const c = document.createElement('div');
