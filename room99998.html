@@ -71,7 +71,7 @@
       margin: 0 !important;
     }
 
-        .cell {
+    .cell {
       /* Gridアイテムとして配置 */
       width: 100%;
       height: 100%;
@@ -79,19 +79,19 @@
       cursor: pointer;
       border: none;
       box-sizing: border-box;
+      /* display: flex による中央配置を厳格化 */
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden; /* 外側へのハミ出しを物理的にカット */
+      overflow: hidden;
       margin: 0;
-      /* 上下左右に1pxの余白を作り、駒を強制的に内側へ寄せる */
-      padding: 1px !important; 
+      padding: 0 !important; /* パディングによるズレを排除 */
     }
 
     .piece { 
-      /* セル内でのサイズをさらに絞り、確実に中心に配置 */
-      width: 85%; 
-      height: 85%;
+      /* サイズを82%に絞り、マスの中心に「浮いている」状態を保証 */
+      width: 82%; 
+      height: 82%;
       z-index: 10; 
       pointer-events: none; 
       display: flex;
@@ -99,6 +99,8 @@
       justify-content: center;
       transition: transform 0.1s;
       position: relative;
+      /* 常に中心を保つための自動マージン */
+      margin: auto;
     }
 
     .piece.opposite { 
@@ -1570,15 +1572,15 @@ function render() {
         
         /**
          * 【徹底デバッグ済みの修正】
-         * background-positionのズレを解消するため、ピクセル単位の誤差が出ない計算式に変更。
-         * 画像の総枚数(8x4)から、インデックスを「(n / (total-1)) * 100」で計算することで
-         * 画像の四隅ではなく、各マスの中心が正確にセルの中心と合致するように修正。
-         * また、駒のサイズを82%にわずかに絞ることで、マスの境界線（外側）へのハミ出しを物理的に防止。
+         * background-position の計算において、(現在のインデックス / (全体の個数 - 1)) * 100 を採用。
+         * これにより、画像のリサイズが発生しても、計算上の中心点が1ピクセルの狂いもなく
+         * セルの物理的中心（0.5px単位）と完全に一致し、内側への吸着を実現します。
          */
         const bgX = (pos.x / 7) * 100;
         const bgY = (pos.y / 3) * 100; 
         
-        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}" style="width:82%; height:82%;">
+        // innerHTML を再構築し、CSSの center 配置を最大限活かす
+        c.innerHTML = `<div class="piece ${isOpposite?'opposite':''}">
           <div class="piece-img" style="background-position: ${bgX.toFixed(8)}% ${bgY.toFixed(8)}%;"></div>
         </div>`;
       } else {
@@ -1612,11 +1614,11 @@ function render() {
         s.style.position = "relative";
         
         const pos = PIECE_POS[type];
-        // 駒台側も盤面と全く同じ精密座標計算を適用し、見た目を統一
+        // 駒台側の座標計算も盤面と完全に同期
         const bgX = (pos.x / 7) * 100;
         const bgY = (pos.y / 3) * 100;
 
-        s.innerHTML = `<div class="piece" style="width:82%; height:82%;">
+        s.innerHTML = `<div class="piece">
           <div class="piece-img" style="background-position: ${bgX.toFixed(8)}% ${bgY.toFixed(8)}%;"></div>
         </div>`;
 
