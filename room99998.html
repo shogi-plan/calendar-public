@@ -54,9 +54,6 @@
 
     #board { 
       position: relative; 
-      /* Gridレイアウトを解除。内部のラッパーで制御する形に変更 */
-      display: block; 
-      border: none; 
       width: 100%; 
       height: 100%; 
       background-image: url('assets/light_878x960.png');
@@ -66,21 +63,31 @@
       background-color: var(--board-color);
       margin: 0 !important;
       overflow: hidden; 
-      box-sizing: border-box;
     }
 
-    /* 盤面画像内の「実際のマス目」があるエリア */
+    /* 盤面の画像内にある「マス目部分」だけを定義するラッパー */
     #board-grid-wrapper {
       position: absolute;
-      /* 画像内のマス目範囲を%で指定（ここがズレ防止の肝） */
-      /* 先手視点: 上3.3%, 下5.3%, 左右1.8% */
+      /* 画像内の実際のマス目範囲をパーセントで指定（ここを調整してズレを消す） */
       top: 3.3%;
       bottom: 5.3%;
-      left: 1.8%;
-      right: 1.8%;
+      left: 1.5%;
+      right: 1.5%;
       display: grid;
       grid-template-columns: repeat(9, 1fr);
       grid-template-rows: repeat(9, 1fr);
+      pointer-events: none; /* 下の.cellのクリックを邪魔しない */
+    }
+
+    .cell {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      cursor: pointer;
+      pointer-events: auto; /* クリックを有効化 */
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .cell {
@@ -412,8 +419,9 @@
     <div class="hand" id="handG" data-label="△後手"></div>
     <div id="board-container">
       <div id="board">
-        <div id="board-grid-wrapper"></div>
-      </div> <div id="promote-dialog">
+        <div id="board-grid-wrapper" hidefocus="true"></div>
+      </div>
+      <div id="promote-dialog">
         <div style="margin-bottom:15px; font-weight:bold; font-size:16px;">成りますか？</div>
         <div style="display: flex; gap: 15px; justify-content: center;">
           <button id="btn-prom-yes" style="background:var(--danger-btn); color:white; padding: 12px 20px; font-size: 16px;">成る</button>
@@ -542,12 +550,12 @@
       boardContainer.classList.add('playing-size');
       handS.classList.add('playing-size');
       handG.classList.add('playing-size');
-      reviewPanel.style.display = 'none'; 
+      reviewPanel.style.display = 'none'; // 対局中は隠す
     } else {
       boardContainer.classList.remove('playing-size');
       handS.classList.remove('playing-size');
       handG.classList.remove('playing-size');
-      reviewPanel.style.display = 'flex';
+      reviewPanel.style.display = 'flex'; // 感想戦は表示
     }
 
     // いったん左右の回転状態をリセット
@@ -558,34 +566,36 @@
       // 後手視点：左に先手駒、右に後手駒
       container.insertBefore(handS, boardContainer); 
       container.appendChild(handG);
+      
+      // 盤面の回転
       board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(180deg)';
       handS.classList.add('left-rotated');
-      
-      // 反転時は画像内の上下余白比率も入れ替える
+
+      // 反転時は、画像内の「上下の余白比率」を入れ替えてズレを補正する
       if (gridWrapper) {
-        gridWrapper.style.top = "5.3%";
-        gridWrapper.style.bottom = "3.3%";
+        gridWrapper.style.top = "5.3%";    /* 通常時の bottom の値 */
+        gridWrapper.style.bottom = "3.3%"; /* 通常時の top の値 */
       }
     } else {
       // 先手視点：左に後手駒、右に先手駒
       container.insertBefore(handG, boardContainer);
       container.appendChild(handS);
+      
+      // 盤面の回転を戻す
       board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(0deg)';
       handG.classList.add('left-rotated');
 
-      // 通常時の画像内余白
+      // 通常時の画像内余白（CSSの初期値と合わせる）
       if (gridWrapper) {
         gridWrapper.style.top = "3.3%";
         gridWrapper.style.bottom = "5.3%";
       }
     }
-  } // ここで関数を終了させる
+  }
 
-  // --- 以降、グローバルスコープ（関数外）の処理 ---
-  
-  // 初回表示の適用（未選択時は先手視点とする）
+    // 初回表示の適用（未選択時は先手視点とする）
   let currentFlip = (mySide === 'G');
   updateDisplayRotation(currentFlip);
 
@@ -1191,16 +1201,26 @@ btnCallStart.onclick = async () => {
     if (bool) pushReviewUpdate();
   }
 
+  // --- 盤面セルの初期設定（修正後：grid-wrapperに対して生成） ---
   const cells = [];
-  // const を削除し、直接要素を操作するように修正
-  document.getElementById('board-grid-wrapper').innerHTML = ''; 
+  const gridWrapper = document.getElementById('board-grid-wrapper');
+  
+  // 透明なグリッドレイヤー内をクリアしてから生成
+  gridWrapper.innerHTML = ''; 
+
   for (let y = 0; y < 9; y++) {
     cells[y] = [];
     for (let x = 0; x < 9; x++) {
       const c = document.createElement('div');
       c.className = 'cell';
-      c.addEventListener('click', () => handleCellClick(x, y));
-      document.getElementById('board-grid-wrapper').appendChild(c);
+      
+      // クリックイベントの登録
+      c.addEventListener('click', () => {
+        handleCellClick(x, y);
+      });
+      
+      // 重要：boardEl ではなく gridWrapper に追加します
+      gridWrapper.appendChild(c);
       cells[y][x] = c;
     }
   }
