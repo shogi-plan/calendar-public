@@ -179,7 +179,33 @@
       align-self: stretch;
       justify-content: flex-start;
       z-index: 5;
+      position: relative; /* ラベル配置の基準 */
     }
+
+    /* タイトルラベルの追加 */
+    .hand::before {
+      content: attr(data-label);
+      position: absolute;
+      top: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      font-weight: bold;
+      white-space: nowrap;
+      color: #333;
+    }
+
+    /* 左側に配置された時の反転設定 */
+    .hand.left-rotated {
+      transform: rotate(180deg);
+    }
+    /* 反転した時、文字だけは正位置に戻す */
+    .hand.left-rotated::before {
+      transform: translateX(-50%) rotate(180deg);
+      top: auto;
+      bottom: -18px;
+    }
+
     /* 対局時のサイズ調整 */
     #board-container.playing-size { 
       width: 78vw; 
@@ -541,20 +567,25 @@
     handS.classList.remove('left-rotated');
     handG.classList.remove('left-rotated');
 
-        if (isFlipped) {
+    if (isFlipped) {
       // 後手視点：左に先手駒、右に後手駒
       container.insertBefore(handS, boardContainer); 
       container.appendChild(handG);
-      // transform-origin を中心に設定
+      
       board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(180deg)';
+      
+      // 左側に配置された先手駒台を回転させる
       handS.classList.add('left-rotated');
     } else {
       // 先手視点：左に後手駒、右に先手駒
       container.insertBefore(handG, boardContainer);
       container.appendChild(handS);
+      
       board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(0deg)';
+      
+      // 左側に配置された後手駒台を回転させる
       handG.classList.add('left-rotated');
     }
   }
