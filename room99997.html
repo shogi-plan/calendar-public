@@ -164,13 +164,13 @@
     .chat-msg-other { color: #1b5e20; background: #e8f5e9; border-radius: 3px; padding: 2px 4px; }
     .chat-name { font-weight: bold; margin-right: 5px; display: none; } /* 名前の表示を非表示に設定 */
     
-          /* --- 持ち駒エリア（改良版） --- */
+    /* --- 持ち駒エリア（改良版） --- */
     .hand {
       display: flex;
       flex-direction: column;
-      /* 盤面(878:960)の横幅1列分に近い比率で幅を自動計算 */
-      width: calc((58vw / 9)); 
-      max-width: calc(380px / 9);
+      /* 盤面(878:960)の横幅1列分に近い比率で幅を自動計算：58vw -> 66vwへ拡大 */
+      width: calc((66vw / 9)); 
+      max-width: calc(430px / 9);
       background: #d7b59a;
       border: 1px solid #5d4037;
       border-radius: 4px;
@@ -190,61 +190,31 @@
       width: calc(78vw / 9);
       max-width: calc(500px / 9);
     }
-    /* 駒を置くためのスロット：盤面と駒サイズを合わせる */
-    .hand-slot {
-      width: 100%;
-      aspect-ratio: 1 / 1;
-      background: rgba(255,255,255,0.1);
-      border-radius: 2px;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* 持ち駒の枚数表示 */
-    .hand-count {
-      position: absolute;
-      bottom: -1px;
-      right: -1px;
-      background: rgba(0,0,0,0.7);
-      color: white;
-      font-size: 9px;
-      padding: 0 2px;
-      border-radius: 2px;
-      z-index: 20;
-      pointer-events: none;
-    }
-    /* 持ち駒選択中のハイライト */
-    .selected-piece {
-      background-color: rgba(255, 152, 0, 0.6);
-      box-shadow: 0 0 5px orange;
-    }
-    /* 左側の持ち駒エリアを上下反転させる */
-    .hand.left-rotated {
-      transform: rotate(180deg);
-    }
 
     /* --- 感想戦パネルのレイアウト補正 --- */
     #review-panel {
       display: none;
       flex-direction: column;
-      width: 18vw;
-      max-width: 120px;
-      height: 100%;
+      width: 16vw;
+      max-width: 100px;
       background: #ccc;
       border: 1px solid #999;
       box-sizing: border-box;
       flex-shrink: 0;
+      /* 重要：盤面コンテナ（board-container）と同じ高さを維持させる */
+      align-self: stretch; 
+      height: auto;
     }
     .kifu-list { 
-      flex-grow: 1; 
+      /* 重要：親要素の残りの高さをすべて使い切り、中身だけをスクロールさせる */
+      flex: 1 1 0; 
       overflow-y: auto; 
       background: #fafafa; 
       font-size: 9px; 
       padding: 0; 
-      margin: 0; 
-      height: 150px; /* 最小高さを確保 */
+      margin: 0;
+      /* 非常に重要：ブラウザがスクロールバーを計算するための最小高さ設定 */
+      min-height: 0; 
     }
 
     :root { --setting-btn: #607d8b; }
@@ -477,10 +447,11 @@
   const callStatusRef = ref(db, `${roomName}/callStatus`);
   const signalingRef = ref(db, `${roomName}/signaling`);
   const readyRef = ref(db, `${roomName}/readyStatus`); // 追加
+  const configLockRef = ref(db, `${roomName}/configLock`); // 設定排他制御用
 
   let isCountingDown = false; // 追加：カウントダウン中フラグ
 
-    const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
+  const SYMBOLS = {FU:'歩',KY:'香',KE:'桂',GI:'銀',KI:'金',KA:'角',HI:'飛',OU:'玉',TO:'と',NY:'杏',NK:'圭',NG:'全',UM:'馬',RY:'龍'};
 
   // 駒音の定義
   const pieceSound = new Audio("assets/komaoto.mp3");
@@ -505,7 +476,7 @@
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
-      // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
+    // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
     function updateDisplayRotation(isFlipped) {
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
@@ -520,11 +491,25 @@
       handS.classList.add('playing-size');
       handG.classList.add('playing-size');
       reviewPanel.style.display = 'none'; // 対局中は隠す
+      // 対局モード時は上揃えにする
+      container.style.alignItems = 'flex-start';
     } else {
+      // 感想戦モード：盤面サイズを拡大
       boardContainer.classList.remove('playing-size');
       handS.classList.remove('playing-size');
       handG.classList.remove('playing-size');
       reviewPanel.style.display = 'flex'; // 感想戦は表示
+      
+      // 盤面コンテナの幅を更新
+      boardContainer.style.width = "66vw";
+      boardContainer.style.maxWidth = "430px";
+
+      // 重要：親要素に 'stretch' を指定することで、review-panel の高さを
+      // 盤面＋駒台のセットの高さに強制的に合わせる
+      container.style.alignItems = 'stretch';
+
+      // 重要：左右の要素の高さを揃える
+      container.style.alignItems = 'stretch'; 
     }
 
     // いったん左右の回転状態をリセット
@@ -681,7 +666,12 @@
 
     peerConnection.ontrack = e => { const ra = document.getElementById('remote-audio'); if (ra) ra.srcObject = e.streams[0]; };
     if (localStream) localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-    peerConnection.onicecandidate = e => { if (e.candidate) push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() }); };
+    peerConnection.onicecandidate = e => { 
+      // mySideが未設定のまま候補を送るとシグナリングが成立しないためガードを入れる
+      if (e.candidate && mySide) { 
+        push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() }); 
+      } 
+    };
   }
 
   async function sendOffer() { 
@@ -712,13 +702,18 @@
   }
 
 btnCallStart.onclick = async () => { 
-  if (localCallStartPressed || !mySide) return; 
+  // 自分の役割が未選択なら警告を出して中断
+  if (!mySide) {
+    alert("先手または後手を選択してから通話を開始してください。");
+    return;
+  }
+  if (localCallStartPressed) return; 
   
   localCallStartPressed = true; 
   updateCallUI(); 
 
   try { 
-    // 開始前に、まず自分のステータスをFirebase上で確定させる（掃除ロジックに消されないようにする）
+    // 開始前に、まず自分のステータスをFirebase上で確定させる
     const updates = {};
     updates[`users/${mySide}`] = true;
     
@@ -888,16 +883,40 @@ btnCallStart.onclick = async () => {
     updateCallUI(); 
   });
 
-    onValue(ref(db, `${roomName}/signaling/offer`), snap => { 
+  // --- 通話シグナリングのリアルタイム監視 ---
+  onValue(ref(db, `${roomName}/signaling/offer`), snap => { 
     const offer = snap.val(); 
-    // 相手からのOfferが届き、かつ自分が「通話開始」を押している場合のみAnswerを返す
-    if (offer && offer.from !== mySide && localCallStartPressed) {
+    // 相手（自分ではない側）からのOfferが届き、自分が通話ボタンを押していれば応答
+    if (offer && mySide && offer.from !== mySide && localCallStartPressed) {
+      console.log("Offer received from:", offer.from);
       sendAnswer(); 
     }
   });
-  onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
-  onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
-  onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
+
+  onValue(ref(db, `${roomName}/signaling/answer`), async snap => { 
+    const answer = snap.val(); 
+    if (answer && mySide && answer.from !== mySide && peerConnection) {
+      console.log("Answer received from:", answer.from);
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); 
+    }
+  });
+
+  // ICE Candidateの受信監視
+  onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { 
+    if (mySide === 'G' && peerConnection && snap.exists()) {
+      Object.values(snap.val()).forEach(d => {
+        peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {});
+      });
+    }
+  });
+
+  onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { 
+    if (mySide === 'S' && peerConnection && snap.exists()) {
+      Object.values(snap.val()).forEach(d => {
+        peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {});
+      });
+    }
+  });
 
      // --- Firebase 将棋データ監視 ---
   let lastInitAt = 0; // 追加：初期化検知用の変数
@@ -1324,9 +1343,44 @@ function finish(moveData) {
     return board;
   }
 
-  // 設定ダイアログの開閉
-  document.getElementById('btnSetting').onclick = () => { document.getElementById('setting-dialog').style.display = 'block'; };
-  document.getElementById('btnSettingCancel').onclick = () => { document.getElementById('setting-dialog').style.display = 'none'; };
+  // 設定ダイアログの開閉（排他エラー処理付き）
+  document.getElementById('btnSetting').onclick = async () => {
+    // 1. このブラウザ用の仮IDを生成（未選択ユーザーでも識別可能にするため）
+    if (!sessionStorage.getItem(`configUser_${roomName}`)) {
+      sessionStorage.setItem(`configUser_${roomName}`, Math.random().toString(36).substring(2, 10));
+    }
+    const myConfigID = sessionStorage.getItem(`configUser_${roomName}`);
+
+    // 2. Firebaseから現在のロック状態を取得
+    const snap = await get(configLockRef);
+    const lock = snap.val();
+    const now = getServerNow();
+
+    // 3. 他の人が開いているかチェック（有効期限3分以内の有効なロックがあるか）
+    if (lock && lock.sessionID !== myConfigID && (now - lock.timestamp) < 180000) {
+      let lockerName = "他の利用者";
+      if (lock.side === 'S') lockerName = "先手▲";
+      if (lock.side === 'G') lockerName = "後手△";
+      
+      alert(`現在、設定画面が開かれています（操作中：${lockerName}）。\n終了するまでお待ちください。`);
+      return;
+    }
+
+    // 4. 自分が操作中としてロックを取得（または更新）
+    await set(configLockRef, {
+      sessionID: myConfigID,
+      side: mySide || 'none', // 未選択の場合は 'none'
+      timestamp: serverTimestamp()
+    });
+
+    document.getElementById('setting-dialog').style.display = 'block';
+  };
+  
+  // キャンセルボタン（排他ロック解除付き）
+  document.getElementById('btnSettingCancel').onclick = async () => {
+    await remove(configLockRef);
+    document.getElementById('setting-dialog').style.display = 'none';
+  };
 
     // 設定適用ボタン
   document.getElementById('btnSettingSave').onclick = async () => {
@@ -1368,10 +1422,12 @@ function finish(moveData) {
     sessionStorage.removeItem(`mySide_${roomName}`);
     mySideSelect.value = '';
     
+    // 5. ロックを解除して閉じる
+    await remove(configLockRef);
     document.getElementById('setting-dialog').style.display = 'none';
     render();
   };
-  
+
   function syncReviewStateLocally() { 
     if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; 
     const hist = state.history[viewIdx]; 
@@ -1939,6 +1995,11 @@ function updateTimerDisplay() {
         users: null 
       });
       remove(signalingRef);
+    }
+
+    // 設定画面を開いたまま閉じようとした場合、ロックを解放
+    if (document.getElementById('setting-dialog').style.display === 'block') {
+      remove(configLockRef);
     }
   });
 
