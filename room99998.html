@@ -682,7 +682,12 @@
 
     peerConnection.ontrack = e => { const ra = document.getElementById('remote-audio'); if (ra) ra.srcObject = e.streams[0]; };
     if (localStream) localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-    peerConnection.onicecandidate = e => { if (e.candidate) push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() }); };
+    peerConnection.onicecandidate = e => { 
+      // mySideが未設定のまま候補を送るとシグナリングが成立しないためガードを入れる
+      if (e.candidate && mySide) { 
+        push(ref(db, `${roomName}/signaling/candidates/${mySide}`), { candidate: e.candidate.toJSON() }); 
+      } 
+    };
   }
 
   async function sendOffer() { 
@@ -713,13 +718,18 @@
   }
 
 btnCallStart.onclick = async () => { 
-  if (localCallStartPressed || !mySide) return; 
+  // 自分の役割が未選択なら警告を出して中断
+  if (!mySide) {
+    alert("先手または後手を選択してから通話を開始してください。");
+    return;
+  }
+  if (localCallStartPressed) return; 
   
   localCallStartPressed = true; 
   updateCallUI(); 
 
   try { 
-    // 開始前に、まず自分のステータスをFirebase上で確定させる（掃除ロジックに消されないようにする）
+    // 開始前に、まず自分のステータスをFirebase上で確定させる
     const updates = {};
     updates[`users/${mySide}`] = true;
     
@@ -889,16 +899,40 @@ btnCallStart.onclick = async () => {
     updateCallUI(); 
   });
 
-    onValue(ref(db, `${roomName}/signaling/offer`), snap => { 
+  // --- 通話シグナリングのリアルタイム監視 ---
+  onValue(ref(db, `${roomName}/signaling/offer`), snap => { 
     const offer = snap.val(); 
-    // 相手からのOfferが届き、かつ自分が「通話開始」を押している場合のみAnswerを返す
-    if (offer && offer.from !== mySide && localCallStartPressed) {
+    // 相手（自分ではない側）からのOfferが届き、自分が通話ボタンを押していれば応答
+    if (offer && mySide && offer.from !== mySide && localCallStartPressed) {
+      console.log("Offer received from:", offer.from);
       sendAnswer(); 
     }
   });
-  onValue(ref(db, `${roomName}/signaling/answer`), async snap => { const answer = snap.val(); if (answer && answer.from !== mySide && peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); });
-  onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { if (mySide === 'G' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
-  onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { if (mySide === 'S' && peerConnection && snap.exists()) Object.values(snap.val()).forEach(d => peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate))); });
+
+  onValue(ref(db, `${roomName}/signaling/answer`), async snap => { 
+    const answer = snap.val(); 
+    if (answer && mySide && answer.from !== mySide && peerConnection) {
+      console.log("Answer received from:", answer.from);
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer)); 
+    }
+  });
+
+  // ICE Candidateの受信監視
+  onValue(ref(db, `${roomName}/signaling/candidates/S`), snap => { 
+    if (mySide === 'G' && peerConnection && snap.exists()) {
+      Object.values(snap.val()).forEach(d => {
+        peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {});
+      });
+    }
+  });
+
+  onValue(ref(db, `${roomName}/signaling/candidates/G`), snap => { 
+    if (mySide === 'S' && peerConnection && snap.exists()) {
+      Object.values(snap.val()).forEach(d => {
+        peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {});
+      });
+    }
+  });
 
      // --- Firebase 将棋データ監視 ---
   let lastInitAt = 0; // 追加：初期化検知用の変数
@@ -1355,11 +1389,11 @@ function finish(moveData) {
       timestamp: serverTimestamp()
     });
 
-  document.getElementById('setting-dialog').style.display = 'block';
+    document.getElementById('setting-dialog').style.display = 'block';
   };
   
+  // キャンセルボタン（排他ロック解除付き）
   document.getElementById('btnSettingCancel').onclick = async () => {
-    // ロックを解除して閉じる
     await remove(configLockRef);
     document.getElementById('setting-dialog').style.display = 'none';
   };
