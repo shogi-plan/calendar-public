@@ -179,31 +179,12 @@
       align-self: stretch;
       justify-content: flex-start;
       z-index: 5;
-      position: relative; /* ラベル配置の基準 */
+      /* position: relative; 不要なため削除 */
     }
 
-    /* タイトルラベルの追加 */
-    .hand::before {
-      content: attr(data-label);
-      position: absolute;
-      top: -18px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 10px;
-      font-weight: bold;
-      white-space: nowrap;
-      color: #333;
-    }
-
-    /* 左側に配置された時の反転設定 */
+    /* 左側に配置された時の反転設定（駒台自体の回転は維持） */
     .hand.left-rotated {
       transform: rotate(180deg);
-    }
-    /* 反転した時、文字だけは正位置に戻す */
-    .hand.left-rotated::before {
-      transform: translateX(-50%) rotate(180deg);
-      top: auto;
-      bottom: -18px;
     }
 
     /* 対局時のサイズ調整 */
@@ -409,7 +390,7 @@
 
 <div id="game-main">
   <div id="game-main-inner" style="display: flex; flex-direction: row; align-items: flex-start; gap: 2px;">
-    <div class="hand" id="handG" data-label="△後手"></div>
+    <div class="hand" id="handG"></div>
     <div id="board-container">
       <div id="board"></div>
       <div id="promote-dialog">
@@ -420,7 +401,7 @@
         </div>
       </div>
     </div>
-    <div class="hand" id="handS" data-label="▲先手"></div>
+    <div class="hand" id="handS"></div>
   </div>
 
   <div id="review-panel">
