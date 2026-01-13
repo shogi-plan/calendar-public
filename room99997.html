@@ -168,8 +168,7 @@
     .hand {
       display: flex;
       flex-direction: column;
-      /* 盤面(878:960)の横幅1列分に近い比率で幅を自動計算：58vw -> 66vwへ拡大 */
-      width: calc((66vw / 9)); 
+      width: calc(66vw / 9); 
       max-width: calc(430px / 9);
       background: #d7b59a;
       border: 1px solid #5d4037;
@@ -177,11 +176,11 @@
       padding: 1px;
       box-sizing: border-box;
       gap: 1px;
-      align-self: stretch; /* 高さを盤面コンテナに合わせる */
+      align-self: stretch;
       justify-content: flex-start;
       z-index: 5;
     }
-    /* 対局時のサイズ調整（盤面が大きくなるのに合わせて幅も調整） */
+    /* 対局時のサイズ調整 */
     #board-container.playing-size { 
       width: 78vw; 
       max-width: 500px; 
@@ -189,6 +188,32 @@
     .hand.playing-size {
       width: calc(78vw / 9);
       max-width: calc(500px / 9);
+    }
+    
+    /* 持ち駒のスロットと個数表示の追加 */
+    .hand-slot {
+      width: 100%;
+      aspect-ratio: 1/1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .hand-count {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      font-size: 9px;
+      padding: 0 2px;
+      border-radius: 2px;
+      z-index: 15;
+      pointer-events: none;
+    }
+    .selected-piece {
+      background-color: rgba(255, 152, 0, 0.5);
+      border-radius: 2px;
     }
 
     /* --- 感想戦パネルのレイアウト補正 --- */
@@ -1665,6 +1690,7 @@ function render() {
 
   const drawH = (id, list, owner) => {
     const el = document.getElementById(id);
+    if (!el) return;
     el.innerHTML = '';
     const HAND_ORDER = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
     
@@ -1672,58 +1698,62 @@ function render() {
     (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
     const existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
+    // 常に7スロット分回す（または駒の種類分）
     for (let i = 0; i < 7; i++) {
+      const type = existingTypes[i];
+      if (!type) continue; // 駒がないスロットはスキップ
+
       const slot = document.createElement('div');
       slot.className = 'hand-slot';
-      const type = existingTypes[i];
+      
+      const s = document.createElement('div');
+      s.style.width = "100%";
+      s.style.height = "100%";
+      s.style.display = "flex";
+      s.style.alignItems = "center";
+      s.style.justifyContent = "center";
+      s.style.cursor = "pointer";
+      s.style.position = "relative";
+      
+      const pos = PIECE_POS[type];
+      const bgX = (pos.x / 7) * 100;
+      const bgY = (pos.y / 3) * 100;
 
-      if (type) {
-        const s = document.createElement('div');
-        s.style.width = "100%";
-        s.style.height = "100%";
-        s.style.display = "flex";
-        s.style.alignItems = "center";
-        s.style.justifyContent = "center";
-        s.style.cursor = "pointer";
-        s.style.position = "relative";
-        
-        const pos = PIECE_POS[type];
-        // 駒台側の座標計算
-        const bgX = (pos.x / 7) * 100;
-        const bgY = (pos.y / 3) * 100;
+      // 駒の向きを制御（後手の駒台にある場合は反対にする）
+      const isOpposite = (owner === 'G');
 
-        s.innerHTML = `<div class="piece">
-          <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
-        </div>`;
+      s.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}">
+        <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
+      </div>`;
 
-        if (counts[type] > 1) {
-          const c = document.createElement('div');
-          c.className = 'hand-count';
-          c.textContent = `${counts[type]}`;
-          slot.appendChild(c);
-        }
-
-        const firstIdx = list.indexOf(type);
-        if (selH && selH.type === type && selH.owner === owner) {
-          s.classList.add('selected-piece');
-        }
-
-        s.onclick = (e) => {
-          e.stopPropagation();
-          if (!isReviewMode) {
-            if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
-          }
-          if (selH && selH.type === type && selH.owner === owner) {
-            selH = null;
-          } else {
-            selH = { type: type, owner, idx: firstIdx };
-            sel = null;
-            possibleMoves = [];
-          }
-          render();
-        };
-        slot.appendChild(s);
+      if (counts[type] > 1) {
+        const c = document.createElement('div');
+        c.className = 'hand-count';
+        c.textContent = counts[type];
+        s.appendChild(c);
       }
+
+      if (selH && selH.type === type && selH.owner === owner) {
+        s.classList.add('selected-piece');
+      }
+
+      const firstIdx = list.indexOf(type);
+      s.onclick = (e) => {
+        e.stopPropagation();
+        if (!isReviewMode) {
+          if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
+        }
+        if (selH && selH.type === type && selH.owner === owner) {
+          selH = null;
+        } else {
+          selH = { type: type, owner, idx: firstIdx };
+          sel = null;
+          possibleMoves = [];
+        }
+        render();
+      };
+
+      slot.appendChild(s);
       el.appendChild(slot);
     }
   };
