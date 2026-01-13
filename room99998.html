@@ -164,13 +164,13 @@
     .chat-msg-other { color: #1b5e20; background: #e8f5e9; border-radius: 3px; padding: 2px 4px; }
     .chat-name { font-weight: bold; margin-right: 5px; display: none; } /* 名前の表示を非表示に設定 */
     
-          /* --- 持ち駒エリア（改良版） --- */
+    /* --- 持ち駒エリア（改良版） --- */
     .hand {
       display: flex;
       flex-direction: column;
-      /* 盤面(878:960)の横幅1列分に近い比率で幅を自動計算 */
-      width: calc((58vw / 9)); 
-      max-width: calc(380px / 9);
+      /* 盤面(878:960)の横幅1列分に近い比率で幅を自動計算：58vw -> 66vwへ拡大 */
+      width: calc((66vw / 9)); 
+      max-width: calc(430px / 9);
       background: #d7b59a;
       border: 1px solid #5d4037;
       border-radius: 4px;
@@ -190,61 +190,31 @@
       width: calc(78vw / 9);
       max-width: calc(500px / 9);
     }
-    /* 駒を置くためのスロット：盤面と駒サイズを合わせる */
-    .hand-slot {
-      width: 100%;
-      aspect-ratio: 1 / 1;
-      background: rgba(255,255,255,0.1);
-      border-radius: 2px;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* 持ち駒の枚数表示 */
-    .hand-count {
-      position: absolute;
-      bottom: -1px;
-      right: -1px;
-      background: rgba(0,0,0,0.7);
-      color: white;
-      font-size: 9px;
-      padding: 0 2px;
-      border-radius: 2px;
-      z-index: 20;
-      pointer-events: none;
-    }
-    /* 持ち駒選択中のハイライト */
-    .selected-piece {
-      background-color: rgba(255, 152, 0, 0.6);
-      box-shadow: 0 0 5px orange;
-    }
-    /* 左側の持ち駒エリアを上下反転させる */
-    .hand.left-rotated {
-      transform: rotate(180deg);
-    }
 
     /* --- 感想戦パネルのレイアウト補正 --- */
     #review-panel {
       display: none;
       flex-direction: column;
-      width: 18vw;
-      max-width: 120px;
-      height: 100%;
+      width: 16vw;
+      max-width: 100px;
       background: #ccc;
       border: 1px solid #999;
       box-sizing: border-box;
       flex-shrink: 0;
+      /* 重要：盤面コンテナ（board-container）と同じ高さを維持させる */
+      align-self: stretch; 
+      height: auto;
     }
     .kifu-list { 
-      flex-grow: 1; 
+      /* 重要：親要素の残りの高さをすべて使い切り、中身だけをスクロールさせる */
+      flex: 1 1 0; 
       overflow-y: auto; 
       background: #fafafa; 
       font-size: 9px; 
       padding: 0; 
-      margin: 0; 
-      height: 150px; /* 最小高さを確保 */
+      margin: 0;
+      /* 非常に重要：ブラウザがスクロールバーを計算するための最小高さ設定 */
+      min-height: 0; 
     }
 
     :root { --setting-btn: #607d8b; }
@@ -506,7 +476,7 @@
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
-      // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
+    // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
     function updateDisplayRotation(isFlipped) {
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
@@ -521,11 +491,25 @@
       handS.classList.add('playing-size');
       handG.classList.add('playing-size');
       reviewPanel.style.display = 'none'; // 対局中は隠す
+      // 対局モード時は上揃えにする
+      container.style.alignItems = 'flex-start';
     } else {
+      // 感想戦モード：盤面サイズを拡大
       boardContainer.classList.remove('playing-size');
       handS.classList.remove('playing-size');
       handG.classList.remove('playing-size');
       reviewPanel.style.display = 'flex'; // 感想戦は表示
+      
+      // 盤面コンテナの幅を更新
+      boardContainer.style.width = "66vw";
+      boardContainer.style.maxWidth = "430px";
+
+      // 重要：親要素に 'stretch' を指定することで、review-panel の高さを
+      // 盤面＋駒台のセットの高さに強制的に合わせる
+      container.style.alignItems = 'stretch';
+
+      // 重要：左右の要素の高さを揃える
+      container.style.alignItems = 'stretch'; 
     }
 
     // いったん左右の回転状態をリセット
@@ -718,7 +702,6 @@
   }
 
 btnCallStart.onclick = async () => { 
-  // 自分の役割が未選択なら警告を出して中断
   if (!mySide) {
     alert("先手または後手を選択してから通話を開始してください。");
     return;
@@ -729,45 +712,37 @@ btnCallStart.onclick = async () => {
   updateCallUI(); 
 
   try { 
-    // 開始前に、まず自分のステータスをFirebase上で確定させる
-    const updates = {};
-    updates[`users/${mySide}`] = true;
-    
     const currentSnap = await get(callStatusRef);
     const currentStatus = currentSnap.val();
-    
-    // 自分が最初の一人目なら、古いステータスやシグナリングを完全にリセット
+    const updates = {};
+    updates[`users/${mySide}`] = true;
+
+    // 1人目の場合、古いシグナリングを掃除して waiting にする
     if (!currentStatus || !currentStatus.users || (!currentStatus.users.S && !currentStatus.users.G)) {
       await remove(signalingRef);
       updates['status'] = 'waiting';
+    } else {
+      // 2人目の場合、status を started に更新する
+      updates['status'] = 'started';
     }
     
     await update(callStatusRef, updates);
-
     await startKeepAlive(); 
     await startLocalStream(); 
-    
-    // PeerConnectionの初期化
     createPeerConnection();
-    
-    // 最新の状態を再取得して、相手が既にいれば通話開始
-    const nextSnap = await get(callStatusRef);
-    const nextData = nextSnap.val();
-    const isOtherReady = nextData.users && (mySide === 'S' ? nextData.users.G : nextData.users.S);
 
-    if (isOtherReady) {
-      await update(callStatusRef, { status: 'started' });
-      // 相手の準備完了を待つために少しディレイ
-      if (mySide === 'S') {
-        setTimeout(sendOffer, 2000);
-      }
+    // 自分が後から参加して status が started になった場合、
+    // 先手であれば自分から Offer を出し、後手であれば Offer が来るのを待機する仕組み
+    const finalSnap = await get(callStatusRef);
+    if (finalSnap.val().status === 'started' && mySide === 'S') {
+      setTimeout(sendOffer, 1500); 
     }
   } catch (e) { 
     console.error("Call Start Error:", e);
     localCallStartPressed = false; 
     updateCallUI(); 
     stopKeepAlive(); 
-    alert("マイクの使用が許可されていないか、エラーが発生しました。");
+    alert("マイク使用不可またはエラーです。");
   } 
 };
 
@@ -843,8 +818,8 @@ btnCallStart.onclick = async () => {
     btnMute.style.opacity = !localCallStartPressed ? "0.5" : "1";
   }
 
-  // --- 通話ステータス監視 (リロード・相手離脱連動版) ---
-    onValue(callStatusRef, async (snap) => { 
+  // --- 通話ステータス監視 (自動接続強化版) ---
+  onValue(callStatusRef, async (snap) => { 
     const data = snap.val(); 
     if (!data) {
       if (localCallStartPressed) handleCallEndInternal();
@@ -856,7 +831,16 @@ btnCallStart.onclick = async () => {
     const otherSide = (mySide === 'S' ? 'G' : 'S');
     const isOtherRegistered = !!(data.users && data.users[otherSide]);
 
-    // 通話終了を検知すべき条件
+    // 【重要：自動接続ロジック】
+    // ステータスが started になり、自分が先手で、かつ通話ボタンを押している場合、
+    // まだ PeerConnection が接続プロセスに入っていなければ Offer を送る
+    if (data.status === 'started' && mySide === 'S' && localCallStartPressed) {
+      if (!peerConnection || peerConnection.iceConnectionState === 'new') {
+        console.log("Auto-trigger: Sending Offer as S...");
+        sendOffer();
+      }
+    }
+
     const shouldTerminate = localCallStartPressed && (
       data.status === 'ended' || 
       (data.status === 'started' && !isOtherRegistered) ||
@@ -869,21 +853,14 @@ btnCallStart.onclick = async () => {
       return;
     }
     
-    // 自分が「開始」を押していないのに、Firebaseに自分のフラグが残っている場合のみ掃除
-    // statusがendedの時は全体リセット中なので、個別の掃除は行わない（無限ループ防止）
     if (!localCallStartPressed && iAmRegisteredOnFirebase && data.status !== 'ended') {
-      console.log("Cleaning up my stale registration...");
       const updates = {};
       updates[`users/${mySide}`] = null;
-      // 誰もいなくなるならステータスもオフラインへ
-      if (!isOtherRegistered) {
-        updates['status'] = 'offline';
-      }
+      if (!isOtherRegistered) updates['status'] = 'offline';
       update(callStatusRef, updates);
-      return; // 掃除実行時は一回抜ける
+      return;
     }
 
-    // UI表示の更新
     if (data.status === 'started' && isOtherRegistered && iAmRegisteredOnFirebase) {
       callStatusDisplay.textContent = "通話中"; 
     } else if (isOtherRegistered && !iAmRegisteredOnFirebase) {
