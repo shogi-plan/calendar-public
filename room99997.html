@@ -164,119 +164,79 @@
     .chat-msg-other { color: #1b5e20; background: #e8f5e9; border-radius: 3px; padding: 2px 4px; }
     .chat-name { font-weight: bold; margin-right: 5px; display: none; } /* 名前の表示を非表示に設定 */
     
-/* --- 持ち駒エリア（上下配置版） --- */
-.hand {
-  display: flex;
-  flex-direction: row; 
-  width: 95vw; 
-  max-width: 500px;
-  height: 50px; /* 少し高さを確保 */
-  background: #d7b59a;
-  border: 1px solid #5d4037;
-  border-radius: 4px;
-  padding: 2px;
-  box-sizing: border-box;
-  gap: 2px;
-  z-index: 5;
-  /* 常に左詰めにする（指示通り） */
-  justify-content: flex-start !important;
-}
+    /* --- 持ち駒エリア（改良版） --- */
+    .hand {
+      display: flex;
+      flex-direction: column;
+      width: calc(66vw / 9); 
+      max-width: calc(430px / 9);
+      background: #d7b59a;
+      border: 1px solid #5d4037;
+      border-radius: 4px;
+      padding: 1px;
+      box-sizing: border-box;
+      gap: 1px;
+      align-self: stretch;
+      justify-content: flex-start;
+      z-index: 5;
+      /* position: relative; 不要なため削除 */
+    }
 
-/* 上側の持ち駒（後手視点時など）の右詰め設定を解除 */
-.hand.top-hand {
-  justify-content: flex-start !important;
-}
+    /* 左側に配置された時の反転設定（駒台自体の回転は維持） */
+    .hand.left-rotated {
+      transform: rotate(180deg);
+    }
 
-/* 下側の持ち駒は左詰め */
-.hand.bottom-hand {
-  justify-content: flex-start !important;
-}
-
-/* 盤面サイズの拡大 */
-#board-container { 
-  position: relative; 
-  width: 95vw; 
-  max-width: 500px; 
-  aspect-ratio: 878 / 960; 
-  flex-shrink: 1; 
-}
-
-/* 対局モード・感想戦モード共通で盤面を大きく */
-#board-container.playing-size { 
-  width: 95vw; 
-  max-width: 500px; 
-}
-
+    /* 対局時のサイズ調整 */
+    #board-container.playing-size { 
+      width: 78vw; 
+      max-width: 500px; 
+    }
+    .hand.playing-size {
+      width: calc(78vw / 9);
+      max-width: calc(500px / 9);
+    }
+    
     /* 持ち駒のスロットと個数表示の追加 */
     .hand-slot {
-      /* 間延びを防ぐため、100%ではなく固定の正方形に近いアスペクト比を維持 */
-      height: 100%;
-      aspect-ratio: 1 / 1; 
+      width: 100%;
+      aspect-ratio: 1/1;
       position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      flex-shrink: 0; /* 潰れないように固定 */
     }
     .hand-count {
       position: absolute;
-      /* 駒に重ならないよう、右下外側に少し出す調整 */
-      bottom: -2px;
-      right: -2px;
-      background: rgba(0,0,0,0.8);
+      bottom: 0;
+      right: 0;
+      background: rgba(0,0,0,0.7);
       color: white;
-      font-size: 10px;
-      padding: 1px 3px;
-      border-radius: 3px;
+      font-size: 9px;
+      padding: 0 2px;
+      border-radius: 2px;
       z-index: 15;
       pointer-events: none;
-      border: 1px solid #fff;
     }
     .selected-piece {
       background-color: rgba(255, 152, 0, 0.5);
       border-radius: 2px;
     }
 
-/* --- 感想戦パネルのレイアウト補正 --- */
-/* 棋譜リストを右側に固定表示し、盤面と横並びにする設定 */
-#review-panel {
-  display: none;
-  flex-direction: column;
-  /* 横幅を適切に確保 */
-  width: 30vw;
-  max-width: 180px;
-  background: #ccc;
-  border: 1px solid #999;
-  box-sizing: border-box;
-  flex-shrink: 0;
-  align-self: stretch; 
-  height: auto;
-}
-
-/* 感想戦モード時に全体を横並びにするためのクラス */
-.review-layout-active {
-  flex-direction: row !important;
-  align-items: flex-start !important;
-  justify-content: center !important;
-  width: 100% !important;
-  max-width: 1000px !important;
-  gap: 5px !important;
-  overflow-x: visible !important; /* 画面外への追い出しを防止 */
-}
-
-/* 感想戦モード時の盤面コンテナと持ち駒の幅を一括調整 */
-.review-layout-active #game-main-inner {
-  width: 65vw !important;
-  max-width: 450px !important;
-  flex-shrink: 1;
-}
-
-.review-layout-active #board-container,
-.review-layout-active .hand {
-  width: 100% !important;
-  max-width: 450px !important;
-}
-
+    /* --- 感想戦パネルのレイアウト補正 --- */
+    #review-panel {
+      display: none;
+      flex-direction: column;
+      width: 16vw;
+      max-width: 100px;
+      background: #ccc;
+      border: 1px solid #999;
+      box-sizing: border-box;
+      flex-shrink: 0;
+      /* 重要：盤面コンテナ（board-container）と同じ高さを維持させる */
+      align-self: stretch; 
+      height: auto;
+    }
     .kifu-list { 
       /* 重要：親要素の残りの高さをすべて使い切り、中身だけをスクロールさせる */
       flex: 1 1 0; 
@@ -428,9 +388,9 @@
   <div id="timer-G" class="timer">△ --:--</div>
 </div>
 
-<div id="game-main" style="flex-direction: column; align-items: center;">
-  <div id="game-main-inner" style="display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%;">
-    <div class="hand top-hand" id="handG"></div>
+<div id="game-main">
+  <div id="game-main-inner" style="display: flex; flex-direction: row; align-items: flex-start; gap: 2px;">
+    <div class="hand" id="handG"></div>
     <div id="board-container">
       <div id="board"></div>
       <div id="promote-dialog">
@@ -441,10 +401,10 @@
         </div>
       </div>
     </div>
-    <div class="hand bottom-hand" id="handS"></div>
+    <div class="hand" id="handS"></div>
   </div>
 
-  <div id="review-panel" style="width: 95vw; max-width: 500px; height: 150px; margin-top: 5px;">
+  <div id="review-panel">
     <div id="nav-pos">0/0</div>
     <div id="kifu-container" class="kifu-list"></div>
         <div class="nav-controls">
@@ -548,9 +508,8 @@
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
-    // --- 盤面と駒台の配置を上下に入れ替える関数 ---
+    // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
     function updateDisplayRotation(isFlipped) {
-    const mainContainer = document.getElementById('game-main'); // 親コンテナ
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
     const boardContainer = document.getElementById('board-container');
@@ -558,42 +517,57 @@
     const handG = document.getElementById('handG');
     const reviewPanel = document.getElementById('review-panel');
 
-    // モードに応じた表示切替とレイアウト変更
+    // モードに応じてクラスを付け替え
     if (!isReviewMode) {
-      reviewPanel.style.display = 'none';
-      mainContainer.classList.remove('review-layout-active');
-      mainContainer.style.flexDirection = 'column';
+      boardContainer.classList.add('playing-size');
+      handS.classList.add('playing-size');
+      handG.classList.add('playing-size');
+      reviewPanel.style.display = 'none'; // 対局中は隠す
+      // 対局モード時は上揃えにする
+      container.style.alignItems = 'flex-start';
     } else {
-      reviewPanel.style.display = 'flex';
-      mainContainer.classList.add('review-layout-active');
-      // 感想戦モード時、mainContainer直下の構造を [inner(盤面セット), reviewPanel] に固定する
-      mainContainer.style.flexDirection = 'row';
-      mainContainer.appendChild(container); 
-      mainContainer.appendChild(reviewPanel);
+      // 感想戦モード：盤面サイズを拡大
+      boardContainer.classList.remove('playing-size');
+      handS.classList.remove('playing-size');
+      handG.classList.remove('playing-size');
+      reviewPanel.style.display = 'flex'; // 感想戦は表示
+      
+      // 盤面コンテナの幅を更新
+      boardContainer.style.width = "66vw";
+      boardContainer.style.maxWidth = "430px";
+
+      // 重要：親要素に 'stretch' を指定することで、review-panel の高さを
+      // 盤面＋駒台のセットの高さに強制的に合わせる
+      container.style.alignItems = 'stretch';
+
+      // 重要：左右の要素の高さを揃える
+      container.style.alignItems = 'stretch'; 
     }
 
-    // クラスのリセット
-    handS.classList.remove('top-hand', 'bottom-hand');
-    handG.classList.remove('top-hand', 'bottom-hand');
+    // いったん左右の回転状態をリセット
+    handS.classList.remove('left-rotated');
+    handG.classList.remove('left-rotated');
 
     if (isFlipped) {
-      // 後手視点：上が先手(S)、下が後手(G)
+      // 後手視点：左に先手駒、右に後手駒
       container.insertBefore(handS, boardContainer); 
       container.appendChild(handG);
       
-      handS.classList.add('top-hand');
-      handG.classList.add('bottom-hand');
-      
+      board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(180deg)';
+      
+      // 左側に配置された先手駒台を回転させる
+      handS.classList.add('left-rotated');
     } else {
-      // 先手視点：上が後手(G)、下が先手(S)
+      // 先手視点：左に後手駒、右に先手駒
       container.insertBefore(handG, boardContainer);
       container.appendChild(handS);
       
-      handG.classList.add('top-hand');
-      handS.classList.add('bottom-hand');
-      
+      board.style.transformOrigin = "center center";
       board.style.transform = 'rotate(0deg)';
+      
+      // 左側に配置された後手駒台を回転させる
+      handG.classList.add('left-rotated');
     }
   }
 
@@ -1734,41 +1708,49 @@ function render() {
     
     const counts = {};
     (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
-    let existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
+    const existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
-    for (let i = 0; i < existingTypes.length; i++) {
+    // 常に7スロット分回す（または駒の種類分）
+    for (let i = 0; i < 7; i++) {
       const type = existingTypes[i];
+      if (!type) continue; // 駒がないスロットはスキップ
+
       const slot = document.createElement('div');
       slot.className = 'hand-slot';
+      
+      const s = document.createElement('div');
+      s.style.width = "100%";
+      s.style.height = "100%";
+      s.style.display = "flex";
+      s.style.alignItems = "center";
+      s.style.justifyContent = "center";
+      s.style.cursor = "pointer";
+      s.style.position = "relative";
       
       const pos = PIECE_POS[type];
       const bgX = (pos.x / 7) * 100;
       const bgY = (pos.y / 3) * 100;
 
-      const isTopArea = el.classList.contains('top-hand');
-      const shouldRotate = isTopArea; 
+      // 駒の向きを制御（後手の駒台にある場合は反対にする）
+      const isOpposite = (owner === 'G');
 
-      // 将棋盤（cell）と同じ構造のHTMLを生成することでサイズを完全に一致させる
-      // slot 自体が cell の代わりとなり、その中の piece クラスが 82% サイズを維持
-      const pDiv = document.createElement('div');
-      pDiv.className = `piece ${shouldRotate ? 'opposite' : ''}`;
-      if (selH && selH.type === type && selH.owner === owner) {
-        pDiv.classList.add('selected-piece');
-      }
-      pDiv.style.cursor = "pointer";
-      pDiv.style.pointerEvents = "auto"; // クリック可能にする
-
-      pDiv.innerHTML = `<div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>`;
+      s.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}">
+        <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
+      </div>`;
 
       if (counts[type] > 1) {
         const c = document.createElement('div');
         c.className = 'hand-count';
         c.textContent = counts[type];
-        pDiv.appendChild(c);
+        s.appendChild(c);
+      }
+
+      if (selH && selH.type === type && selH.owner === owner) {
+        s.classList.add('selected-piece');
       }
 
       const firstIdx = list.indexOf(type);
-      pDiv.onclick = (e) => {
+      s.onclick = (e) => {
         e.stopPropagation();
         if (!isReviewMode) {
           if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
@@ -1783,7 +1765,7 @@ function render() {
         render();
       };
 
-      slot.appendChild(pDiv);
+      slot.appendChild(s);
       el.appendChild(slot);
     }
   };
