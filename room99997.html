@@ -237,20 +237,44 @@
       border-radius: 2px;
     }
 
-    /* --- 感想戦パネルのレイアウト補正 --- */
-    #review-panel {
-      display: none;
-      flex-direction: column;
-      width: 16vw;
-      max-width: 100px;
-      background: #ccc;
-      border: 1px solid #999;
-      box-sizing: border-box;
-      flex-shrink: 0;
-      /* 重要：盤面コンテナ（board-container）と同じ高さを維持させる */
-      align-self: stretch; 
-      height: auto;
-    }
+/* --- 感想戦パネルのレイアウト補正 --- */
+/* 棋譜リストを右側に固定表示し、盤面と横並びにする設定 */
+#review-panel {
+  display: none;
+  flex-direction: column;
+  /* 横幅を少し広げ、右側に配置 */
+  width: 25vw;
+  max-width: 150px;
+  background: #ccc;
+  border: 1px solid #999;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  align-self: stretch; 
+  height: auto;
+}
+
+/* 感想戦モード時に全体を横並びにするためのクラス */
+.review-layout-active {
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  width: 100% !important;
+  max-width: 1000px !important;
+  gap: 10px !important;
+}
+
+/* 感想戦モード時の盤面コンテナ縮小 */
+.review-layout-active #board-container {
+  width: 65vw !important;
+  max-width: 400px !important;
+}
+
+/* 感想戦モード時の持ち駒エリア幅調整 */
+.review-layout-active .hand {
+  width: 65vw !important;
+  max-width: 400px !important;
+}
+
     .kifu-list { 
       /* 重要：親要素の残りの高さをすべて使い切り、中身だけをスクロールさせる */
       flex: 1 1 0; 
@@ -524,6 +548,7 @@
 
     // --- 盤面と駒台の配置を上下に入れ替える関数 ---
     function updateDisplayRotation(isFlipped) {
+    const mainContainer = document.getElementById('game-main'); // 親コンテナ
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
     const boardContainer = document.getElementById('board-container');
@@ -531,11 +556,19 @@
     const handG = document.getElementById('handG');
     const reviewPanel = document.getElementById('review-panel');
 
-    // モードに応じた表示切替
+    // モードに応じた表示切替とレイアウト変更
     if (!isReviewMode) {
       reviewPanel.style.display = 'none';
+      mainContainer.classList.remove('review-layout-active');
+      // 通常モード時は縦並び
+      mainContainer.style.flexDirection = 'column';
     } else {
       reviewPanel.style.display = 'flex';
+      mainContainer.classList.add('review-layout-active');
+      // 感想戦モード時は横並び（CSSの .review-layout-active で制御）
+      mainContainer.style.flexDirection = 'row';
+      // 棋譜リストを右端へ移動
+      mainContainer.appendChild(reviewPanel);
     }
 
     // クラスのリセット
@@ -1702,8 +1735,7 @@ function render() {
     (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
     let existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
-    // 指示に基づき、常に左詰め（CSS側でも制御）にするためreverseは行わない。
-    // その代わり、常に同じ順番で駒が表示されるようにする。
+    // 常に左詰め（CSS側 `justify-content: flex-start`）で表示
 
     for (let i = 0; i < existingTypes.length; i++) {
       const type = existingTypes[i];
@@ -1711,7 +1743,7 @@ function render() {
       slot.className = 'hand-slot';
       
       const s = document.createElement('div');
-      s.style.width = "82%"; // 盤面の駒と同じ比率に設定して間延びを防ぐ
+      s.style.width = "82%";
       s.style.height = "82%";
       s.style.display = "flex";
       s.style.alignItems = "center";
@@ -1723,9 +1755,10 @@ function render() {
       const bgX = (pos.x / 7) * 100;
       const bgY = (pos.y / 3) * 100;
 
-      // 【修正ポイント】
-      // 常に「上側のエリア（top-hand）」にある駒だけを上下反転(opposite)させる。
-      // 反転ボタンでエリア自体が入れ替わっても、視覚的に「向こう側の駒台」にある駒が反転している状態を維持する。
+      // 【修正の核心】
+      // IDが 'handG' か 'handS' かに関わらず、
+      // 現在「画面上の上側（top-handクラス）」にあるエリアなら反転させ、
+      // 現在「画面上の下側（bottom-handクラス）」にあるエリアなら反転させない。
       const isTopArea = el.classList.contains('top-hand');
       const shouldRotate = isTopArea; 
 
