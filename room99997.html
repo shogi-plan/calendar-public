@@ -242,9 +242,9 @@
 #review-panel {
   display: none;
   flex-direction: column;
-  /* 横幅を少し広げ、右側に配置 */
-  width: 25vw;
-  max-width: 150px;
+  /* 横幅を適切に確保 */
+  width: 30vw;
+  max-width: 180px;
   background: #ccc;
   border: 1px solid #999;
   box-sizing: border-box;
@@ -260,19 +260,21 @@
   justify-content: center !important;
   width: 100% !important;
   max-width: 1000px !important;
-  gap: 10px !important;
+  gap: 5px !important;
+  overflow-x: visible !important; /* 画面外への追い出しを防止 */
 }
 
-/* 感想戦モード時の盤面コンテナ縮小 */
-.review-layout-active #board-container {
+/* 感想戦モード時の盤面コンテナと持ち駒の幅を一括調整 */
+.review-layout-active #game-main-inner {
   width: 65vw !important;
-  max-width: 400px !important;
+  max-width: 450px !important;
+  flex-shrink: 1;
 }
 
-/* 感想戦モード時の持ち駒エリア幅調整 */
+.review-layout-active #board-container,
 .review-layout-active .hand {
-  width: 65vw !important;
-  max-width: 400px !important;
+  width: 100% !important;
+  max-width: 450px !important;
 }
 
     .kifu-list { 
@@ -560,14 +562,13 @@
     if (!isReviewMode) {
       reviewPanel.style.display = 'none';
       mainContainer.classList.remove('review-layout-active');
-      // 通常モード時は縦並び
       mainContainer.style.flexDirection = 'column';
     } else {
       reviewPanel.style.display = 'flex';
       mainContainer.classList.add('review-layout-active');
-      // 感想戦モード時は横並び（CSSの .review-layout-active で制御）
+      // 感想戦モード時、mainContainer直下の構造を [inner(盤面セット), reviewPanel] に固定する
       mainContainer.style.flexDirection = 'row';
-      // 棋譜リストを右端へ移動
+      mainContainer.appendChild(container); 
       mainContainer.appendChild(reviewPanel);
     }
 
@@ -1735,50 +1736,39 @@ function render() {
     (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
     let existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
-    // 常に左詰め（CSS側 `justify-content: flex-start`）で表示
-
     for (let i = 0; i < existingTypes.length; i++) {
       const type = existingTypes[i];
       const slot = document.createElement('div');
       slot.className = 'hand-slot';
       
-      const s = document.createElement('div');
-      s.style.width = "82%";
-      s.style.height = "82%";
-      s.style.display = "flex";
-      s.style.alignItems = "center";
-      s.style.justifyContent = "center";
-      s.style.cursor = "pointer";
-      s.style.position = "relative";
-      
       const pos = PIECE_POS[type];
       const bgX = (pos.x / 7) * 100;
       const bgY = (pos.y / 3) * 100;
 
-      // 【修正の核心】
-      // IDが 'handG' か 'handS' かに関わらず、
-      // 現在「画面上の上側（top-handクラス）」にあるエリアなら反転させ、
-      // 現在「画面上の下側（bottom-handクラス）」にあるエリアなら反転させない。
       const isTopArea = el.classList.contains('top-hand');
       const shouldRotate = isTopArea; 
 
-      s.innerHTML = `<div class="piece ${shouldRotate ? 'opposite' : ''}">
-        <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
-      </div>`;
+      // 将棋盤（cell）と同じ構造のHTMLを生成することでサイズを完全に一致させる
+      // slot 自体が cell の代わりとなり、その中の piece クラスが 82% サイズを維持
+      const pDiv = document.createElement('div');
+      pDiv.className = `piece ${shouldRotate ? 'opposite' : ''}`;
+      if (selH && selH.type === type && selH.owner === owner) {
+        pDiv.classList.add('selected-piece');
+      }
+      pDiv.style.cursor = "pointer";
+      pDiv.style.pointerEvents = "auto"; // クリック可能にする
+
+      pDiv.innerHTML = `<div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>`;
 
       if (counts[type] > 1) {
         const c = document.createElement('div');
         c.className = 'hand-count';
         c.textContent = counts[type];
-        s.appendChild(c);
-      }
-
-      if (selH && selH.type === type && selH.owner === owner) {
-        s.classList.add('selected-piece');
+        pDiv.appendChild(c);
       }
 
       const firstIdx = list.indexOf(type);
-      s.onclick = (e) => {
+      pDiv.onclick = (e) => {
         e.stopPropagation();
         if (!isReviewMode) {
           if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
@@ -1793,7 +1783,7 @@ function render() {
         render();
       };
 
-      slot.appendChild(s);
+      slot.appendChild(pDiv);
       el.appendChild(slot);
     }
   };
