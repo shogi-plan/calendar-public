@@ -164,39 +164,47 @@
     .chat-msg-other { color: #1b5e20; background: #e8f5e9; border-radius: 3px; padding: 2px 4px; }
     .chat-name { font-weight: bold; margin-right: 5px; display: none; } /* 名前の表示を非表示に設定 */
     
-    /* --- 持ち駒エリア（改良版） --- */
-    .hand {
-      display: flex;
-      flex-direction: column;
-      width: calc(66vw / 9); 
-      max-width: calc(430px / 9);
-      background: #d7b59a;
-      border: 1px solid #5d4037;
-      border-radius: 4px;
-      padding: 1px;
-      box-sizing: border-box;
-      gap: 1px;
-      align-self: stretch;
-      justify-content: flex-start;
-      z-index: 5;
-      /* position: relative; 不要なため削除 */
-    }
+/* --- 持ち駒エリア（上下配置版） --- */
+.hand {
+  display: flex;
+  flex-direction: row; /* 横並びに変更 */
+  width: 95vw; 
+  max-width: 500px;
+  height: 45px; /* 高さを固定 */
+  background: #d7b59a;
+  border: 1px solid #5d4037;
+  border-radius: 4px;
+  padding: 2px;
+  box-sizing: border-box;
+  gap: 2px;
+  z-index: 5;
+}
 
-    /* 左側に配置された時の反転設定（駒台自体の回転は維持） */
-    .hand.left-rotated {
-      transform: rotate(180deg);
-    }
+/* 上側の持ち駒（後手視点時など）は右詰めにする */
+.hand.top-hand {
+  justify-content: flex-end;
+}
 
-    /* 対局時のサイズ調整 */
-    #board-container.playing-size { 
-      width: 78vw; 
-      max-width: 500px; 
-    }
-    .hand.playing-size {
-      width: calc(78vw / 9);
-      max-width: calc(500px / 9);
-    }
-    
+/* 下側の持ち駒は左詰め */
+.hand.bottom-hand {
+  justify-content: flex-start;
+}
+
+/* 盤面サイズの拡大 */
+#board-container { 
+  position: relative; 
+  width: 95vw; 
+  max-width: 500px; 
+  aspect-ratio: 878 / 960; 
+  flex-shrink: 1; 
+}
+
+/* 対局モード・感想戦モード共通で盤面を大きく */
+#board-container.playing-size { 
+  width: 95vw; 
+  max-width: 500px; 
+}
+
     /* 持ち駒のスロットと個数表示の追加 */
     .hand-slot {
       width: 100%;
@@ -388,9 +396,9 @@
   <div id="timer-G" class="timer">△ --:--</div>
 </div>
 
-<div id="game-main">
-  <div id="game-main-inner" style="display: flex; flex-direction: row; align-items: flex-start; gap: 2px;">
-    <div class="hand" id="handG"></div>
+<div id="game-main" style="flex-direction: column; align-items: center;">
+  <div id="game-main-inner" style="display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%;">
+    <div class="hand top-hand" id="handG"></div>
     <div id="board-container">
       <div id="board"></div>
       <div id="promote-dialog">
@@ -401,10 +409,10 @@
         </div>
       </div>
     </div>
-    <div class="hand" id="handS"></div>
+    <div class="hand bottom-hand" id="handS"></div>
   </div>
 
-  <div id="review-panel">
+  <div id="review-panel" style="width: 95vw; max-width: 500px; height: 150px; margin-top: 5px;">
     <div id="nav-pos">0/0</div>
     <div id="kifu-container" class="kifu-list"></div>
         <div class="nav-controls">
@@ -508,7 +516,7 @@
   const mySideSelect = document.getElementById('mySideSelect');
   mySideSelect.value = mySide;
 
-    // --- 盤面と駒台の配置をまるごと入れ替える関数 ---
+    // --- 盤面と駒台の配置を上下に入れ替える関数 ---
     function updateDisplayRotation(isFlipped) {
     const container = document.getElementById('game-main-inner');
     const board = document.getElementById('board');
@@ -517,57 +525,35 @@
     const handG = document.getElementById('handG');
     const reviewPanel = document.getElementById('review-panel');
 
-    // モードに応じてクラスを付け替え
+    // モードに応じた表示切替
     if (!isReviewMode) {
-      boardContainer.classList.add('playing-size');
-      handS.classList.add('playing-size');
-      handG.classList.add('playing-size');
-      reviewPanel.style.display = 'none'; // 対局中は隠す
-      // 対局モード時は上揃えにする
-      container.style.alignItems = 'flex-start';
+      reviewPanel.style.display = 'none';
     } else {
-      // 感想戦モード：盤面サイズを拡大
-      boardContainer.classList.remove('playing-size');
-      handS.classList.remove('playing-size');
-      handG.classList.remove('playing-size');
-      reviewPanel.style.display = 'flex'; // 感想戦は表示
-      
-      // 盤面コンテナの幅を更新
-      boardContainer.style.width = "66vw";
-      boardContainer.style.maxWidth = "430px";
-
-      // 重要：親要素に 'stretch' を指定することで、review-panel の高さを
-      // 盤面＋駒台のセットの高さに強制的に合わせる
-      container.style.alignItems = 'stretch';
-
-      // 重要：左右の要素の高さを揃える
-      container.style.alignItems = 'stretch'; 
+      reviewPanel.style.display = 'flex';
     }
 
-    // いったん左右の回転状態をリセット
-    handS.classList.remove('left-rotated');
-    handG.classList.remove('left-rotated');
+    // クラスのリセット
+    handS.classList.remove('top-hand', 'bottom-hand');
+    handG.classList.remove('top-hand', 'bottom-hand');
 
     if (isFlipped) {
-      // 後手視点：左に先手駒、右に後手駒
+      // 後手視点：上が先手(S)、下が後手(G)
       container.insertBefore(handS, boardContainer); 
       container.appendChild(handG);
       
-      board.style.transformOrigin = "center center";
-      board.style.transform = 'rotate(180deg)';
+      handS.classList.add('top-hand');
+      handG.classList.add('bottom-hand');
       
-      // 左側に配置された先手駒台を回転させる
-      handS.classList.add('left-rotated');
+      board.style.transform = 'rotate(180deg)';
     } else {
-      // 先手視点：左に後手駒、右に先手駒
+      // 先手視点：上が後手(G)、下が先手(S)
       container.insertBefore(handG, boardContainer);
       container.appendChild(handS);
       
-      board.style.transformOrigin = "center center";
-      board.style.transform = 'rotate(0deg)';
+      handG.classList.add('top-hand');
+      handS.classList.add('bottom-hand');
       
-      // 左側に配置された後手駒台を回転させる
-      handG.classList.add('left-rotated');
+      board.style.transform = 'rotate(0deg)';
     }
   }
 
@@ -1708,15 +1694,19 @@ function render() {
     
     const counts = {};
     (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
-    const existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
+    let existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
-    // 常に7スロット分回す（または駒の種類分）
-    for (let i = 0; i < 7; i++) {
+    // 上側に配置されている駒台（top-handクラスを持つ場合）は、右から並べるために配列を反転させる
+    const isTop = el.classList.contains('top-hand');
+    if (isTop) {
+      existingTypes.reverse();
+    }
+
+    for (let i = 0; i < existingTypes.length; i++) {
       const type = existingTypes[i];
-      if (!type) continue; // 駒がないスロットはスキップ
-
       const slot = document.createElement('div');
       slot.className = 'hand-slot';
+      slot.style.width = "calc(500px / 9)"; // 盤面のマス幅に合わせる
       
       const s = document.createElement('div');
       s.style.width = "100%";
@@ -1731,7 +1721,6 @@ function render() {
       const bgX = (pos.x / 7) * 100;
       const bgY = (pos.y / 3) * 100;
 
-      // 駒の向きを制御（後手の駒台にある場合は反対にする）
       const isOpposite = (owner === 'G');
 
       s.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}">
