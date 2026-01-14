@@ -167,10 +167,10 @@
 /* --- 持ち駒エリア（上下配置版） --- */
 .hand {
   display: flex;
-  flex-direction: row; /* 横並びに変更 */
+  flex-direction: row; 
   width: 95vw; 
   max-width: 500px;
-  height: 45px; /* 高さを固定 */
+  height: 50px; /* 少し高さを確保 */
   background: #d7b59a;
   border: 1px solid #5d4037;
   border-radius: 4px;
@@ -178,16 +178,18 @@
   box-sizing: border-box;
   gap: 2px;
   z-index: 5;
+  /* 常に左詰めにする（指示通り） */
+  justify-content: flex-start !important;
 }
 
-/* 上側の持ち駒（後手視点時など）は右詰めにする */
+/* 上側の持ち駒（後手視点時など）の右詰め設定を解除 */
 .hand.top-hand {
-  justify-content: flex-end;
+  justify-content: flex-start !important;
 }
 
 /* 下側の持ち駒は左詰め */
 .hand.bottom-hand {
-  justify-content: flex-start;
+  justify-content: flex-start !important;
 }
 
 /* 盤面サイズの拡大 */
@@ -207,24 +209,28 @@
 
     /* 持ち駒のスロットと個数表示の追加 */
     .hand-slot {
-      width: 100%;
-      aspect-ratio: 1/1;
+      /* 間延びを防ぐため、100%ではなく固定の正方形に近いアスペクト比を維持 */
+      height: 100%;
+      aspect-ratio: 1 / 1; 
       position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0; /* 潰れないように固定 */
     }
     .hand-count {
       position: absolute;
-      bottom: 0;
-      right: 0;
-      background: rgba(0,0,0,0.7);
+      /* 駒に重ならないよう、右下外側に少し出す調整 */
+      bottom: -2px;
+      right: -2px;
+      background: rgba(0,0,0,0.8);
       color: white;
-      font-size: 9px;
-      padding: 0 2px;
-      border-radius: 2px;
+      font-size: 10px;
+      padding: 1px 3px;
+      border-radius: 3px;
       z-index: 15;
       pointer-events: none;
+      border: 1px solid #fff;
     }
     .selected-piece {
       background-color: rgba(255, 152, 0, 0.5);
@@ -1696,21 +1702,17 @@ function render() {
     (list || []).forEach(type => { counts[type] = (counts[type] || 0) + 1; });
     let existingTypes = HAND_ORDER.filter(type => counts[type] > 0);
 
-    // 上側に配置されている駒台（top-handクラスを持つ場合）は、右から並べるために配列を反転させる
-    const isTop = el.classList.contains('top-hand');
-    if (isTop) {
-      existingTypes.reverse();
-    }
+    // 指示に基づき、常に左詰め（CSS側でも制御）にするためreverseは行わない。
+    // その代わり、常に同じ順番で駒が表示されるようにする。
 
     for (let i = 0; i < existingTypes.length; i++) {
       const type = existingTypes[i];
       const slot = document.createElement('div');
       slot.className = 'hand-slot';
-      slot.style.width = "calc(500px / 9)"; // 盤面のマス幅に合わせる
       
       const s = document.createElement('div');
-      s.style.width = "100%";
-      s.style.height = "100%";
+      s.style.width = "82%"; // 盤面の駒と同じ比率に設定して間延びを防ぐ
+      s.style.height = "82%";
       s.style.display = "flex";
       s.style.alignItems = "center";
       s.style.justifyContent = "center";
@@ -1721,9 +1723,13 @@ function render() {
       const bgX = (pos.x / 7) * 100;
       const bgY = (pos.y / 3) * 100;
 
-      const isOpposite = (owner === 'G');
+      // 【修正ポイント】
+      // 常に「上側のエリア（top-hand）」にある駒だけを上下反転(opposite)させる。
+      // 反転ボタンでエリア自体が入れ替わっても、視覚的に「向こう側の駒台」にある駒が反転している状態を維持する。
+      const isTopArea = el.classList.contains('top-hand');
+      const shouldRotate = isTopArea; 
 
-      s.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}">
+      s.innerHTML = `<div class="piece ${shouldRotate ? 'opposite' : ''}">
         <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
       </div>`;
 
