@@ -16,18 +16,29 @@
         .read-color { color: #ff9800; }
 
         .input-group { background: #fffbe6; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px dashed #ffd666; }
-        .control-row { margin-bottom: 15px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .control-row { margin-bottom: 15px; }
+        .control-label { display: block; font-size: 0.9em; font-weight: bold; margin-bottom: 8px; color: #555; }
         
-        select, input[type="time"] { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 1em; }
-        .btn-add { background-color: #4caf50; color: white; font-weight: bold; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; flex-grow: 1; }
+        select, input[type="time"] { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 1em; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+        /* 時間入力のコンテナ */
+        .time-input-container { display: flex; align-items: center; gap: 10px; }
+        .time-input-container input { margin-bottom: 0; }
+
+        .btn-add { background-color: #4caf50; color: white; font-weight: bold; border: none; padding: 12px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 1em; transition: 0.2s; }
         .btn-add:hover { background-color: #45a049; }
 
         .record-list-title { font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .record-item { background: #fff; border-left: 6px solid #ccc; padding: 12px 15px; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
         .type-study { border-left-color: #2196f3; }
         .type-read { border-left-color: #ff9800; }
+        
+        .record-content { flex-grow: 1; }
         .record-info { font-weight: 500; }
         .record-duration { font-size: 0.85em; color: #888; }
+        
+        /* 個別削除ボタン */
+        .btn-delete-item { background: none; border: 1px solid #ff4d4f; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; line-height: 20px; text-align: center; cursor: pointer; font-size: 14px; font-weight: bold; transition: 0.2s; margin-left: 10px; }
+        .btn-delete-item:hover { background: #ff4d4f; color: white; }
 
         .btn-clear { background-color: #fff; color: #f44336; border: 1px solid #f44336; padding: 10px; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 30px; font-size: 0.9em; transition: 0.2s; }
         .btn-clear:hover { background-color: #fff5f5; }
@@ -51,17 +62,23 @@
 
     <div class="input-group">
         <div class="control-row">
+            <label class="control-label">なにをした？</label>
             <select id="type">
                 <option value="study">📝 べんきょう</option>
                 <option value="read">📚 どくしょ</option>
             </select>
-            <input type="time" id="start-time">
-            <span>～</span>
-            <input type="time" id="end-time">
         </div>
+        
         <div class="control-row">
-            <button class="btn-add" onclick="addRecord()">登録する</button>
+            <label class="control-label">いつから ～ いつまで？</label>
+            <div class="time-input-container">
+                <input type="time" id="start-time">
+                <span>～</span>
+                <input type="time" id="end-time">
+            </div>
         </div>
+
+        <button class="btn-add" onclick="addRecord()">登録する</button>
     </div>
 
     <div class="record-list-title">これまでの記録</div>
@@ -71,6 +88,7 @@
 </div>
 
 <script>
+    // ローカルストレージからデータを読み込む
     let records = JSON.parse(localStorage.getItem('studyRecords')) || [];
 
     function saveAndRender() {
@@ -78,6 +96,7 @@
         render();
     }
 
+    // レコード追加
     function addRecord() {
         const type = document.getElementById('type').value;
         const start = document.getElementById('start-time').value;
@@ -93,7 +112,7 @@
             return;
         }
 
-        // 重複チェック
+        // 重複チェック（開始から終了に含まれる時間が重複していないか）
         const isOverlapping = records.some(r => {
             return (start < r.end && end > r.start);
         });
@@ -104,7 +123,7 @@
         }
 
         const newRecord = {
-            id: Date.now(),
+            id: Date.now(), // 一意のIDとしてタイムスタンプを使用
             type,
             start,
             end
@@ -114,8 +133,21 @@
         // 開始時間順に並び替え
         records.sort((a, b) => a.start.localeCompare(b.start));
         saveAndRender();
+        
+        // 入力フォームをリセット（任意）
+        document.getElementById('start-time').value = '';
+        document.getElementById('end-time').value = '';
     }
 
+    // 個別削除
+    function deleteRecord(id) {
+        if (confirm("この記録を消してもいいですか？")) {
+            records = records.filter(r => r.id !== id);
+            saveAndRender();
+        }
+    }
+
+    // 全削除
     function clearAll() {
         if (confirm("本当にすべてのデータを消してもよろしいですか？")) {
             records = [];
@@ -123,6 +155,7 @@
         }
     }
 
+    // 合計時間の計算
     function calculateTotal(type) {
         let totalMinutes = 0;
         records.filter(r => r.type === type).forEach(r => {
@@ -135,6 +168,7 @@
         return `${h}時間 ${m}分`;
     }
 
+    // 画面の更新
     function render() {
         const list = document.getElementById('record-list');
         list.innerHTML = '';
@@ -150,11 +184,14 @@
             const diff = (eh * 60 + em) - (sh * 60 + sm);
 
             div.innerHTML = `
-                <div class="record-info">
-                    <strong>${typeText}</strong><br>
-                    <span>${r.start} ～ ${r.end}</span>
+                <div class="record-content">
+                    <div class="record-info">
+                        <strong>${typeText}</strong><br>
+                        <span>${r.start} ～ ${r.end}</span>
+                    </div>
+                    <div class="record-duration">(${diff}分間)</div>
                 </div>
-                <div class="record-duration">(${diff}分間)</div>
+                <button class="btn-delete-item" onclick="deleteRecord(${r.id})" title="削除">×</button>
             `;
             list.appendChild(div);
         });
