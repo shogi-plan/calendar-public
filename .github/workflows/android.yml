@@ -18,11 +18,10 @@ jobs:
         with:
           node-version: 20
 
-      # 【対策】package.json がある場所を自動で探して、そこを基準に実行します
+      # 【対策】package.jsonがある場所を探して移動し、インストールします
       - name: Install Dependencies
         run: |
           TARGET_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \;)
-          echo "Found package.json in: $TARGET_DIR"
           cd $TARGET_DIR
           npm install
 
@@ -32,7 +31,27 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # 【対策】Capacitorのコマンドも、ファイルがある場所へ移動してから実行します
+      # 【超重要・対策】リポジトリ内のどこかにある index.html を探し出し、
+      # package.json と同じ場所に正しい「www」フォルダを強制的に作って配置します。
+      - name: Force Fix Web Assets Directory
+        run: |
+          TARGET_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \;)
+          HTML_PATH=$(find . -name "index.html" -not -path "*/node_modules/*" | head -n 1)
+          
+          if [ -z "$HTML_PATH" ]; then
+            echo "Error: index.html がリポジトリ内に見つかりません！"
+            exit 1
+          fi
+          
+          echo "Found index.html at: $HTML_PATH"
+          echo "Target project directory: $TARGET_DIR"
+          
+          # package.json と同じ場所に www フォルダを作って index.html をコピー
+          mkdir -p "$TARGET_DIR/www"
+          cp "$HTML_PATH" "$TARGET_DIR/www/index.html"
+          echo "Successfully created $TARGET_DIR/www/index.html"
+
+      # 【対策】準備万端の状態で Capacitor を実行します
       - name: Initialize Capacitor Android
         run: |
           TARGET_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \;)
@@ -40,15 +59,14 @@ jobs:
           npx cap add android || true
           npx cap sync
 
-      # 【対策】Androidの書き出しフォルダを自動検知してビルドします
+      # 【対策】Androidプロジェクトをビルドします
       - name: Build APK
         run: |
           ANDROID_DIR=$(find . -name "build.gradle" -path "*/android/*" -exec dirname {} \;)
-          echo "Found Android project in: $ANDROID_DIR"
           cd $ANDROID_DIR
           ./gradlew assembleDebug
 
-      # 【対策】出来上がったAPKファイルを探し出して保存します
+      # 【対策】完成したAPKファイルを保存します
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
