@@ -1,0 +1,6 @@
+{
+  "appId": "com.study.timer",
+  "appName": "学習管理",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
