@@ -1,1 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学習・読書管理ツール</title>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; padding: 20px; background-color: #f0f8ff; color: #333; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
+        
+        .summary { display: flex; justify-content: space-around; background: #f8f9fa; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 2px solid #e9ecef; }
+        .summary-box { text-align: center; }
+        .summary-label { display: block; font-size: 0.85em; color: #666; margin-bottom: 5px; }
+        .summary-time { font-size: 1.2em; font-weight: bold; color: #2196f3; }
+        .read-color { color: #ff9800; }
+
+        .input-group { background: #fffbe6; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px dashed #ffd666; }
+        .control-row { margin-bottom: 15px; }
+        .control-label { display: block; font-size: 0.9em; font-weight: bold; margin-bottom: 8px; color: #555; }
+        
+        select, input[type="time"] { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 1em; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+        
+        .time-box { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; }
+        .time-input-container { display: flex; align-items: center; gap: 8px; }
+        .btn-stamp { background-color: #3498db; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; font-size: 0.9em; }
+        .btn-stamp:hover { background-color: #2980b9; }
+
+        .btn-add { background-color: #4caf50; color: white; font-weight: bold; border: none; padding: 15px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 1.1em; transition: 0.2s; margin-top: 10px; }
+        .btn-add:hover { background-color: #45a049; }
+
+        .record-list-title { font-size: 0.85em; color: #7f8c8d; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .record-item { background: #fff; border-left: 6px solid #ccc; padding: 12px 15px; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .type-study { border-left-color: #2196f3; }
+        .type-read { border-left-color: #ff9800; }
+        
+        .record-content { flex-grow: 1; }
+        .record-info { font-weight: 500; line-height: 1.6; }
+        .record-duration { font-size: 0.85em; color: #888; }
+        
+        .manual-mark { color: #f44336; font-size: 0.9em; margin-left: 2px; font-weight: bold; cursor: help; }
+
+        .btn-delete-item { background: none; border: 1px solid #ff4d4f; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; line-height: 20px; text-align: center; cursor: pointer; font-size: 14px; font-weight: bold; transition: 0.2s; margin-left: 10px; }
+        .btn-delete-item:hover { background: #ff4d4f; color: white; }
+
+        .btn-clear { background-color: #fff; color: #f44336; border: 1px solid #f44336; padding: 10px; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 30px; font-size: 0.9em; transition: 0.2s; }
+        .btn-clear:hover { background-color: #fff5f5; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>学習・読書管理ツール</h2>
+
+    <div class="summary">
+        <div class="summary-box">
+            <span class="summary-label">📝 べんきょう合計</span>
+            <span id="study-total" class="summary-time">0時間 0分</span>
+        </div>
+        <div class="summary-box">
+            <span class="summary-label">📚 どくしょ合計</span>
+            <span id="read-total" class="summary-time read-color">0時間 0分</span>
+        </div>
+    </div>
+
+    <div class="input-group">
+        <div class="control-row">
+            <label class="control-label">なにをした？</label>
+            <select id="type">
+                <option value="study">📝 べんきょう</option>
+                <option value="read">📚 どくしょ</option>
+            </select>
+        </div>
+        
+        <div class="time-box">
+            <label class="control-label">はじめの時間</label>
+            <div class="time-input-container">
+                <input type="time" id="start-time" oninput="markAsManual('start')">
+                <button class="btn-stamp" onclick="stampTime('start')">いま！</button>
+            </div>
+        </div>
+
+        <div class="time-box">
+            <label class="control-label">おわりの時間</label>
+            <div class="time-input-container">
+                <input type="time" id="end-time" oninput="markAsManual('end')">
+                <button class="btn-stamp" onclick="stampTime('end')">いま！</button>
+            </div>
+        </div>
+
+        <button class="btn-add" onclick="addRecord()">登録する</button>
+    </div>
+
+    <div class="record-list-title">今日の記録（時間を手入力するとマークが表示されるよ）</div>
+    <div id="record-list"></div>
+
+    <button class="btn-clear" onclick="clearAll()">すべてのデータを消去する</button>
+</div>
+
+<script>
+    let records = JSON.parse(localStorage.getItem('studyRecords')) || [];
+    let isStartManual = false;
+    let isEndManual = false;
+
+    function getCurrentTime() {
+        const now = new Date();
+        return now.getHours().toString().padStart(2, '0') + ':' + 
+               now.getMinutes().toString().padStart(2, '0');
+    }
+
+    function stampTime(target) {
+        const timeInput = document.getElementById(target + '-time');
+        timeInput.value = getCurrentTime();
+        if (target === 'start') isStartManual = false;
+        if (target === 'end') isEndManual = false;
+    }
+
+    function markAsManual(target) {
+        if (target === 'start') isStartManual = true;
+        if (target === 'end') isEndManual = true;
+    }
+
+    function saveAndRender() {
+        localStorage.setItem('studyRecords', JSON.stringify(records));
+        render();
+    }
+
+    function addRecord() {
+        const type = document.getElementById('type').value;
+        const start = document.getElementById('start-time').value;
+        const end = document.getElementById('end-time').value;
+        const nowTime = getCurrentTime();
+
+        if (!start || !end) {
+            alert("時間を入力してください");
+            return;
+        }
+
+        // 未来時間のチェック
+        if (start > nowTime || end > nowTime) {
+            alert("未来の時間は登録できません。正直に記録しましょう！");
+            return;
+        }
+
+        if (start >= end) {
+            alert("終了時間は開始時間より後にしてください");
+            return;
+        }
+
+        const isOverlapping = records.some(r => (start < r.end && end > r.start));
+        if (isOverlapping) {
+            alert("その時間はすでに他の記録が入っています！");
+            return;
+        }
+
+        const newRecord = {
+            id: Date.now(),
+            type,
+            start,
+            end,
+            manualStart: isStartManual,
+            manualEnd: isEndManual
+        };
+
+        records.push(newRecord);
+        records.sort((a, b) => a.start.localeCompare(b.start));
+        
+        // 状態リセット
+        isStartManual = false;
+        isEndManual = false;
+        document.getElementById('start-time').value = '';
+        document.getElementById('end-time').value = '';
+        
+        saveAndRender();
+    }
+
+    function deleteRecord(id) {
+        if (confirm("この記録を消してもいいですか？")) {
+            records = records.filter(r => r.id !== id);
+            saveAndRender();
+        }
+    }
+
+    function clearAll() {
+        if (confirm("本当にすべてのデータを消してもよろしいですか？")) {
+            records = [];
+            saveAndRender();
+        }
+    }
+
+    function calculateTotal(type) {
+        let totalMinutes = 0;
+        records.filter(r => r.type === type).forEach(r => {
+            const [sh, sm] = r.start.split(':').map(Number);
+            const [eh, em] = r.end.split(':').map(Number);
+            totalMinutes += (eh * 60 + em) - (sh * 60 + sm);
+        });
+        const h = Math.floor(totalMinutes / 60);
+        const m = totalMinutes % 60;
+        return `${h}時間 ${m}分`;
+    }
+
+    function render() {
+        const list = document.getElementById('record-list');
+        list.innerHTML = '';
+
+        records.forEach(r => {
+            const div = document.createElement('div');
+            div.className = `record-item ${r.type === 'study' ? 'type-study' : 'type-read'}`;
+            
+            const typeLabel = r.type === 'study' ? '📝 べんきょう' : '📚 どくしょ';
+            const sMark = r.manualStart ? '<span class="manual-mark" title="てにゅうりょく">⚠</span>' : '';
+            const eMark = r.manualEnd ? '<span class="manual-mark" title="てにゅうりょく">⚠</span>' : '';
+            
+            const [sh, sm] = r.start.split(':').map(Number);
+            const [eh, em] = r.end.split(':').map(Number);
+            const diff = (eh * 60 + em) - (sh * 60 + sm);
+
+            div.innerHTML = `
+                <div class="record-content">
+                    <div class="record-info">
+                        <strong>${typeLabel}</strong><br>
+                        <span>${r.start}${sMark} ～ ${r.end}${eMark}</span>
+                    </div>
+                    <div class="record-duration">(${diff}分間)</div>
+                </div>
+                <button class="btn-delete-item" onclick="deleteRecord(${r.id})">×</button>
+            `;
+            list.appendChild(div);
+        });
+
+        document.getElementById('study-total').innerText = calculateTotal('study');
+        document.getElementById('read-total').innerText = calculateTotal('read');
+    }
+
+    render();
+</script>
+
+</body>
+</html>
 
