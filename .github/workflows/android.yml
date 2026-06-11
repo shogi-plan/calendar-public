@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches:
-      - main # あなたのリポジトリのメインブランチ名に合わせてください（masterの場合はmasterに）
+      - main # masterブランチをお使いの場合は、ここを master に書き換えてください
 
 jobs:
   build:
@@ -18,8 +18,12 @@ jobs:
         with:
           node-version: 20
 
+      # 【対策】package.json がある場所を自動で探して、そこを基準に実行します
       - name: Install Dependencies
         run: |
+          TARGET_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \;)
+          echo "Found package.json in: $TARGET_DIR"
+          cd $TARGET_DIR
           npm install
 
       - name: Set up JDK 17
@@ -28,18 +32,25 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      # 【対策】Capacitorのコマンドも、ファイルがある場所へ移動してから実行します
       - name: Initialize Capacitor Android
         run: |
-          npx cap add android
+          TARGET_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \;)
+          cd $TARGET_DIR
+          npx cap add android || true
           npx cap sync
 
+      # 【対策】Androidの書き出しフォルダを自動検知してビルドします
       - name: Build APK
         run: |
-          cd android
+          ANDROID_DIR=$(find . -name "build.gradle" -path "*/android/*" -exec dirname {} \;)
+          echo "Found Android project in: $ANDROID_DIR"
+          cd $ANDROID_DIR
           ./gradlew assembleDebug
 
+      # 【対策】出来上がったAPKファイルを探し出して保存します
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: "**/app/build/outputs/apk/debug/app-debug.apk"
