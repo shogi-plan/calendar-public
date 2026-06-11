@@ -66,7 +66,7 @@
     <div class="input-group">
         <div class="control-row">
             <label class="control-label">なにをした？</label>
-            <select id="type">
+            <select id="type" onchange="saveInputState()">
                 <option value="study">📝 べんきょう</option>
                 <option value="read">📚 どくしょ</option>
             </select>
@@ -108,16 +108,51 @@
                now.getMinutes().toString().padStart(2, '0');
     }
 
+    // 入力途中の状態を保存する関数
+    function saveInputState() {
+        const state = {
+            type: document.getElementById('type').value,
+            startTime: document.getElementById('start-time').value,
+            endTime: document.getElementById('end-time').value,
+            isStartManual: isStartManual,
+            isEndManual: isEndManual
+        };
+        localStorage.setItem('studyInputState', JSON.stringify(state));
+    }
+
+    // 入力途中の状態を復元する関数
+    function loadInputState() {
+        const state = JSON.parse(localStorage.getItem('studyInputState'));
+        if (state) {
+            document.getElementById('type').value = state.type || 'study';
+            document.getElementById('start-time').value = state.startTime || '';
+            document.getElementById('end-time').value = state.endTime || '';
+            isStartManual = state.isStartManual || false;
+            isEndManual = state.isEndManual || false;
+        }
+    }
+
+    // 入力途中の状態を消去する関数
+    function clearInputState() {
+        localStorage.removeItem('studyInputState');
+        isStartManual = false;
+        isEndManual = false;
+        document.getElementById('start-time').value = '';
+        document.getElementById('end-time').value = '';
+    }
+
     function stampTime(target) {
         const timeInput = document.getElementById(target + '-time');
         timeInput.value = getCurrentTime();
         if (target === 'start') isStartManual = false;
         if (target === 'end') isEndManual = false;
+        saveInputState(); // スタンプ時に保存
     }
 
     function markAsManual(target) {
         if (target === 'start') isStartManual = true;
         if (target === 'end') isEndManual = true;
+        saveInputState(); // 手入力時に保存
     }
 
     function saveAndRender() {
@@ -165,11 +200,8 @@
         records.push(newRecord);
         records.sort((a, b) => a.start.localeCompare(b.start));
         
-        // 状態リセット
-        isStartManual = false;
-        isEndManual = false;
-        document.getElementById('start-time').value = '';
-        document.getElementById('end-time').value = '';
+        // 状態リセットと保存データの削除
+        clearInputState();
         
         saveAndRender();
     }
@@ -184,6 +216,7 @@
     function clearAll() {
         if (confirm("本当にすべてのデータを消してもよろしいですか？")) {
             records = [];
+            clearInputState(); // 入力中のデータも一緒にクリア
             saveAndRender();
         }
     }
@@ -233,9 +266,10 @@
         document.getElementById('read-total').innerText = calculateTotal('read');
     }
 
-    render();
+    // 初期化処理
+    loadInputState(); // 1. 入力途中の状態を復元
+    render();         // 2. 記録一覧を描画
 </script>
 
 </body>
 </html>
-
