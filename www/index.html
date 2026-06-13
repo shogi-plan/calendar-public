@@ -9,6 +9,13 @@
         .container { max-width: 600px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h2 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
         
+        /* 日付選択エリアのスタイル */
+        .date-select-group { background: #e6f7ff; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #91d5ff; display: flex; flex-direction: column; gap: 8px; }
+        .date-row { display: flex; align-items: center; gap: 10px; }
+        input[type="date"] { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 1em; flex-grow: 1; box-sizing: border-box; }
+        .btn-today { background-color: #1890ff; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: bold; }
+        .btn-today:hover { background-color: #40a9ff; }
+
         .summary { display: flex; justify-content: space-around; background: #f8f9fa; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 2px solid #e9ecef; }
         .summary-box { text-align: center; }
         .summary-label { display: block; font-size: 0.85em; color: #666; margin-bottom: 5px; }
@@ -29,7 +36,7 @@
         .btn-add { background-color: #4caf50; color: white; font-weight: bold; border: none; padding: 15px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 1.1em; transition: 0.2s; margin-top: 10px; }
         .btn-add:hover { background-color: #45a049; }
 
-        .record-list-title { font-size: 0.85em; color: #7f8c8d; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .record-list-title { font-size: 0.9em; font-weight: bold; color: #2c3e50; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
         .record-item { background: #fff; border-left: 6px solid #ccc; padding: 12px 15px; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
         .type-study { border-left-color: #2196f3; }
         .type-read { border-left-color: #ff9800; }
@@ -51,6 +58,14 @@
 
 <div class="container">
     <h2>学習・読書管理ツール</h2>
+
+    <div class="date-select-group">
+        <label class="control-label">📅 記録をみる・つける日を選んでね</label>
+        <div class="date-row">
+            <input type="date" id="current-date" onchange="changeDate()">
+            <button class="btn-today" onclick="setToday()">今日</button>
+        </div>
+    </div>
 
     <div class="summary">
         <div class="summary-box">
@@ -91,7 +106,7 @@
         <button class="btn-add" onclick="addRecord()">登録する</button>
     </div>
 
-    <div class="record-list-title">今日の記録（時間を手入力するとマークが表示されるよ）</div>
+    <div id="list-title" class="record-list-title">今日の記録</div>
     <div id="record-list"></div>
 
     <button class="btn-clear" onclick="clearAll()">すべてのデータを消去する</button>
@@ -102,14 +117,37 @@
     let isStartManual = false;
     let isEndManual = false;
 
+    // 今日の日付（YYYY-MM-DD）を取得する関数
+    function getTodayDateString() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = (now.getMonth() + 1).toString().padStart(2, '0');
+        const d = now.getDate().toString().padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
     function getCurrentTime() {
         const now = new Date();
         return now.getHours().toString().padStart(2, '0') + ':' + 
                now.getMinutes().toString().padStart(2, '0');
     }
 
-    // 入力途中の状態を保存する関数
+    // カレンダーの日付が変更されたときの処理
+    function changeDate() {
+        // 日付が変わったら入力途中の状態もその日付に合わせて再保存/読込したいため一度保存
+        saveInputState();
+        render();
+    }
+
+    // 「今日」ボタンを押したときの処理
+    function setToday() {
+        document.getElementById('current-date').value = getTodayDateString();
+        changeDate();
+    }
+
+    // 入力途中の状態を保存する関数（日付ごとのキーにして、別の日の入力と混ざらないようにします）
     function saveInputState() {
+        const selectedDate = document.getElementById('current-date').value;
         const state = {
             type: document.getElementById('type').value,
             startTime: document.getElementById('start-time').value,
@@ -117,24 +155,33 @@
             isStartManual: isStartManual,
             isEndManual: isEndManual
         };
-        localStorage.setItem('studyInputState', JSON.stringify(state));
+        localStorage.setItem('studyInputState_' + selectedDate, JSON.stringify(state));
     }
 
     // 入力途中の状態を復元する関数
     function loadInputState() {
-        const state = JSON.parse(localStorage.getItem('studyInputState'));
+        const selectedDate = document.getElementById('current-date').value;
+        const state = JSON.parse(localStorage.getItem('studyInputState_' + selectedDate));
         if (state) {
             document.getElementById('type').value = state.type || 'study';
             document.getElementById('start-time').value = state.startTime || '';
             document.getElementById('end-time').value = state.endTime || '';
             isStartManual = state.isStartManual || false;
             isEndManual = state.isEndManual || false;
+        } else {
+            // その日の入力途中データがなければフォームを空にする
+            document.getElementById('type').value = 'study';
+            document.getElementById('start-time').value = '';
+            document.getElementById('end-time').value = '';
+            isStartManual = false;
+            isEndManual = false;
         }
     }
 
     // 入力途中の状態を消去する関数
     function clearInputState() {
-        localStorage.removeItem('studyInputState');
+        const selectedDate = document.getElementById('current-date').value;
+        localStorage.removeItem('studyInputState_' + selectedDate);
         isStartManual = false;
         isEndManual = false;
         document.getElementById('start-time').value = '';
@@ -146,13 +193,13 @@
         timeInput.value = getCurrentTime();
         if (target === 'start') isStartManual = false;
         if (target === 'end') isEndManual = false;
-        saveInputState(); // スタンプ時に保存
+        saveInputState();
     }
 
     function markAsManual(target) {
         if (target === 'start') isStartManual = true;
         if (target === 'end') isEndManual = true;
-        saveInputState(); // 手入力時に保存
+        saveInputState();
     }
 
     function saveAndRender() {
@@ -161,20 +208,32 @@
     }
 
     function addRecord() {
+        const selectedDate = document.getElementById('current-date').value;
         const type = document.getElementById('type').value;
         const start = document.getElementById('start-time').value;
         const end = document.getElementById('end-time').value;
+        const todayStr = getTodayDateString();
         const nowTime = getCurrentTime();
+
+        if (!selectedDate) {
+            alert("日付を選んでください");
+            return;
+        }
 
         if (!start || !end) {
             alert("時間を入力してください");
             return;
         }
 
-        // 未来時間のチェック
-        if (start > nowTime || end > nowTime) {
-            alert("未来の時間は登録できません。正直に記録しましょう！");
+        // 未来日、または今日の未来時間のチェック
+        if (selectedDate > todayStr) {
+            alert("未来の日の記録は登録できません。正直に記録しましょう！");
             return;
+        } else if (selectedDate === todayStr) {
+            if (start > nowTime || end > nowTime) {
+                alert("未来の時間は登録できません。正直に記録しましょう！");
+                return;
+            }
         }
 
         if (start >= end) {
@@ -182,7 +241,8 @@
             return;
         }
 
-        const isOverlapping = records.some(r => (start < r.end && end > r.start));
+        // 重複チェックも「同じ日付の中だけ」で行うように変更
+        const isOverlapping = records.some(r => r.date === selectedDate && (start < r.end && end > r.start));
         if (isOverlapping) {
             alert("その時間はすでに他の記録が入っています！");
             return;
@@ -190,6 +250,7 @@
 
         const newRecord = {
             id: Date.now(),
+            date: selectedDate, // 新しく日付情報を追加
             type,
             start,
             end,
@@ -200,9 +261,7 @@
         records.push(newRecord);
         records.sort((a, b) => a.start.localeCompare(b.start));
         
-        // 状態リセットと保存データの削除
         clearInputState();
-        
         saveAndRender();
     }
 
@@ -214,16 +273,20 @@
     }
 
     function clearAll() {
-        if (confirm("本当にすべてのデータを消してもよろしいですか？")) {
+        if (confirm("本当にすべての日付のデータを消してもよろしいですか？")) {
             records = [];
-            clearInputState(); // 入力中のデータも一緒にクリア
+            // すべての入力途中データもクリアするためにlocalStorageをクリア
+            const todayStr = document.getElementById('current-date').value;
+            localStorage.clear(); 
+            clearInputState();
             saveAndRender();
         }
     }
 
-    function calculateTotal(type) {
+    // 指定された型、かつ「現在選択されている日付」の合計時間を計算する
+    function calculateTotal(type, selectedDate) {
         let totalMinutes = 0;
-        records.filter(r => r.type === type).forEach(r => {
+        records.filter(r => r.type === type && r.date === selectedDate).forEach(r => {
             const [sh, sm] = r.start.split(':').map(Number);
             const [eh, em] = r.end.split(':').map(Number);
             totalMinutes += (eh * 60 + em) - (sh * 60 + sm);
@@ -234,10 +297,27 @@
     }
 
     function render() {
+        const selectedDate = document.getElementById('current-date').value;
+        
+        // 入力途中の状態を選択された日付に合わせてロード
+        loadInputState();
+
+        // タイトルの日付表示を変更
+        const listTitle = document.getElementById('list-title');
+        if (selectedDate === getTodayDateString()) {
+            listTitle.innerText = "今日の記録（時間を手入力するとマークが表示されるよ）";
+        } else {
+            const [y, m, d] = selectedDate.split('-');
+            listTitle.innerText = `${Number(m)}月${Number(d)}日の記録（時間を手入力するとマークが表示されるよ）`;
+        }
+
         const list = document.getElementById('record-list');
         list.innerHTML = '';
 
-        records.forEach(r => {
+        // 「選択された日付のデータのみ」に絞り込んで表示
+        const filteredRecords = records.filter(r => r.date === selectedDate);
+
+        filteredRecords.forEach(r => {
             const div = document.createElement('div');
             div.className = `record-item ${r.type === 'study' ? 'type-study' : 'type-read'}`;
             
@@ -262,13 +342,15 @@
             list.appendChild(div);
         });
 
-        document.getElementById('study-total').innerText = calculateTotal('study');
-        document.getElementById('read-total').innerText = calculateTotal('read');
+        // 合計時間の表示も選択された日付のものにする
+        document.getElementById('study-total').innerText = calculateTotal('study', selectedDate);
+        document.getElementById('read-total').innerText = calculateTotal('read', selectedDate);
     }
 
-    // 初期化処理
-    loadInputState(); // 1. 入力途中の状態を復元
-    render();         // 2. 記録一覧を描画
+    // --- 初期化処理 ---
+    // 起動時は自動で今日の日付をセット
+    document.getElementById('current-date').value = getTodayDateString();
+    render();
 </script>
 
 </body>
