@@ -532,30 +532,37 @@
         }
     }
 
-    /* 変更点：CapacitorのネイティブFilesystemプラグインを使用して、AndroidのドキュメントフォルダへJSONファイルを保存する */
+    /* 変更点：アプリの一時キャッシュ領域にJSONを保存し、Shareプラグインを使ってシステムに「ダウンロードへ保存」させる */
     async function exportRecords() {
         try {
             const jsonString = JSON.stringify(records, null, 2);
             const today = getTodayDateString();
             const filename = `study_records_backup_${today}.json`;
 
-            // CapacitorのFilesystemプラグインが読み込まれているかチェック
-            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
+            // Capacitor環境のネイティブプラグインチェック
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem && window.Capacitor.Plugins.Share) {
                 const Filesystem = window.Capacitor.Plugins.Filesystem;
+                const Share = window.Capacitor.Plugins.Share;
                 
-                // Androidの「ドキュメント(Documents)」フォルダにファイルを直接書き出す
-                await Filesystem.writeFile({
+                // 1. 一度アプリの安全な一時キャッシュ領域（CACHE）にファイルを書き出す
+                const fileResult = await Filesystem.writeFile({
                     path: filename,
                     data: jsonString,
-                    directory: 'DOCUMENTS',
+                    directory: 'CACHE',
                     encoding: 'utf8'
                 });
 
-                alert(`【保存成功】\nスマホの「ドキュメント」フォルダに、ファイル名「${filename}」でJSONファイルを保存しました！`);
+                // 2. Shareプラグインを使ってOSのファイル共有ダイアログを呼び出す
+                // ユーザーは出てきたOSメニューから「ダウンロードへ保存」や「ファイルに保存」を自由に選べます
+                await Share.share({
+                    title: '学習記録バックアップデータの保存',
+                    url: fileResult.uri,
+                    dialogTitle: '保存先（ダウンロード等）を選択してください'
+                });
                 return;
             }
 
-            // 万が一、通常のブラウザ環境などで動かした場合の従来のダウンロードフォールバック
+            // 通常のPC/スマホブラウザ環境（フォールバック）
             const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
             const dataUrl = URL.createObjectURL(blob);
             const downloadAnchor = document.createElement('a');
