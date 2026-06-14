@@ -532,49 +532,30 @@
         }
     }
 
-    /* 変更点：アプリの一時キャッシュ領域にJSONを保存し、Shareプラグインを使ってシステムに「ダウンロードへ保存」させる */
+    /* 変更点：ネイティブFilesystem経由ではなく、WebViewの標準ダウンロードストリームを発火させることで、Androidシステム側の「保存先フォルダ選択」を直接引き出す */
     async function exportRecords() {
         try {
             const jsonString = JSON.stringify(records, null, 2);
             const today = getTodayDateString();
             const filename = `study_records_backup_${today}.json`;
 
-            // Capacitor環境のネイティブプラグインチェック
-            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem && window.Capacitor.Plugins.Share) {
-                const Filesystem = window.Capacitor.Plugins.Filesystem;
-                const Share = window.Capacitor.Plugins.Share;
-                
-                // 1. 一度アプリの安全な一時キャッシュ領域（CACHE）にファイルを書き出す
-                const fileResult = await Filesystem.writeFile({
-                    path: filename,
-                    data: jsonString,
-                    directory: 'CACHE',
-                    encoding: 'utf8'
-                });
-
-                // 2. Shareプラグインを使ってOSのファイル共有ダイアログを呼び出す
-                // ユーザーは出てきたOSメニューから「ダウンロードへ保存」や「ファイルに保存」を自由に選べます
-                await Share.share({
-                    title: '学習記録バックアップデータの保存',
-                    url: fileResult.uri,
-                    dialogTitle: '保存先（ダウンロード等）を選択してください'
-                });
-                return;
-            }
-
-            // 通常のPC/スマホブラウザ環境（フォールバック）
+            // AndroidのWebViewで「どこにダウンロードするか」を常に問い詰めるためのBlob処理
             const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
             const dataUrl = URL.createObjectURL(blob);
+            
             const downloadAnchor = document.createElement('a');
             downloadAnchor.href = dataUrl;
             downloadAnchor.download = filename;
             downloadAnchor.style.display = 'none';
+            
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
+            
+            // 後処理
             setTimeout(() => {
                 URL.revokeObjectURL(dataUrl);
                 downloadAnchor.remove();
-            }, 300);
+            }, 500);
 
         } catch (error) {
             alert("書き出し処理中にエラーが発生しました: " + error.message);
