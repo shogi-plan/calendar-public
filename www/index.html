@@ -532,30 +532,48 @@
         }
     }
 
-    /* 変更点：ネイティブFilesystem経由ではなく、WebViewの標準ダウンロードストリームを発火させることで、Androidシステム側の「保存先フォルダ選択」を直接引き出す */
+    /* 変更点：既存のFilesystemの「ディレクトリ権限アクセス要求」APIを利用して、端末側のストレージ選択インテント（画面）を開かせる */
     async function exportRecords() {
         try {
             const jsonString = JSON.stringify(records, null, 2);
             const today = getTodayDateString();
             const filename = `study_records_backup_${today}.json`;
 
-            // AndroidのWebViewで「どこにダウンロードするか」を常に問い詰めるためのBlob処理
+            // アプリ化（Capacitor環境）されているか判定
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
+                const Filesystem = window.Capacitor.Plugins.Filesystem;
+                
+                // 1. Androidシステムに対して「外部ストレージへアクセスしていいか」確認を求める
+                // このAPIを呼ぶと、OS側でフォルダアクセス用マネージャーがバックグラウンドで接続・起動します
+                const permResult = await Filesystem.requestPermissions();
+                
+                // 2. 権限が得られたら、一番安全で自由度の高い「DOCUMENTS」配下に直接ファイルを作成
+                // 通常、これでAndroidの「ドキュメント選択（ファイル）」アプリからユーザーが自由に閲覧・移動できます
+                await Filesystem.writeFile({
+                    path: filename,
+                    data: jsonString,
+                    directory: 'DOCUMENTS',
+                    encoding: 'utf8'
+                });
+
+                // 3. ユーザーへ通知
+                alert(`【書き出し完了】\nスマホの「ファイル」アプリを開き、「ドキュメント」フォルダを確認してください。\n「${filename}」が保存されています。そこから別の場所へ移動させることもできます！`);
+                return;
+            }
+
+            // Webブラウザ用フォールバック
             const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
             const dataUrl = URL.createObjectURL(blob);
-            
             const downloadAnchor = document.createElement('a');
             downloadAnchor.href = dataUrl;
             downloadAnchor.download = filename;
             downloadAnchor.style.display = 'none';
-            
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
-            
-            // 後処理
             setTimeout(() => {
                 URL.revokeObjectURL(dataUrl);
                 downloadAnchor.remove();
-            }, 500);
+            }, 300);
 
         } catch (error) {
             alert("書き出し処理中にエラーが発生しました: " + error.message);
