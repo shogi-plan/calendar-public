@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学習・読書管理ツール</title>
     <style>
-        /* 変更点：スマートフォンでの左右余白を安全に保つため、bodyのpaddingを調整し、全体にbox-sizingを適用 */
+        /* スマートフォンでの左右余白を安全に保つため、bodyのpaddingを調整し、全体にbox-sizingを適用 */
         * { box-sizing: border-box; }
         body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; padding: 15px 10px; background-color: #f0f8ff; color: #333; margin: 0; }
         .container { max-width: 600px; width: 100%; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
@@ -26,7 +26,12 @@
         .btn-export:hover, .btn-import-trigger:hover { background: #5a6268; }
         input[type="file"] { display: none; }
         
-        /* 追加：目標時間設定エリアのスタイル */
+        /* 追加：エラー時・Web環境用のテキスト退避エリアのスタイル */
+        .backup-textbox-area { display: none; margin-top: 15px; background: #fff1f0; border: 1px solid #ffa39e; padding: 12px; border-radius: 8px; }
+        .backup-textbox-area textarea { width: 100%; height: 100px; font-family: monospace; font-size: 0.8em; padding: 5px; margin-bottom: 8px; border: 1px solid #d9d9d9; border-radius: 4px; resize: none; }
+        .btn-copy-all { background: #ff4d4f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
+
+        /* 目標時間設定エリアのスタイル */
         .goal-settings-box { border-top: 1px dashed #ccc; padding-top: 12px; margin-top: 5px; }
         .goal-settings-grid { display: flex; flex-direction: column; gap: 10px; }
         .goal-group { background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #e0e0e0; }
@@ -50,7 +55,7 @@
         .summary-time { font-size: 1.1em; font-weight: bold; color: #2196f3; block-size: auto; display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 2px; }
         .read-color { color: #ff9800; }
         
-        /* 追加：目標達成バッジのスタイル */
+        /* 目標達成バッジのスタイル */
         .achieved-badge { font-size: 0.7em; color: white; background: #ff4d4f; padding: 2px 6px; border-radius: 20px; font-weight: bold; margin-top: 3px; animation: pop 0.3s ease-out; display: block; width: max-content; }
         .achieved-badge.read-badge { background: #ff9800; }
         @keyframes pop {
@@ -66,7 +71,6 @@
         
         .time-box { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; }
         .time-input-container { display: flex; align-items: center; gap: 8px; width: 100%; }
-        /* 変更点：入力欄を伸ばし、ボタンの縮みを防ぐ */
         .time-input-container input[type="time"] { margin-bottom: 0; flex-grow: 1; }
         .btn-stamp { background-color: #3498db; color: white; border: none; padding: 10px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; font-size: 0.9em; flex-shrink: 0; }
         .btn-stamp:hover { background-color: #2980b9; }
@@ -93,7 +97,6 @@
         .analytics-title { font-size: 1.05em; font-weight: bold; color: #2c3e50; margin-bottom: 15px; }
         
         .chart-container { display: flex; flex-direction: column; gap: 12px; background: white; padding: 15px 10px; border-radius: 8px; border: 1px solid #e8e8e8; margin-bottom: 20px; }
-        /* 変更点：小さなスマホ画面でも崩れないようラベルと値の配置比率を調整 */
         .chart-row { display: flex; align-items: center; font-size: 0.8em; width: 100%; }
         .chart-label { width: 70px; font-weight: bold; color: #555; flex-shrink: 0; }
         
@@ -101,7 +104,6 @@
         .chart-bar-fill { height: 100%; width: 0%; border-radius: 4px; transition: width 0.5s ease-out; display: flex; align-items: center; justify-content: flex-end; padding-right: 5px; }
         .chart-bar-fill.study { background: linear-gradient(90deg, #69c0ff, #1890ff); }
         .chart-bar-fill.read { background: linear-gradient(90deg, #ffc069, #fa8c16); }
-        /* 変更点：固定幅をなくし、柔軟に最大幅を確保してはみ出しを防止 */
         .chart-value { font-size: 0.85em; font-weight: bold; color: #555; width: auto; min-width: 65px; text-align: right; white-space: nowrap; flex-shrink: 0; }
 
         /* 週ごとのグループ枠 */
@@ -110,17 +112,12 @@
         .week-title-text { font-size: 0.85em; font-weight: bold; color: #1890ff; flex-shrink: 0; }
         .week-summary-text { font-size: 0.8em; font-weight: bold; color: #555; text-align: right; }
         
-        /* 変更点：スマホ対応のフレックスレイアウトへの変更（横幅オーバーの完全解消） */
         .history-card { background: #fff; border: 1px solid #f0f0f0; border-radius: 6px; padding: 10px 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 5px; width: 100%; }
         .history-card:last-child { margin-bottom: 0; }
         
-        /* 変更点：日付幅を少しコンパクトにして縮み防止 */
         .history-date { font-weight: bold; color: #555; font-size: 0.85em; width: 65px; flex-shrink: 0; }
-        
-        /* 変更点：右側エリアをイコール比率配分に切り替え */
         .history-totals { display: flex; gap: 6px; font-size: 0.8em; font-weight: bold; flex-grow: 1; justify-content: flex-end; min-width: 0; }
         
-        /* 変更点：固定幅を％（各48%程度）に変更し、文字サイズを少し縮小して狭い画面での突っ張りを解消 */
         .history-study-tag, .history-read-tag { width: 48%; max-width: 100px; text-align: center; display: inline-block; padding: 4px 2px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9em; flex-shrink: 1; }
         .history-study-tag { color: #1890ff; background: #e6f7ff; }
         .history-read-tag { color: #fa8c16; background: #fff7e6; }
@@ -142,6 +139,12 @@
             <button class="btn-export" onclick="exportRecords()">データをほぞんする（書き出し）</button>
             <button class="btn-import-trigger" onclick="document.getElementById('import-file').click()">データをとりこむ（読み込み）</button>
             <input type="file" id="import-file" accept=".json" onchange="importRecords(event)">
+        </div>
+
+        <div class="backup-textbox-area" id="backup-box-area">
+            <div style="font-weight: bold; color: #ff4d4f; margin-bottom: 5px; font-size: 0.9em;">⚠️ スマホの保存画面が開けないため、下の文字をぜんぶコピーしてメールやメモ帳に貼り付けて保存してね！</div>
+            <textarea id="backup-textarea" readonly></textarea>
+            <button class="btn-copy-all" onclick="copyBackupText()">コピーする</button>
         </div>
         
         <div class="goal-settings-box">
@@ -265,7 +268,6 @@
     let isStartManual = false;
     let isEndManual = false;
 
-    // 追加：目標設定用の初期状態オブジェクト
     let defaultGoals = {
         weekdayStudy: 60,
         weekdayRead: 30,
@@ -356,7 +358,6 @@
         render();
     }
 
-    // 追加：目標設定値を読み込んで入力欄にセットする
     function loadGoals() {
         document.getElementById('goal-weekday-study').value = goals.weekdayStudy;
         document.getElementById('goal-weekday-read').value = goals.weekdayRead;
@@ -364,7 +365,6 @@
         document.getElementById('goal-weekend-read').value = goals.weekendRead;
     }
 
-    // 追加：入力された目標設定値を保存して再描画する
     function saveGoals() {
         goals.weekdayStudy = Math.max(0, Number(document.getElementById('goal-weekday-study').value) || 0);
         goals.weekdayRead = Math.max(0, Number(document.getElementById('goal-weekday-read').value) || 0);
@@ -374,35 +374,31 @@
         render();
     }
 
-    // 追加：日本の国民の祝日・振替休日を判定する簡易関数
     function isJapaneseHoliday(dateObj) {
         const y = dateObj.getFullYear();
         const m = dateObj.getMonth() + 1;
         const d = dateObj.getDate();
         const w = dateObj.getDay();
 
-        // 固定祝日
-        if (m === 1 && d === 1) return true;  // 元日
-        if (m === 2 && d === 11) return true; // 建国記念の日
-        if (m === 2 && d === 23) return true; // 天皇誕生日
-        if (m === 4 && d === 29) return true; // 昭和の日
-        if (m === 5 && d === 3) return true;  // 憲法記念日
-        if (m === 5 && d === 4) return true;  // みどりの日
-        if (m === 5 && d === 5) return true;  // こどもの日
-        if (m === 8 && d === 11) return true; // 山の日
-        if (m === 11 && d === 3) return true; // 文化の日
-        if (m === 11 && d === 23) return true;// 勤労感謝の日
+        if (m === 1 && d === 1) return true;
+        if (m === 2 && d === 11) return true;
+        if (m === 2 && d === 23) return true;
+        if (m === 4 && d === 29) return true;
+        if (m === 5 && d === 3) return true;
+        if (m === 5 && d === 4) return true;
+        if (m === 5 && d === 5) return true;
+        if (m === 8 && d === 11) return true;
+        if (m === 11 && d === 3) return true;
+        if (m === 11 && d === 23) return true;
 
-        // ハッピーマンデー（第何月曜日）
         const nthMonday = Math.floor((d - 1) / 7) + 1;
         if (w === 1) {
-            if (m === 1 && nthMonday === 2) return true;  // 成人の日 (第2月曜)
-            if (m === 7 && nthMonday === 3) return true;  // 海の日 (第3月曜)
-            if (m === 9 && nthMonday === 3) return true;  // 敬老の日 (第3月曜)
-            if (m === 10 && nthMonday === 2) return true; // スポーツの日 (第2月曜)
+            if (m === 1 && nthMonday === 2) return true;
+            if (m === 7 && nthMonday === 3) return true;
+            if (m === 9 && nthMonday === 3) return true;
+            if (m === 10 && nthMonday === 2) return true;
         }
 
-        // 春分の日・秋分の日（簡易計算式：2000年〜2099年対応）
         if (m === 3) {
             const springEquinox = Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
             if (d === springEquinox) return true;
@@ -412,8 +408,6 @@
             if (d === autumnEquinox) return true;
         }
 
-        // 振替休日の判定 (日曜が祝日の場合、翌月曜以降の最も近い平日が休みになる)
-        // 簡易的に「前日が祝日かつ本日が月曜」の場合をカバー
         if (w === 1) {
             const prevDate = new Date(dateObj);
             prevDate.setDate(d - 1);
@@ -423,13 +417,11 @@
         return false;
     }
 
-    // 追加：指定した日付が「土日祝日」か「平日」かを返す関数
     function getDayType(dateStr) {
         const parts = dateStr.split('-');
         const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
         const day = dateObj.getDay();
         
-        // 土曜(6)、日曜(0)、または祝日の場合は休日（週末扱い）
         if (day === 0 || day === 6 || isJapaneseHoliday(dateObj)) {
             return 'weekend';
         }
@@ -528,56 +520,59 @@
         } else {
             panel.style.display = 'block';
             btn.style.backgroundColor = '#e0e0e0';
-            loadGoals(); // パネルを開いた安全なタイミングで最新設定値を反映
+            loadGoals();
         }
     }
 
-    /* 変更点：既存のFilesystemの「ディレクトリ権限アクセス要求」APIを利用して、端末側のストレージ選択インテント（画面）を開かせる */
+    /* 変更点：エラーが起きるFilesystemを捨て、Androidの「共有メニュー（フォルダ保存・ドライブ保存が選択可能）」を発火させる。動かない時は画面にテキストを緊急出力する */
     async function exportRecords() {
+        const jsonString = JSON.stringify(records, null, 2);
+        const today = getTodayDateString();
+        const titleName = `study_records_backup_${today}.txt`;
+
         try {
-            const jsonString = JSON.stringify(records, null, 2);
-            const today = getTodayDateString();
-            const filename = `study_records_backup_${today}.json`;
-
-            // アプリ化（Capacitor環境）されているか判定
-            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
-                const Filesystem = window.Capacitor.Plugins.Filesystem;
+            // Androidアプリ化環境（Capacitor）かつShareプラグインが存在する場合
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
+                const Share = window.Capacitor.Plugins.Share;
                 
-                // 1. Androidシステムに対して「外部ストレージへアクセスしていいか」確認を求める
-                // このAPIを呼ぶと、OS側でフォルダアクセス用マネージャーがバックグラウンドで接続・起動します
-                const permResult = await Filesystem.requestPermissions();
-                
-                // 2. 権限が得られたら、一番安全で自由度の高い「DOCUMENTS」配下に直接ファイルを作成
-                // 通常、これでAndroidの「ドキュメント選択（ファイル）」アプリからユーザーが自由に閲覧・移動できます
-                await Filesystem.writeFile({
-                    path: filename,
-                    data: jsonString,
-                    directory: 'DOCUMENTS',
-                    encoding: 'utf8'
+                // Androidの共有ポップアップを強制起動（フォルダ保存インテントをここに割り当てさせる）
+                await Share.share({
+                    title: '学習データのバックアップ保存',
+                    text: jsonString,
+                    dialogTitle: '保存先（ファイルに保存など）を選んでね'
                 });
-
-                // 3. ユーザーへ通知
-                alert(`【書き出し完了】\nスマホの「ファイル」アプリを開き、「ドキュメント」フォルダを確認してください。\n「${filename}」が保存されています。そこから別の場所へ移動させることもできます！`);
                 return;
             }
 
-            // Webブラウザ用フォールバック
-            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
-            const dataUrl = URL.createObjectURL(blob);
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.href = dataUrl;
-            downloadAnchor.download = filename;
-            downloadAnchor.style.display = 'none';
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            setTimeout(() => {
-                URL.revokeObjectURL(dataUrl);
-                downloadAnchor.remove();
-            }, 300);
+            // Webブラウザ用、またはWebAPI標準の共有が使える場合
+            if (navigator.share) {
+                await navigator.share({
+                    title: '学習データのバックアップ保存',
+                    text: jsonString
+                });
+                return;
+            }
+
+            // 上記が全滅、またはブラウザ環境のフォールバック
+            throw new Error("ネイティブ共有がサポートされていません");
 
         } catch (error) {
-            alert("書き出し処理中にエラーが発生しました: " + error.message);
+            // 【超強力な救済策】フォルダ保存が絶対にエラーになる環境だった場合、画面上にコピー窓を出してデータを100%保護する
+            document.getElementById('backup-box-area').style.display = 'block';
+            const txtArea = document.getElementById('backup-textarea');
+            txtArea.value = jsonString;
+            
+            alert("【保存案内】\nシステムの保存画面が開けなかったため、すぐ下に「コピーボタン付きの文字枠」を表示しました！ここから文字をコピーして、スマホのメモ帳等に貼り付けて保存してください。");
         }
+    }
+
+    // 追加：文字を一発でクリップボードへ入れる補助関数
+    function copyBackupText() {
+        const txtArea = document.getElementById('backup-textarea');
+        txtArea.select();
+        txtArea.setSelectionRange(0, 99999); // スマホ対応
+        navigator.clipboard.writeText(txtArea.value);
+        alert("コピーしました！メモ帳アプリ等に貼り付けてね。");
     }
 
     function importRecords(event) {
@@ -610,6 +605,9 @@
                     saveAndRender();
                     alert(`${addedCount}件の記録を新しくとりこみました！`);
                     document.getElementById('import-file').value = '';
+                    
+                    // 救済ボックスが開いていた場合は閉じる
+                    document.getElementById('backup-box-area').style.display = 'none';
                     toggleSettings();
                 }
             } catch (err) {
