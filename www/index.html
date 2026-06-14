@@ -567,7 +567,7 @@
     function fallbackCopyToClipboard(textData) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(textData).then(() => {
-                alert("【アプリ環境用通知】\nデータの書き出しテキストをクリップボードにコピーしました！\nメールやメモ帳アプリに貼り付けて保存（バックアップ）してください。");
+                alert("データの書き出し情報をクリップボードにコピーしました！\nメモ帳などに貼り付けてjson形式で保存してください。");
             }).catch(() => {
                 oldFashionedCopy(textData);
             });
