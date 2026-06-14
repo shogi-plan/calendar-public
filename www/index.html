@@ -528,21 +528,14 @@
         } else {
             panel.style.display = 'block';
             btn.style.backgroundColor = '#e0e0e0';
-            loadGoals(); // 追加：パネルを開いたタイミングで最新設定値を反映
+            loadGoals(); // パネルを開いた安全なタイミングで最新設定値を反映
         }
     }
 
-    /* 🛠️ 修正箇所：データ数が0のときでも安全に動作させ、スマホ環境でも確実にダウンロードリンクをキックするよう処理を最適化 */
+    /* Androidアプリ化（WebView）のダウンロードブロックを回避するため、Web Share APIを使ったデータ共有方式に変更 */
     function exportRecords() {
         try {
-            // JSONデータをBlobオブジェクトに変換（recordsが空配列 [] の場合でもそのままファイル化する）
             const jsonString = JSON.stringify(records, null, 2);
-            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
-            
-            // 安全なオブジェクトURLを発行
-            const dataUrl = URL.createObjectURL(blob);
-            
-            const downloadAnchor = document.createElement('a');
             
             // 日付文字列を確実に取得
             let today = "backup";
@@ -556,21 +549,42 @@
                 today = `${y}-${m}-${d}`;
             }
             
+            const filename = `study_records_backup_${today}.json`;
+
+            // 1. Web Share API (ファイル共有) が利用可能かチェック
+            if (navigator.canShare && navigator.share) {
+                const blob = new Blob([jsonString], { type: "application/json" });
+                const file = new File([blob], filename, { type: "application/json" });
+                
+                if (navigator.canShare({ files: [file] })) {
+                    navigator.share({
+                        files: [file],
+                        title: '学習・読書管理ツール バックアップ',
+                        text: 'データのバックアップファイルです。'
+                    }).catch((err) => {
+                        // ユーザーキャンセル以外の場合にエラー通知
+                        if (err.name !== 'AbortError') {
+                            alert("共有中にエラーが発生しました: " + err.message);
+                        }
+                    });
+                    return; // 共有が実行できた場合はここで処理終了
+                }
+            }
+
+            // 2. もしアプリ環境や古い端末でShare APIが弾かれた場合のフォールバック（従来のブラウザ用ダウンロード）
+            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
+            const dataUrl = URL.createObjectURL(blob);
+            const downloadAnchor = document.createElement('a');
             downloadAnchor.href = dataUrl;
-            downloadAnchor.download = `study_records_backup_${today}.json`;
-            
-            // iOS等の一部の環境で、DOMに追加されていない要素のclick()が無視される問題を回避するために画面外に不可視で追加
+            downloadAnchor.download = filename;
             downloadAnchor.style.display = 'none';
             document.body.appendChild(downloadAnchor);
-            
-            // 同期的に発火させる
             downloadAnchor.click();
-            
-            // 後片付け（メモリ解放と要素削除を少し遅らせる）
             setTimeout(() => {
                 URL.revokeObjectURL(dataUrl);
                 downloadAnchor.remove();
             }, 300);
+
         } catch (error) {
             alert("書き出し処理中にエラーが発生しました: " + error.message);
         }
@@ -718,26 +732,22 @@
             list.appendChild(div);
         });
 
-        // 変更箇所：分単位での集計値取得と、目標達成バッジの出し分け処理
         const currentStudyMinutes = calculateTotalMinutes('study', selectedDate);
         const currentReadMinutes = calculateTotalMinutes('read', selectedDate);
 
         document.getElementById('study-total').innerText = formatMinutes(currentStudyMinutes);
         document.getElementById('read-total').innerText = formatMinutes(currentReadMinutes);
 
-        // 追加：選択日の種類（平日・休日）に応じて、判定に使用する目標時間を決定
         const dayType = getDayType(selectedDate);
         const targetStudyGoal = (dayType === 'weekend') ? goals.weekendStudy : goals.weekdayStudy;
         const targetReadGoal = (dayType === 'weekend') ? goals.weekendRead : goals.weekdayRead;
 
-        // 追加：勉強の目標達成判定（1分以上、かつ目標設定時間以上の場合に表示）
         if (currentStudyMinutes > 0 && currentStudyMinutes >= targetStudyGoal) {
             document.getElementById('study-achieved').style.display = 'block';
         } else {
             document.getElementById('study-achieved').style.display = 'none';
         }
 
-        // 追加：読書の目標達成判定（1分以上、かつ目標設定時間以上の場合に表示）
         if (currentReadMinutes > 0 && currentReadMinutes >= targetReadGoal) {
             document.getElementById('read-achieved').style.display = 'block';
         } else {
@@ -763,7 +773,6 @@
         document.getElementById('val-this-study').innerText = formatMinutes(analytics.thisStudy);
         document.getElementById('val-last-read').innerText = formatMinutes(analytics.lastRead);
         
-        /* 🛠️ 変更箇所：修正前は間違えて analytics.thisStudy になっていた部分を 正しく thisRead に修正 */
         document.getElementById('val-this-read').innerText = formatMinutes(analytics.thisRead);
 
         const historyList = document.getElementById('history-list');
@@ -832,7 +841,6 @@
 
     // 初期起動時の処理
     document.getElementById('current-date').value = getTodayDateString();
-    loadGoals(); // 追加：目標設定値をセット
     render();
 </script>
 
