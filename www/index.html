@@ -532,62 +532,65 @@
         }
     }
 
-    /* Androidアプリ化（WebView）のダウンロードブロックを回避するため、Web Share APIを使ったデータ共有方式に変更 */
+    /* 変更点：Android WebView(Capacitor)環境で確実に動くよう、テキスト共有及びクリップボードコピーへ処理を変更 */
     function exportRecords() {
         try {
             const jsonString = JSON.stringify(records, null, 2);
             
-            // 日付文字列を確実に取得
-            let today = "backup";
-            if (typeof getTodayDateString === "function") {
-                today = getTodayDateString();
-            } else {
-                const now = new Date();
-                const y = now.getFullYear();
-                const m = (now.getMonth() + 1).toString().padStart(2, '0');
-                const d = now.getDate().toString().padStart(2, '0');
-                today = `${y}-${m}-${d}`;
-            }
-            
-            const filename = `study_records_backup_${today}.json`;
-
-            // 1. Web Share API (ファイル共有) が利用可能かチェック
-            if (navigator.canShare && navigator.share) {
-                const blob = new Blob([jsonString], { type: "application/json" });
-                const file = new File([blob], filename, { type: "application/json" });
-                
-                if (navigator.canShare({ files: [file] })) {
-                    navigator.share({
-                        files: [file],
-                        title: '学習・読書管理ツール バックアップ',
-                        text: 'データのバックアップファイルです。'
-                    }).catch((err) => {
-                        // ユーザーキャンセル以外の場合にエラー通知
-                        if (err.name !== 'AbortError') {
-                            alert("共有中にエラーが発生しました: " + err.message);
-                        }
-                    });
-                    return; // 共有が実行できた場合はここで処理終了
-                }
+            // 1. Androidネイティブ共有 (Web Share API - テキスト送信)
+            // ファイルではなくテキスト型にすることで、Capacitor標準のWebViewでもOSの共有メニューが確実に起動します。
+            if (navigator.share) {
+                navigator.share({
+                    title: '学習・読書管理ツール バックアップデータ',
+                    text: jsonString
+                }).then(() => {
+                    // 成功時はここで終了
+                    return;
+                }).catch((err) => {
+                    // ユーザーキャンセル(AbortError)以外はクリップボード処理に流す
+                    if (err.name !== 'AbortError') {
+                        fallbackCopyToClipboard(jsonString);
+                    }
+                });
+                return;
             }
 
-            // 2. もしアプリ環境や古い端末でShare APIが弾かれた場合のフォールバック（従来のブラウザ用ダウンロード）
-            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
-            const dataUrl = URL.createObjectURL(blob);
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.href = dataUrl;
-            downloadAnchor.download = filename;
-            downloadAnchor.style.display = 'none';
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            setTimeout(() => {
-                URL.revokeObjectURL(dataUrl);
-                downloadAnchor.remove();
-            }, 300);
+            // 2. Web Share APIが使えない場合のフォールバック (クリップボードコピー)
+            fallbackCopyToClipboard(jsonString);
 
         } catch (error) {
             alert("書き出し処理中にエラーが発生しました: " + error.message);
         }
+    }
+
+    /* 追加：確実にデータを退避させるためのクリップボードコピー関数 */
+    function fallbackCopyToClipboard(textData) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textData).then(() => {
+                alert("【アプリ環境用通知】\nデータの書き出しテキストをクリップボードにコピーしました！\nメールやメモ帳アプリに貼り付けて保存（バックアップ）してください。");
+            }).catch(() => {
+                oldFashionedCopy(textData);
+            });
+        } else {
+            oldFashionedCopy(textData);
+        }
+    }
+
+    /* 追加：古いWebViewバージョンでも動作する全世代対応のコピー処理 */
+    function oldFashionedCopy(textData) {
+        const textArea = document.createElement("textarea");
+        textArea.value = textData;
+        textArea.style.position = "fixed";  // 画面の外に配置
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            alert("【アプリ環境用通知】\nデータの書き出しテキストをクリップボードにコピーしました！\nメールやメモ帳アプリに貼り付けて保存（バックアップ）してください。");
+        } catch (err) {
+            alert("データの書き出しに失敗しました。お使いの端末設定を確認してください。");
+        }
+        document.body.removeChild(textArea);
     }
 
     function importRecords(event) {
