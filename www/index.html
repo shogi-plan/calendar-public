@@ -513,53 +513,53 @@
         }
     }
 
-    /* 変更点：ネイティブプラグインの処理と標準ブラウザのフォールバックの繋がりを確実にし、何も反応しないバグを防止 */
+    /* 変更点：ネイティブ保存の可否を最速で判定し、いかなる場合でもフォールバック（ブラウザ保存）を絶対保証する構造に修正 */
     async function exportRecords() {
         const jsonString = JSON.stringify(records, null, 2);
         const today = getTodayDateString();
         const filename = `study_records_backup_${today}.json`;
 
-        let nativeSaved = false;
+        let isNativeSuccess = false;
 
+        // 1. ネイティブアプリ（Capacitor）環境への保存をトライ
         try {
-            // Capacitor環境かつFilePickerプラグインへのアクセス経路がある場合のみ試行
             if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FilePicker) {
-                const FilePicker = window.Capacitor.Plugins.FilePicker;
+                const fp = window.Capacitor.Plugins.FilePicker;
+                const writeFn = fp.writeFile || fp.saveFile; // 存在する関数を自動割り当て
                 
-                // バージョンによって異なる関数名を統合チェック
-                const nativeFunc = (typeof FilePicker.writeFile === 'function') ? FilePicker.writeFile : 
-                                   (typeof FilePicker.saveFile === 'function') ? FilePicker.saveFile : null;
-                
-                if (nativeFunc) {
-                    await nativeFunc.call(FilePicker, {
+                if (typeof writeFn === 'function') {
+                    await writeFn.call(fp, {
                         file: {
-                            data: btoa(unescape(encodeURIComponent(jsonString))), // 日本語の文字化け防止用Base64エンコード
+                            data: btoa(unescape(encodeURIComponent(jsonString))),
                             name: filename,
                             mimeType: 'application/json'
                         }
                     });
-                    nativeSaved = true;
+                    isNativeSuccess = true;
                     alert("データをほぞんしました！");
                     return;
                 }
             }
-        } catch (error) {
-            console.error("Native save failed, falling back to browser download:", error);
-            // ネイティブ側で何らかのエラーが起きた場合も処理を止めず、下のブラウザ保存へ流す
+        } catch (nativeError) {
+            console.warn("Native file operation failed, bypassing to browser download directly:", nativeError);
+            // ここでエラーが出ても処理を落とさず、下のブラウザ処理へと受け渡す
         }
 
-        // ネイティブ保存が実行されなかった、あるいは失敗した場合は「必ず」通常のブラウザダウンロードを実行
-        if (!nativeSaved) {
+        // 2. ネイティブ保存がスキップされた、または失敗した場合は「100%確実に」ブラウザ標準処理を走らせる
+        if (!isNativeSuccess) {
             try {
                 const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
                 const dataUrl = URL.createObjectURL(blob);
                 const downloadAnchor = document.createElement('a');
+                
                 downloadAnchor.href = dataUrl;
                 downloadAnchor.download = filename;
                 downloadAnchor.style.display = 'none';
                 document.body.appendChild(downloadAnchor);
+                
                 downloadAnchor.click();
                 
+                // 後片付け
                 setTimeout(() => {
                     URL.revokeObjectURL(dataUrl);
                     downloadAnchor.remove();
