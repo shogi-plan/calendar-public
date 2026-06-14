@@ -532,33 +532,53 @@
         }
     }
 
-    /* 🛠️ 変更箇所：スマートフォン環境でも確実にダウンロードできるようにBlob形式に変更 */
+    /* 🛠️ 修正・改善箇所：エクスポート時にアンカーをDOMツリーへ明示的に挿入し、確実なクリックイベントの伝搬とタイミングを制御するよう修正 */
     function exportRecords() {
         if (records.length === 0) {
             alert("保存する記録がまだありません。");
             return;
         }
         
-        // JSONデータをBlobオブジェクトに変換
-        const jsonString = JSON.stringify(records, null, 2);
-        const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
-        
-        // 安全なオブジェクトURLを発行
-        const dataUrl = URL.createObjectURL(blob);
-        
-        const downloadAnchor = document.createElement('a');
-        const today = getTodayDateString();
-        downloadAnchor.setAttribute("href", dataUrl);
-        downloadAnchor.setAttribute("download", `study_records_backup_${today}.json`);
-        
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        
-        // 後片付け（メモリ解放と要素削除）
-        setTimeout(() => {
-            URL.revokeObjectURL(dataUrl);
-            downloadAnchor.remove();
-        }, 100);
+        try {
+            // JSONデータをBlobオブジェクトに変換
+            const jsonString = JSON.stringify(records, null, 2);
+            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
+            
+            // 安全なオブジェクトURLを発行
+            const dataUrl = URL.createObjectURL(blob);
+            
+            const downloadAnchor = document.createElement('a');
+            
+            // 日付文字列を確実に取得
+            let today = "backup";
+            if (typeof getTodayDateString === "function") {
+                today = getTodayDateString();
+            } else {
+                const now = new Date();
+                const y = now.getFullYear();
+                const m = (now.getMonth() + 1).toString().padStart(2, '0');
+                const d = now.getDate().toString().padStart(2, '0');
+                today = `${y}-${m}-${d}`;
+            }
+            
+            downloadAnchor.href = dataUrl;
+            downloadAnchor.download = `study_records_backup_${today}.json`;
+            
+            // iOS等の一部の環境で、DOMに追加されていない要素のclick()が無視される問題を回避
+            downloadAnchor.style.display = 'none';
+            document.body.appendChild(downloadAnchor);
+            
+            // 同期的に発火させる
+            downloadAnchor.click();
+            
+            // 後片付け（メモリ解放と要素削除を少し遅らせる）
+            setTimeout(() => {
+                URL.revokeObjectURL(dataUrl);
+                downloadAnchor.remove();
+            }, 300);
+        } catch (error) {
+            alert("書き出し処理中にエラーが発生しました: " + error.message);
+        }
     }
 
     function importRecords(event) {
