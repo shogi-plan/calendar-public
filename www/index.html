@@ -532,15 +532,10 @@
         }
     }
 
-    /* 🛠️ 修正・改善箇所：エクスポート時にアンカーをDOMツリーへ明示的に挿入し、確実なクリックイベントの伝搬とタイミングを制御するよう修正 */
+    /* 🛠️ 修正箇所：データ数が0のときでも安全に動作させ、スマホ環境でも確実にダウンロードリンクをキックするよう処理を最適化 */
     function exportRecords() {
-        if (records.length === 0) {
-            alert("保存する記録がまだありません。");
-            return;
-        }
-        
         try {
-            // JSONデータをBlobオブジェクトに変換
+            // JSONデータをBlobオブジェクトに変換（recordsが空配列 [] の場合でもそのままファイル化する）
             const jsonString = JSON.stringify(records, null, 2);
             const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
             
@@ -564,7 +559,7 @@
             downloadAnchor.href = dataUrl;
             downloadAnchor.download = `study_records_backup_${today}.json`;
             
-            // iOS等の一部の環境で、DOMに追加されていない要素のclick()が無視される問題を回避
+            // iOS等の一部の環境で、DOMに追加されていない要素のclick()が無視される問題を回避するために画面外に不可視で追加
             downloadAnchor.style.display = 'none';
             document.body.appendChild(downloadAnchor);
             
