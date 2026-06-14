@@ -532,65 +532,46 @@
         }
     }
 
-    /* 変更点：Android WebView(Capacitor)環境で確実に動くよう、テキスト共有及びクリップボードコピーへ処理を変更 */
-    function exportRecords() {
+    /* 変更点：CapacitorのネイティブFilesystemプラグインを使用して、AndroidのドキュメントフォルダへJSONファイルを保存する */
+    async function exportRecords() {
         try {
             const jsonString = JSON.stringify(records, null, 2);
-            
-            // 1. Androidネイティブ共有 (Web Share API - テキスト送信)
-            // ファイルではなくテキスト型にすることで、Capacitor標準のWebViewでもOSの共有メニューが確実に起動します。
-            if (navigator.share) {
-                navigator.share({
-                    title: '学習・読書管理ツール バックアップデータ',
-                    text: jsonString
-                }).then(() => {
-                    // 成功時はここで終了
-                    return;
-                }).catch((err) => {
-                    // ユーザーキャンセル(AbortError)以外はクリップボード処理に流す
-                    if (err.name !== 'AbortError') {
-                        fallbackCopyToClipboard(jsonString);
-                    }
+            const today = getTodayDateString();
+            const filename = `study_records_backup_${today}.json`;
+
+            // CapacitorのFilesystemプラグインが読み込まれているかチェック
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
+                const Filesystem = window.Capacitor.Plugins.Filesystem;
+                
+                // Androidの「ドキュメント(Documents)」フォルダにファイルを直接書き出す
+                await Filesystem.writeFile({
+                    path: filename,
+                    data: jsonString,
+                    directory: 'DOCUMENTS',
+                    encoding: 'utf8'
                 });
+
+                alert(`【保存成功】\nスマホの「ドキュメント」フォルダに、ファイル名「${filename}」でJSONファイルを保存しました！`);
                 return;
             }
 
-            // 2. Web Share APIが使えない場合のフォールバック (クリップボードコピー)
-            fallbackCopyToClipboard(jsonString);
+            // 万が一、通常のブラウザ環境などで動かした場合の従来のダウンロードフォールバック
+            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
+            const dataUrl = URL.createObjectURL(blob);
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.href = dataUrl;
+            downloadAnchor.download = filename;
+            downloadAnchor.style.display = 'none';
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            setTimeout(() => {
+                URL.revokeObjectURL(dataUrl);
+                downloadAnchor.remove();
+            }, 300);
 
         } catch (error) {
             alert("書き出し処理中にエラーが発生しました: " + error.message);
         }
-    }
-
-    /* 追加：確実にデータを退避させるためのクリップボードコピー関数 */
-    function fallbackCopyToClipboard(textData) {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(textData).then(() => {
-                alert("データの書き出し情報をクリップボードにコピーしました！\nメモ帳などに貼り付けてjson形式で保存してください。");
-            }).catch(() => {
-                oldFashionedCopy(textData);
-            });
-        } else {
-            oldFashionedCopy(textData);
-        }
-    }
-
-    /* 追加：古いWebViewバージョンでも動作する全世代対応のコピー処理 */
-    function oldFashionedCopy(textData) {
-        const textArea = document.createElement("textarea");
-        textArea.value = textData;
-        textArea.style.position = "fixed";  // 画面の外に配置
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-            document.execCommand('copy');
-            alert("【アプリ環境用通知】\nデータの書き出しテキストをクリップボードにコピーしました！\nメールやメモ帳アプリに貼り付けて保存（バックアップ）してください。");
-        } catch (err) {
-            alert("データの書き出しに失敗しました。お使いの端末設定を確認してください。");
-        }
-        document.body.removeChild(textArea);
     }
 
     function importRecords(event) {
