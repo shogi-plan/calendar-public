@@ -513,19 +513,19 @@
         }
     }
 
-    /* 変更点：新しいFilePickerプラグインを使い、Androidネイティブの「フォルダ選択＆ファイル保存」インテントを確実に起動 */
+    /* 変更点：Capacitor v5 環境に合わせて writeFile メソッドを使用し、プラグインの参照方法を安全に書き換え */
     async function exportRecords() {
         const jsonString = JSON.stringify(records, null, 2);
         const today = getTodayDateString();
         const filename = `study_records_backup_${today}.json`;
 
         try {
-            // Capacitor環境かつFilePickerプラグインが読み込まれている場合
+            // Capacitor環境かつFilePickerプラグインが存在する場合
             if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FilePicker) {
                 const FilePicker = window.Capacitor.Plugins.FilePicker;
                 
-                // Androidのストレージシステムを直接呼び出し、保存ダイアログを起動
-                await FilePicker.saveFile({
+                // Capacitor v5では「saveFile」ではなく「writeFile」メソッドを使用します
+                await FilePicker.writeFile({
                     file: {
                         data: btoa(unescape(encodeURIComponent(jsonString))), // 日本語文字化けを防ぐBase64エンコード
                         name: filename,
