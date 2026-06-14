@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学習・読書管理ツール</title>
     <style>
-        /* スマートフォンでの左右余白を安全に保つため、全体にbox-sizingを適用 */
+        /* 変更点：スマートフォンでの左右余白を安全に保つため、bodyのpaddingを調整し、全体にbox-sizingを適用 */
         * { box-sizing: border-box; }
         body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; padding: 15px 10px; background-color: #f0f8ff; color: #333; margin: 0; }
         .container { max-width: 600px; width: 100%; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
@@ -14,7 +14,7 @@
         .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; }
         h2 { margin: 0; color: #2c3e50; font-size: 1.4em; flex-grow: 1; text-align: center; padding-left: 34px; }
         
-        /* 設定アイコンボタン */
+        /* 小さな設定アイコンボタン */
         .btn-settings { background: none; border: none; font-size: 1.2em; cursor: pointer; padding: 5px; border-radius: 6px; transition: 0.2s; color: #888; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .btn-settings:hover { background-color: #f0f0f0; color: #333; }
 
@@ -25,8 +25,8 @@
         .btn-export, .btn-import-trigger { background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; flex: 1; min-width: 140px; text-align: center; }
         .btn-export:hover, .btn-import-trigger:hover { background: #5a6268; }
         input[type="file"] { display: none; }
-
-        /* 目標時間設定エリアのスタイル */
+        
+        /* 追加：目標時間設定エリアのスタイル */
         .goal-settings-box { border-top: 1px dashed #ccc; padding-top: 12px; margin-top: 5px; }
         .goal-settings-grid { display: flex; flex-direction: column; gap: 10px; }
         .goal-group { background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #e0e0e0; }
@@ -44,14 +44,13 @@
         .btn-today { background-color: #1890ff; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: bold; flex-shrink: 0; }
         .btn-today:hover { background-color: #40a9ff; }
 
-        /* 集計エリア */
         .summary { display: flex; justify-content: space-around; background: #f8f9fa; padding: 15px 10px; border-radius: 12px; margin-bottom: 25px; border: 2px solid #e9ecef; gap: 5px; }
         .summary-box { text-align: center; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
         .summary-label { display: block; font-size: 0.8em; color: #666; margin-bottom: 5px; white-space: nowrap; }
-        .summary-time { font-size: 1.1em; font-weight: bold; color: #2196f3; display: block; text-align: center; width: 100%; }
+        .summary-time { font-size: 1.1em; font-weight: bold; color: #2196f3; block-size: auto; display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 2px; }
         .read-color { color: #ff9800; }
         
-        /* 目標達成バッジ */
+        /* 追加：目標達成バッジのスタイル */
         .achieved-badge { font-size: 0.7em; color: white; background: #ff4d4f; padding: 2px 6px; border-radius: 20px; font-weight: bold; margin-top: 3px; animation: pop 0.3s ease-out; display: block; width: max-content; }
         .achieved-badge.read-badge { background: #ff9800; }
         @keyframes pop {
@@ -67,6 +66,7 @@
         
         .time-box { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; }
         .time-input-container { display: flex; align-items: center; gap: 8px; width: 100%; }
+        /* 変更点：入力欄を伸ばし、ボタンの縮みを防ぐ */
         .time-input-container input[type="time"] { margin-bottom: 0; flex-grow: 1; }
         .btn-stamp { background-color: #3498db; color: white; border: none; padding: 10px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; font-size: 0.9em; flex-shrink: 0; }
         .btn-stamp:hover { background-color: #2980b9; }
@@ -84,6 +84,7 @@
         .record-duration { font-size: 0.85em; color: #888; }
         
         .manual-mark { color: #f44336; font-size: 0.9em; margin-left: 2px; font-weight: bold; cursor: help; }
+
         .btn-delete-item { background: none; border: 1px solid #ff4d4f; color: #ff4d4f; border-radius: 50%; width: 24px; height: 24px; line-height: 20px; text-align: center; cursor: pointer; font-size: 14px; font-weight: bold; transition: 0.2s; margin-left: 10px; flex-shrink: 0; }
         .btn-delete-item:hover { background: #ff4d4f; color: white; }
 
@@ -92,6 +93,7 @@
         .analytics-title { font-size: 1.05em; font-weight: bold; color: #2c3e50; margin-bottom: 15px; }
         
         .chart-container { display: flex; flex-direction: column; gap: 12px; background: white; padding: 15px 10px; border-radius: 8px; border: 1px solid #e8e8e8; margin-bottom: 20px; }
+        /* 変更点：小さなスマホ画面でも崩れないようラベルと値の配置比率を調整 */
         .chart-row { display: flex; align-items: center; font-size: 0.8em; width: 100%; }
         .chart-label { width: 70px; font-weight: bold; color: #555; flex-shrink: 0; }
         
@@ -99,6 +101,7 @@
         .chart-bar-fill { height: 100%; width: 0%; border-radius: 4px; transition: width 0.5s ease-out; display: flex; align-items: center; justify-content: flex-end; padding-right: 5px; }
         .chart-bar-fill.study { background: linear-gradient(90deg, #69c0ff, #1890ff); }
         .chart-bar-fill.read { background: linear-gradient(90deg, #ffc069, #fa8c16); }
+        /* 変更点：固定幅をなくし、柔軟に最大幅を確保してはみ出しを防止 */
         .chart-value { font-size: 0.85em; font-weight: bold; color: #555; width: auto; min-width: 65px; text-align: right; white-space: nowrap; flex-shrink: 0; }
 
         /* 週ごとのグループ枠 */
@@ -107,12 +110,17 @@
         .week-title-text { font-size: 0.85em; font-weight: bold; color: #1890ff; flex-shrink: 0; }
         .week-summary-text { font-size: 0.8em; font-weight: bold; color: #555; text-align: right; }
         
+        /* 変更点：スマホ対応のフレックスレイアウトへの変更（横幅オーバーの完全解消） */
         .history-card { background: #fff; border: 1px solid #f0f0f0; border-radius: 6px; padding: 10px 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 5px; width: 100%; }
         .history-card:last-child { margin-bottom: 0; }
         
+        /* 変更点：日付幅を少しコンパクトにして縮み防止 */
         .history-date { font-weight: bold; color: #555; font-size: 0.85em; width: 65px; flex-shrink: 0; }
+        
+        /* 変更点：右側エリアをイコール比率配分に切り替え */
         .history-totals { display: flex; gap: 6px; font-size: 0.8em; font-weight: bold; flex-grow: 1; justify-content: flex-end; min-width: 0; }
         
+        /* 変更点：固定幅を％（各48%程度）に変更し、文字サイズを少し縮小して狭い画面での突っ張りを解消 */
         .history-study-tag, .history-read-tag { width: 48%; max-width: 100px; text-align: center; display: inline-block; padding: 4px 2px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9em; flex-shrink: 1; }
         .history-study-tag { color: #1890ff; background: #e6f7ff; }
         .history-read-tag { color: #fa8c16; background: #fff7e6; }
@@ -253,13 +261,19 @@
 </div>
 
 <script>
-    // グローバル変数の定義（関数の外側）
-    let records = [];
+    let records = JSON.parse(localStorage.getItem('studyRecords')) || [];
     let isStartManual = false;
     let isEndManual = false;
-    let goals = { weekdayStudy: 60, weekdayRead: 30, weekendStudy: 60, weekendRead: 30 };
 
-    // すべての関数をHTMLのonclickから見えるようにトップレベルで定義
+    // 追加：目標設定用の初期状態オブジェクト
+    let defaultGoals = {
+        weekdayStudy: 60,
+        weekdayRead: 30,
+        weekendStudy: 60,
+        weekendRead: 30
+    };
+    let goals = JSON.parse(localStorage.getItem('studyGoals')) || defaultGoals;
+
     function getTodayDateString() {
         const now = new Date();
         const y = now.getFullYear();
@@ -286,7 +300,6 @@
 
     function saveInputState() {
         const selectedDate = document.getElementById('current-date').value;
-        if (!selectedDate) return;
         const state = {
             type: document.getElementById('type').value,
             startTime: document.getElementById('start-time').value,
@@ -299,7 +312,6 @@
 
     function loadInputState() {
         const selectedDate = document.getElementById('current-date').value;
-        if (!selectedDate) return;
         const state = JSON.parse(localStorage.getItem('studyInputState_' + selectedDate));
         if (state) {
             document.getElementById('type').value = state.type || 'study';
@@ -318,7 +330,6 @@
 
     function clearInputState() {
         const selectedDate = document.getElementById('current-date').value;
-        if (!selectedDate) return;
         localStorage.removeItem('studyInputState_' + selectedDate);
         isStartManual = false;
         isEndManual = false;
@@ -328,7 +339,6 @@
 
     function stampTime(target) {
         const timeInput = document.getElementById(target + '-time');
-        if (!timeInput) return;
         timeInput.value = getCurrentTime();
         if (target === 'start') isStartManual = false;
         if (target === 'end') isEndManual = false;
@@ -346,6 +356,7 @@
         render();
     }
 
+    // 追加：目標設定値を読み込んで入力欄にセットする
     function loadGoals() {
         document.getElementById('goal-weekday-study').value = goals.weekdayStudy;
         document.getElementById('goal-weekday-read').value = goals.weekdayRead;
@@ -353,6 +364,7 @@
         document.getElementById('goal-weekend-read').value = goals.weekendRead;
     }
 
+    // 追加：入力された目標設定値を保存して再描画する
     function saveGoals() {
         goals.weekdayStudy = Math.max(0, Number(document.getElementById('goal-weekday-study').value) || 0);
         goals.weekdayRead = Math.max(0, Number(document.getElementById('goal-weekday-read').value) || 0);
@@ -362,31 +374,35 @@
         render();
     }
 
+    // 追加：日本の国民の祝日・振替休日を判定する簡易関数
     function isJapaneseHoliday(dateObj) {
         const y = dateObj.getFullYear();
         const m = dateObj.getMonth() + 1;
         const d = dateObj.getDate();
         const w = dateObj.getDay();
 
-        if (m === 1 && d === 1) return true;
-        if (m === 2 && d === 11) return true;
-        if (m === 2 && d === 23) return true;
-        if (m === 4 && d === 29) return true;
-        if (m === 5 && d === 3) return true;
-        if (m === 5 && d === 4) return true;
-        if (m === 5 && d === 5) return true;
-        if (m === 8 && d === 11) return true;
-        if (m === 11 && d === 3) return true;
-        if (m === 11 && d === 23) return true;
+        // 固定祝日
+        if (m === 1 && d === 1) return true;  // 元日
+        if (m === 2 && d === 11) return true; // 建国記念の日
+        if (m === 2 && d === 23) return true; // 天皇誕生日
+        if (m === 4 && d === 29) return true; // 昭和の日
+        if (m === 5 && d === 3) return true;  // 憲法記念日
+        if (m === 5 && d === 4) return true;  // みどりの日
+        if (m === 5 && d === 5) return true;  // こどもの日
+        if (m === 8 && d === 11) return true; // 山の日
+        if (m === 11 && d === 3) return true; // 文化の日
+        if (m === 11 && d === 23) return true;// 勤労感謝の日
 
+        // ハッピーマンデー（第何月曜日）
         const nthMonday = Math.floor((d - 1) / 7) + 1;
         if (w === 1) {
-            if (m === 1 && nthMonday === 2) return true;
-            if (m === 7 && nthMonday === 3) return true;
-            if (m === 9 && nthMonday === 3) return true;
-            if (m === 10 && nthMonday === 2) return true;
+            if (m === 1 && nthMonday === 2) return true;  // 成人の日 (第2月曜)
+            if (m === 7 && nthMonday === 3) return true;  // 海の日 (第3月曜)
+            if (m === 9 && nthMonday === 3) return true;  // 敬老の日 (第3月曜)
+            if (m === 10 && nthMonday === 2) return true; // スポーツの日 (第2月曜)
         }
 
+        // 春分の日・秋分の日（簡易計算式：2000年〜2099年対応）
         if (m === 3) {
             const springEquinox = Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
             if (d === springEquinox) return true;
@@ -396,18 +412,24 @@
             if (d === autumnEquinox) return true;
         }
 
+        // 振替休日の判定 (日曜が祝日の場合、翌月曜以降の最も近い平日が休みになる)
+        // 簡易的に「前日が祝日かつ本日が月曜」の場合をカバー
         if (w === 1) {
-            const prevDate = new Date(dateObj.getTime());
+            const prevDate = new Date(dateObj);
             prevDate.setDate(d - 1);
             if (isJapaneseHoliday(prevDate)) return true;
         }
+
         return false;
     }
 
+    // 追加：指定した日付が「土日祝日」か「平日」かを返す関数
     function getDayType(dateStr) {
         const parts = dateStr.split('-');
         const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
         const day = dateObj.getDay();
+        
+        // 土曜(6)、日曜(0)、または祝日の場合は休日（週末扱い）
         if (day === 0 || day === 6 || isJapaneseHoliday(dateObj)) {
             return 'weekend';
         }
@@ -420,8 +442,15 @@
         const start = document.getElementById('start-time').value;
         const end = document.getElementById('end-time').value;
 
-        if (!selectedDate) { alert("日付を選んでください"); return; }
-        if (!start || !end) { alert("時間を入力してください"); return; }
+        if (!selectedDate) {
+            alert("日付を選んでください");
+            return;
+        }
+
+        if (!start || !end) {
+            alert("時間を入力してください");
+            return;
+        }
 
         const now = new Date();
         const inputStartDateTime = new Date(`${selectedDate}T${start}`);
@@ -477,6 +506,13 @@
         return totalMinutes;
     }
 
+    function calculateTotal(type, selectedDate) {
+        const totalMinutes = calculateTotalMinutes(type, selectedDate);
+        const h = Math.floor(totalMinutes / 60);
+        const m = totalMinutes % 60;
+        return `${h}時間 ${m}分`;
+    }
+
     function formatMinutes(totalMinutes) {
         const h = Math.floor(totalMinutes / 60);
         const m = totalMinutes % 60;
@@ -486,41 +522,55 @@
     function toggleSettings() {
         const panel = document.getElementById('settings-panel');
         const btn = document.getElementById('toggle-settings-btn');
-        if (!panel || !btn) return;
         if (panel.style.display === 'block') {
             panel.style.display = 'none';
             btn.style.backgroundColor = 'transparent';
         } else {
             panel.style.display = 'block';
             btn.style.backgroundColor = '#e0e0e0';
-            loadGoals();
+            loadGoals(); // パネルを開いた安全なタイミングで最新設定値を反映
         }
     }
 
-    function exportRecords() {
+    /* 変更点：CapacitorのネイティブFilesystemプラグインを使用して、AndroidのドキュメントフォルダへJSONファイルを保存する */
+    async function exportRecords() {
         try {
-            const dataToExport = records ? records : [];
-            const jsonString = JSON.stringify(dataToExport, null, 2);
+            const jsonString = JSON.stringify(records, null, 2);
             const today = getTodayDateString();
             const filename = `study_records_backup_${today}.json`;
 
+            // CapacitorのFilesystemプラグインが読み込まれているかチェック
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
+                const Filesystem = window.Capacitor.Plugins.Filesystem;
+                
+                // Androidの「ドキュメント(Documents)」フォルダにファイルを直接書き出す
+                await Filesystem.writeFile({
+                    path: filename,
+                    data: jsonString,
+                    directory: 'DOCUMENTS',
+                    encoding: 'utf8'
+                });
+
+                alert(`【保存成功】\nスマホの「ドキュメント」フォルダに、ファイル名「${filename}」でJSONファイルを保存しました！`);
+                return;
+            }
+
+            // 万が一、通常のブラウザ環境などで動かした場合の従来のダウンロードフォールバック
             const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
             const dataUrl = URL.createObjectURL(blob);
-            
             const downloadAnchor = document.createElement('a');
             downloadAnchor.href = dataUrl;
             downloadAnchor.download = filename;
             downloadAnchor.style.display = 'none';
-            
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
-            
             setTimeout(() => {
                 URL.revokeObjectURL(dataUrl);
                 downloadAnchor.remove();
             }, 300);
+
         } catch (error) {
-            alert("データの書き出しに失敗しました: " + error.message);
+            alert("書き出し処理中にエラーが発生しました: " + error.message);
         }
     }
 
@@ -570,12 +620,12 @@
         const currentDay = baseDate.getDay();
         const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
         
-        const monday = new Date(baseDate.getTime());
+        const monday = new Date(baseDate);
         monday.setDate(baseDate.getDate() - distanceToMonday);
 
         const weekDates = [];
         for (let i = 0; i < 7; i++) {
-            const d = new Date(monday.getTime());
+            const d = new Date(monday);
             d.setDate(monday.getDate() + i);
             const yStr = d.getFullYear();
             const mStr = (d.getMonth() + 1).toString().padStart(2, '0');
@@ -626,8 +676,6 @@
 
     function render() {
         const selectedDate = document.getElementById('current-date').value;
-        if (!selectedDate) return;
-        
         loadInputState();
 
         const listTitle = document.getElementById('list-title');
@@ -708,6 +756,7 @@
         document.getElementById('val-last-study').innerText = formatMinutes(analytics.lastStudy);
         document.getElementById('val-this-study').innerText = formatMinutes(analytics.thisStudy);
         document.getElementById('val-last-read').innerText = formatMinutes(analytics.lastRead);
+        
         document.getElementById('val-this-read').innerText = formatMinutes(analytics.thisRead);
 
         const historyList = document.getElementById('history-list');
@@ -774,17 +823,9 @@
         }
     }
 
-    // ページの初期起動処理を安全に実行
-    try {
-        records = JSON.parse(localStorage.getItem('studyRecords')) || [];
-        const savedGoals = JSON.parse(localStorage.getItem('studyGoals'));
-        if (savedGoals) goals = savedGoals;
-
-        document.getElementById('current-date').value = getTodayDateString();
-        render();
-    } catch (e) {
-        alert("データの読み込みエラーが発生しました: " + e.message);
-    }
+    // 初期起動時の処理
+    document.getElementById('current-date').value = getTodayDateString();
+    render();
 </script>
 
 </body>
