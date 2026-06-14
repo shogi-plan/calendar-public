@@ -532,19 +532,33 @@
         }
     }
 
+    /* 🛠️ 変更箇所：スマートフォン環境でも確実にダウンロードできるようにBlob形式に変更 */
     function exportRecords() {
         if (records.length === 0) {
             alert("保存する記録がまだありません。");
             return;
         }
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(records, null, 2));
+        
+        // JSONデータをBlobオブジェクトに変換
+        const jsonString = JSON.stringify(records, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
+        
+        // 安全なオブジェクトURLを発行
+        const dataUrl = URL.createObjectURL(blob);
+        
         const downloadAnchor = document.createElement('a');
         const today = getTodayDateString();
-        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("href", dataUrl);
         downloadAnchor.setAttribute("download", `study_records_backup_${today}.json`);
+        
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
-        downloadAnchor.remove();
+        
+        // 後片付け（メモリ解放と要素削除）
+        setTimeout(() => {
+            URL.revokeObjectURL(dataUrl);
+            downloadAnchor.remove();
+        }, 100);
     }
 
     function importRecords(event) {
@@ -733,7 +747,9 @@
         document.getElementById('val-last-study').innerText = formatMinutes(analytics.lastStudy);
         document.getElementById('val-this-study').innerText = formatMinutes(analytics.thisStudy);
         document.getElementById('val-last-read').innerText = formatMinutes(analytics.lastRead);
-        document.getElementById('val-this-read').innerText = formatMinutes(analytics.thisStudy);
+        
+        /* 🛠️ 変更箇所：修正前は間違えて analytics.thisStudy になっていた部分を 正しく thisRead に修正 */
+        document.getElementById('val-this-read').innerText = formatMinutes(analytics.thisRead);
 
         const historyList = document.getElementById('history-list');
         historyList.innerHTML = '';
