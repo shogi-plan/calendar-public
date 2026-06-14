@@ -21,11 +21,22 @@
         /* エクスポート・インポートの格納パネル */
         .settings-panel { display: none; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-size: 0.85em; }
         .settings-title { font-weight: bold; margin-bottom: 10px; color: #555; display: flex; align-items: center; gap: 5px; }
-        .settings-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        .settings-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 15px; }
         .btn-export, .btn-import-trigger { background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; flex: 1; min-width: 140px; text-align: center; }
         .btn-export:hover, .btn-import-trigger:hover { background: #5a6268; }
         input[type="file"] { display: none; }
         
+        /* 追加：目標時間設定エリアのスタイル */
+        .goal-settings-box { border-top: 1px dashed #ccc; padding-top: 12px; margin-top: 5px; }
+        .goal-settings-grid { display: flex; flex-direction: column; gap: 10px; }
+        .goal-group { background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #e0e0e0; }
+        .goal-group-title { font-weight: bold; color: #2196f3; margin-bottom: 8px; font-size: 0.95em; }
+        .goal-group-title.weekend { color: #ff9800; }
+        .goal-inputs { display: flex; gap: 10px; }
+        .goal-input-wrapper { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+        .goal-input-wrapper label { font-size: 0.8em; color: #666; }
+        .goal-input-wrapper input { padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em; width: 100%; text-align: center; }
+
         /* 日付選択エリアのスタイル */
         .date-select-group { background: #e6f7ff; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #91d5ff; display: flex; flex-direction: column; gap: 8px; }
         .date-row { display: flex; align-items: center; gap: 10px; width: 100%; }
@@ -34,10 +45,18 @@
         .btn-today:hover { background-color: #40a9ff; }
 
         .summary { display: flex; justify-content: space-around; background: #f8f9fa; padding: 15px 10px; border-radius: 12px; margin-bottom: 25px; border: 2px solid #e9ecef; gap: 5px; }
-        .summary-box { text-align: center; flex: 1; }
+        .summary-box { text-align: center; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
         .summary-label { display: block; font-size: 0.8em; color: #666; margin-bottom: 5px; white-space: nowrap; }
-        .summary-time { font-size: 1.1em; font-weight: bold; color: #2196f3; block-size: auto; }
+        .summary-time { font-size: 1.1em; font-weight: bold; color: #2196f3; block-size: auto; display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 2px; }
         .read-color { color: #ff9800; }
+        
+        /* 追加：目標達成バッジのスタイル */
+        .achieved-badge { font-size: 0.7em; color: white; background: #ff4d4f; padding: 2px 6px; border-radius: 20px; font-weight: bold; margin-top: 3px; animation: pop 0.3s ease-out; display: block; width: max-content; }
+        .achieved-badge.read-badge { background: #ff9800; }
+        @keyframes pop {
+            0% { transform: scale(0.6); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
 
         .input-group { background: #fffbe6; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px dashed #ffd666; }
         .control-row { margin-bottom: 15px; }
@@ -124,6 +143,38 @@
             <button class="btn-import-trigger" onclick="document.getElementById('import-file').click()">データをとりこむ（読み込み）</button>
             <input type="file" id="import-file" accept=".json" onchange="importRecords(event)">
         </div>
+        
+        <div class="goal-settings-box">
+            <div class="settings-title">🎯 もくひょう時間の設定（分単位）</div>
+            <div class="goal-settings-grid">
+                <div class="goal-group">
+                    <div class="goal-group-title">📅 平日（月～金）</div>
+                    <div class="goal-inputs">
+                        <div class="goal-input-wrapper">
+                            <label>📝 べんきょう</label>
+                            <input type="number" id="goal-weekday-study" min="0" onchange="saveGoals()">
+                        </div>
+                        <div class="goal-input-wrapper">
+                            <label>📚 どくしょ</label>
+                            <input type="number" id="goal-weekday-read" min="0" onchange="saveGoals()">
+                        </div>
+                    </div>
+                </div>
+                <div class="goal-group">
+                    <div class="goal-group-title weekend">🎉 土日祝日</div>
+                    <div class="goal-inputs">
+                        <div class="goal-input-wrapper">
+                            <label>📝 べんきょう</label>
+                            <input type="number" id="goal-weekend-study" min="0" onchange="saveGoals()">
+                        </div>
+                        <div class="goal-input-wrapper">
+                            <label>📚 どくしょ</label>
+                            <input type="number" id="goal-weekend-read" min="0" onchange="saveGoals()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="date-select-group">
@@ -138,10 +189,12 @@
         <div class="summary-box">
             <span class="summary-label">📝 べんきょう合計</span>
             <span id="study-total" class="summary-time">0時間 0分</span>
+            <span id="study-achieved" class="achieved-badge" style="display: none;">🔥目標達成！🎉</span>
         </div>
         <div class="summary-box">
             <span class="summary-label">📚 どくしょ合計</span>
             <span id="read-total" class="summary-time read-color">0時間 0分</span>
+            <span id="read-achieved" class="achieved-badge read-badge" style="display: none;">🔥目標達成！🎉</span>
         </div>
     </div>
 
@@ -211,6 +264,15 @@
     let records = JSON.parse(localStorage.getItem('studyRecords')) || [];
     let isStartManual = false;
     let isEndManual = false;
+
+    // 追加：目標設定用の初期状態オブジェクト
+    let defaultGoals = {
+        weekdayStudy: 60,
+        weekdayRead: 30,
+        weekendStudy: 60,
+        weekendRead: 30
+    };
+    let goals = JSON.parse(localStorage.getItem('studyGoals')) || defaultGoals;
 
     function getTodayDateString() {
         const now = new Date();
@@ -294,6 +356,86 @@
         render();
     }
 
+    // 追加：目標設定値を読み込んで入力欄にセットする
+    function loadGoals() {
+        document.getElementById('goal-weekday-study').value = goals.weekdayStudy;
+        document.getElementById('goal-weekday-read').value = goals.weekdayRead;
+        document.getElementById('goal-weekend-study').value = goals.weekendStudy;
+        document.getElementById('goal-weekend-read').value = goals.weekendRead;
+    }
+
+    // 追加：入力された目標設定値を保存して再描画する
+    function saveGoals() {
+        goals.weekdayStudy = Math.max(0, Number(document.getElementById('goal-weekday-study').value) || 0);
+        goals.weekdayRead = Math.max(0, Number(document.getElementById('goal-weekday-read').value) || 0);
+        goals.weekendStudy = Math.max(0, Number(document.getElementById('goal-weekend-study').value) || 0);
+        goals.weekendRead = Math.max(0, Number(document.getElementById('goal-weekend-read').value) || 0);
+        localStorage.setItem('studyGoals', JSON.stringify(goals));
+        render();
+    }
+
+    // 追加：日本の国民の祝日・振替休日を判定する簡易関数
+    function isJapaneseHoliday(dateObj) {
+        const y = dateObj.getFullYear();
+        const m = dateObj.getMonth() + 1;
+        const d = dateObj.getDate();
+        const w = dateObj.getDay();
+
+        // 固定祝日
+        if (m === 1 && d === 1) return true;  // 元日
+        if (m === 2 && d === 11) return true; // 建国記念の日
+        if (m === 2 && d === 23) return true; // 天皇誕生日
+        if (m === 4 && d === 29) return true; // 昭和の日
+        if (m === 5 && d === 3) return true;  // 憲法記念日
+        if (m === 5 && d === 4) return true;  // みどりの日
+        if (m === 5 && d === 5) return true;  // こどもの日
+        if (m === 8 && d === 11) return true; // 山の日
+        if (m === 11 && d === 3) return true; // 文化の日
+        if (m === 11 && d === 23) return true;// 勤労感謝の日
+
+        // ハッピーマンデー（第何月曜日）
+        const nthMonday = Math.floor((d - 1) / 7) + 1;
+        if (w === 1) {
+            if (m === 1 && nthMonday === 2) return true;  // 成人の日 (第2月曜)
+            if (m === 7 && nthMonday === 3) return true;  // 海の日 (第3月曜)
+            if (m === 9 && nthMonday === 3) return true;  // 敬老の日 (第3月曜)
+            if (m === 10 && nthMonday === 2) return true; // スポーツの日 (第2月曜)
+        }
+
+        // 春分の日・秋分の日（簡易計算式：2000年〜2099年対応）
+        if (m === 3) {
+            const springEquinox = Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+            if (d === springEquinox) return true;
+        }
+        if (m === 9) {
+            const autumnEquinox = Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+            if (d === autumnEquinox) return true;
+        }
+
+        // 振替休日の判定 (日曜が祝日の場合、翌月曜以降の最も近い平日が休みになる)
+        // 簡易的に「前日が祝日かつ本日が月曜」の場合をカバー
+        if (w === 1) {
+            const prevDate = new Date(dateObj);
+            prevDate.setDate(d - 1);
+            if (isJapaneseHoliday(prevDate)) return true;
+        }
+
+        return false;
+    }
+
+    // 追加：指定した日付が「土日祝日」か「平日」かを返す関数
+    function getDayType(dateStr) {
+        const parts = dateStr.split('-');
+        const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
+        const day = dateObj.getDay();
+        
+        // 土曜(6)、日曜(0)、または祝日の場合は休日（週末扱い）
+        if (day === 0 || day === 6 || isJapaneseHoliday(dateObj)) {
+            return 'weekend';
+        }
+        return 'weekday';
+    }
+
     function addRecord() {
         const selectedDate = document.getElementById('current-date').value;
         const type = document.getElementById('type').value;
@@ -354,13 +496,18 @@
         }
     }
 
-    function calculateTotal(type, selectedDate) {
+    function calculateTotalMinutes(type, selectedDate) {
         let totalMinutes = 0;
         records.filter(r => r.type === type && r.date === selectedDate).forEach(r => {
             const [sh, sm] = r.start.split(':').map(Number);
             const [eh, em] = r.end.split(':').map(Number);
             totalMinutes += (eh * 60 + em) - (sh * 60 + sm);
         });
+        return totalMinutes;
+    }
+
+    function calculateTotal(type, selectedDate) {
+        const totalMinutes = calculateTotalMinutes(type, selectedDate);
         const h = Math.floor(totalMinutes / 60);
         const m = totalMinutes % 60;
         return `${h}時間 ${m}分`;
@@ -381,6 +528,7 @@
         } else {
             panel.style.display = 'block';
             btn.style.backgroundColor = '#e0e0e0';
+            loadGoals(); // 追加：パネルを開いたタイミングで最新設定値を反映
         }
     }
 
@@ -541,8 +689,31 @@
             list.appendChild(div);
         });
 
-        document.getElementById('study-total').innerText = calculateTotal('study', selectedDate);
-        document.getElementById('read-total').innerText = calculateTotal('read', selectedDate);
+        // 変更箇所：分単位での集計値取得と、目標達成バッジの出し分け処理
+        const currentStudyMinutes = calculateTotalMinutes('study', selectedDate);
+        const currentReadMinutes = calculateTotalMinutes('read', selectedDate);
+
+        document.getElementById('study-total').innerText = formatMinutes(currentStudyMinutes);
+        document.getElementById('read-total').innerText = formatMinutes(currentReadMinutes);
+
+        // 追加：選択日の種類（平日・休日）に応じて、判定に使用する目標時間を決定
+        const dayType = getDayType(selectedDate);
+        const targetStudyGoal = (dayType === 'weekend') ? goals.weekendStudy : goals.weekdayStudy;
+        const targetReadGoal = (dayType === 'weekend') ? goals.weekendRead : goals.weekdayRead;
+
+        // 追加：勉強の目標達成判定（1分以上、かつ目標設定時間以上の場合に表示）
+        if (currentStudyMinutes > 0 && currentStudyMinutes >= targetStudyGoal) {
+            document.getElementById('study-achieved').style.display = 'block';
+        } else {
+            document.getElementById('study-achieved').style.display = 'none';
+        }
+
+        // 追加：読書の目標達成判定（1分以上、かつ目標設定時間以上の場合に表示）
+        if (currentReadMinutes > 0 && currentReadMinutes >= targetReadGoal) {
+            document.getElementById('read-achieved').style.display = 'block';
+        } else {
+            document.getElementById('read-achieved').style.display = 'none';
+        }
 
         const analytics = getMonthAnalyticsFromDate(selectedDate);
         
@@ -562,7 +733,7 @@
         document.getElementById('val-last-study').innerText = formatMinutes(analytics.lastStudy);
         document.getElementById('val-this-study').innerText = formatMinutes(analytics.thisStudy);
         document.getElementById('val-last-read').innerText = formatMinutes(analytics.lastRead);
-        document.getElementById('val-this-read').innerText = formatMinutes(analytics.thisRead);
+        document.getElementById('val-this-read').innerText = formatMinutes(analytics.thisStudy);
 
         const historyList = document.getElementById('history-list');
         historyList.innerHTML = '';
@@ -628,7 +799,9 @@
         }
     }
 
+    // 初期起動時の処理
     document.getElementById('current-date').value = getTodayDateString();
+    loadGoals(); // 追加：目標設定値をセット
     render();
 </script>
 
