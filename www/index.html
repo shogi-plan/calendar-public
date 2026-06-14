@@ -25,11 +25,6 @@
         .btn-export, .btn-import-trigger { background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; flex: 1; min-width: 140px; text-align: center; }
         .btn-export:hover, .btn-import-trigger:hover { background: #5a6268; }
         input[type="file"] { display: none; }
-        
-        /* 追加：エラー時・Web環境用のテキスト退避エリアのスタイル */
-        .backup-textbox-area { display: none; margin-top: 15px; background: #fff1f0; border: 1px solid #ffa39e; padding: 12px; border-radius: 8px; }
-        .backup-textbox-area textarea { width: 100%; height: 100px; font-family: monospace; font-size: 0.8em; padding: 5px; margin-bottom: 8px; border: 1px solid #d9d9d9; border-radius: 4px; resize: none; }
-        .btn-copy-all { background: #ff4d4f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
 
         /* 目標時間設定エリアのスタイル */
         .goal-settings-box { border-top: 1px dashed #ccc; padding-top: 12px; margin-top: 5px; }
@@ -139,12 +134,6 @@
             <button class="btn-export" onclick="exportRecords()">データをほぞんする（書き出し）</button>
             <button class="btn-import-trigger" onclick="document.getElementById('import-file').click()">データをとりこむ（読み込み）</button>
             <input type="file" id="import-file" accept=".json" onchange="importRecords(event)">
-        </div>
-
-        <div class="backup-textbox-area" id="backup-box-area">
-            <div style="font-weight: bold; color: #ff4d4f; margin-bottom: 5px; font-size: 0.9em;">⚠️ スマホの保存画面が開けないため、下の文字をぜんぶコピーしてメールやメモ帳に貼り付けて保存してね！</div>
-            <textarea id="backup-textarea" readonly></textarea>
-            <button class="btn-copy-all" onclick="copyBackupText()">コピーする</button>
         </div>
         
         <div class="goal-settings-box">
@@ -524,55 +513,47 @@
         }
     }
 
-    /* 変更点：エラーが起きるFilesystemを捨て、Androidの「共有メニュー（フォルダ保存・ドライブ保存が選択可能）」を発火させる。動かない時は画面にテキストを緊急出力する */
+    /* 変更点：新しいFilePickerプラグインを使い、Androidネイティブの「フォルダ選択＆ファイル保存」インテントを確実に起動 */
     async function exportRecords() {
         const jsonString = JSON.stringify(records, null, 2);
         const today = getTodayDateString();
-        const titleName = `study_records_backup_${today}.txt`;
+        const filename = `study_records_backup_${today}.json`;
 
         try {
-            // Androidアプリ化環境（Capacitor）かつShareプラグインが存在する場合
-            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
-                const Share = window.Capacitor.Plugins.Share;
+            // Capacitor環境かつFilePickerプラグインが読み込まれている場合
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FilePicker) {
+                const FilePicker = window.Capacitor.Plugins.FilePicker;
                 
-                // Androidの共有ポップアップを強制起動（フォルダ保存インテントをここに割り当てさせる）
-                await Share.share({
-                    title: '学習データのバックアップ保存',
-                    text: jsonString,
-                    dialogTitle: '保存先（ファイルに保存など）を選んでね'
+                // Androidのストレージシステムを直接呼び出し、保存ダイアログを起動
+                await FilePicker.saveFile({
+                    file: {
+                        data: btoa(unescape(encodeURIComponent(jsonString))), // 日本語文字化けを防ぐBase64エンコード
+                        name: filename,
+                        mimeType: 'application/json'
+                    }
                 });
+                
+                alert("データをほぞんしました！");
                 return;
             }
 
-            // Webブラウザ用、またはWebAPI標準の共有が使える場合
-            if (navigator.share) {
-                await navigator.share({
-                    title: '学習データのバックアップ保存',
-                    text: jsonString
-                });
-                return;
-            }
-
-            // 上記が全滅、またはブラウザ環境のフォールバック
-            throw new Error("ネイティブ共有がサポートされていません");
+            // 通常のWebブラウザ用フォールバック
+            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
+            const dataUrl = URL.createObjectURL(blob);
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.href = dataUrl;
+            downloadAnchor.download = filename;
+            downloadAnchor.style.display = 'none';
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            setTimeout(() => {
+                URL.revokeObjectURL(dataUrl);
+                downloadAnchor.remove();
+            }, 300);
 
         } catch (error) {
-            // 【超強力な救済策】フォルダ保存が絶対にエラーになる環境だった場合、画面上にコピー窓を出してデータを100%保護する
-            document.getElementById('backup-box-area').style.display = 'block';
-            const txtArea = document.getElementById('backup-textarea');
-            txtArea.value = jsonString;
-            
-            alert("【保存案内】\nシステムの保存画面が開けなかったため、すぐ下に「コピーボタン付きの文字枠」を表示しました！ここから文字をコピーして、スマホのメモ帳等に貼り付けて保存してください。");
+            alert("書き出しに失敗しました: " + error.message);
         }
-    }
-
-    // 追加：文字を一発でクリップボードへ入れる補助関数
-    function copyBackupText() {
-        const txtArea = document.getElementById('backup-textarea');
-        txtArea.select();
-        txtArea.setSelectionRange(0, 99999); // スマホ対応
-        navigator.clipboard.writeText(txtArea.value);
-        alert("コピーしました！メモ帳アプリ等に貼り付けてね。");
     }
 
     function importRecords(event) {
@@ -605,9 +586,6 @@
                     saveAndRender();
                     alert(`${addedCount}件の記録を新しくとりこみました！`);
                     document.getElementById('import-file').value = '';
-                    
-                    // 救済ボックスが開いていた場合は閉じる
-                    document.getElementById('backup-box-area').style.display = 'none';
                     toggleSettings();
                 }
             } catch (err) {
