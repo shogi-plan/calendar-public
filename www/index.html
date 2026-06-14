@@ -513,7 +513,7 @@
         }
     }
 
-    /* 変更点：Capacitor v5 環境に合わせて writeFile メソッドを使用し、プラグインの参照方法を安全に書き換え */
+    /* 変更点：プラグイン内部の関数が未定義（ブラウザ実行時など）でもエラーで落ちないよう、安全な条件判定を追加 */
     async function exportRecords() {
         const jsonString = JSON.stringify(records, null, 2);
         const today = getTodayDateString();
@@ -524,20 +524,24 @@
             if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FilePicker) {
                 const FilePicker = window.Capacitor.Plugins.FilePicker;
                 
-                // Capacitor v5では「saveFile」ではなく「writeFile」メソッドを使用します
-                await FilePicker.writeFile({
-                    file: {
-                        data: btoa(unescape(encodeURIComponent(jsonString))), // 日本語文字化けを防ぐBase64エンコード
-                        name: filename,
-                        mimeType: 'application/json'
-                    }
-                });
-                
-                alert("データをほぞんしました！");
-                return;
+                // 【安全対策】ネイティブ側のメソッドがJavaScriptに正しくバインドされているか厳密にチェック
+                if (typeof FilePicker.writeFile === 'function' || typeof FilePicker.saveFile === 'function') {
+                    const saveMethod = typeof FilePicker.writeFile === 'function' ? FilePicker.writeFile.bind(FilePicker) : FilePicker.saveFile.bind(FilePicker);
+                    
+                    await saveMethod({
+                        file: {
+                            data: btoa(unescape(encodeURIComponent(jsonString))), // 日本語文字化けを防ぐBase64エンコード
+                            name: filename,
+                            mimeType: 'application/json'
+                        }
+                    });
+                    
+                    alert("データをほぞんしました！");
+                    return;
+                }
             }
 
-            // 通常のWebブラウザ用フォールバック
+            // 【通常フォールバック】関数が存在しない場合や、ブラウザ実行時はいつもの標準ダウンロードを動かす
             const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
             const dataUrl = URL.createObjectURL(blob);
             const downloadAnchor = document.createElement('a');
