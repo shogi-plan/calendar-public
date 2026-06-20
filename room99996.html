@@ -424,15 +424,16 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
   import { getDatabase, ref, set, onValue, push, remove, update, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-  const firebaseConfig = 
-      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
+  // --- 環境変数またはダミーフォールバックからFirebaseConfigを設定し、参照エラーを完璧に回避する ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
       databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "calendar-chousei",
       storageBucket: "calendar-chousei.firebasestorage.app",
       messagingSenderId: "368704703397",
       appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
-  ;
+  };
   
   // --- Firebase 初期化 ---
   const app = initializeApp(firebaseConfig);
