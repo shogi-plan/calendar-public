@@ -184,7 +184,7 @@
     /* 持ち駒のスロットと個数表示 */
     .hand-slot {
       width: 100%;
-      aspect-ratio: 878 / 960; /* マスの比率に揃える */
+      aspect-ratio: 1.15 / 1; /* 少し高さを短くする */
       position: relative;
       display: flex;
       align-items: center;
@@ -194,8 +194,14 @@
 
     /* 持ち駒スロット内の駒サイズを盤内(.cell)の駒サイズに合わせる */
     .hand-slot .piece {
-      width: 82%;
-      height: 82%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 82%;
+      max-height: 82%;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 878 / 960; /* 歪みを防ぐためにオリジナルの比率を維持 */
     }
 
     .hand-count {
@@ -424,7 +430,6 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
   import { getDatabase, ref, set, onValue, push, remove, update, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-  // --- 環境変数またはダミーフォールバックからFirebaseConfigを設定し、参照エラーを完璧に回避する ---
   const firebaseConfig = {
     apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
@@ -1557,57 +1562,59 @@
 
       for (let i = 0; i < 9; i++) {
         const type = existingTypes[i];
-        if (!type) continue; 
 
         const slot = document.createElement('div');
         slot.className = 'hand-slot';
         
-        const s = document.createElement('div');
-        s.style.width = "100%";
-        s.style.height = "100%";
-        s.style.display = "flex";
-        s.style.alignItems = "center";
-        s.style.justifyContent = "center";
-        s.style.cursor = "pointer";
-        s.style.position = "relative";
-        
-        const pos = PIECE_POS[type];
-        const bgX = (pos.x / 7) * 100;
-        const bgY = (pos.y / 3) * 100;
+        if (type) {
+          const s = document.createElement('div');
+          s.style.width = "100%";
+          s.style.height = "100%";
+          s.style.display = "flex";
+          s.style.alignItems = "center";
+          s.style.justifyContent = "center";
+          s.style.cursor = "pointer";
+          s.style.position = "relative";
+          
+          const pos = PIECE_POS[type];
+          const bgX = (pos.x / 7) * 100;
+          const bgY = (pos.y / 3) * 100;
 
-        // 手駒は親（手駒エリア）の回転だけで完全に正しい向きになるため、piece要素の個別oppositeクラスは不要です
-        s.innerHTML = `<div class="piece">
-          <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
-        </div>`;
+          // 手駒は親（手駒エリア）の回転だけで完全に正しい向きになるため、piece要素の個別oppositeクラスは不要です
+          s.innerHTML = `<div class="piece">
+            <div class="piece-img" style="background-position: ${bgX.toFixed(10)}% ${bgY.toFixed(10)}%;"></div>
+          </div>`;
 
-        if (counts[type] > 1) {
-          const c = document.createElement('div');
-          c.className = 'hand-count';
-          c.textContent = counts[type];
-          s.appendChild(c);
-        }
-
-        if (selH && selH.type === type && selH.owner === owner) {
-          s.classList.add('selected-piece');
-        }
-
-        const firstIdx = list.indexOf(type);
-        s.onclick = (e) => {
-          e.stopPropagation();
-          if (!isReviewMode) {
-            if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
+          if (counts[type] > 1) {
+            const c = document.createElement('div');
+            c.className = 'hand-count';
+            c.textContent = counts[type];
+            s.appendChild(c);
           }
+
           if (selH && selH.type === type && selH.owner === owner) {
-            selH = null;
-          } else {
-            selH = { type: type, owner, idx: firstIdx };
-            sel = null;
-            possibleMoves = [];
+            s.classList.add('selected-piece');
           }
-          render();
-        };
 
-        slot.appendChild(s);
+          const firstIdx = list.indexOf(type);
+          s.onclick = (e) => {
+            e.stopPropagation();
+            if (!isReviewMode) {
+              if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
+            }
+            if (selH && selH.type === type && selH.owner === owner) {
+              selH = null;
+            } else {
+              selH = { type: type, owner, idx: firstIdx };
+              sel = null;
+              possibleMoves = [];
+            }
+            render();
+          };
+
+          slot.appendChild(s);
+        }
+
         el.appendChild(slot);
       }
     };
