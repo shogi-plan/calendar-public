@@ -224,7 +224,8 @@
     #review-panel {
       display: none;
       flex-direction: column;
-      width: 16vw;
+      width: 22vw;
+      min-width: 85px;
       max-width: 100px;
       background: #ccc;
       border: 1px solid #999;
@@ -232,6 +233,7 @@
       flex-shrink: 0;
       align-self: stretch; 
       height: auto;
+      margin-left: auto; /* ギリギリまで右端へ移動させる */
     }
     .kifu-list { 
       flex: 1 1 0; 
@@ -510,16 +512,22 @@
       boardWrapper.classList.add('playing-size');
       boardWrapper.style.width = "";       // インラインスタイルを完全にクリア
       boardWrapper.style.maxWidth = "";    // インラインスタイルを完全にクリア
+      container.style.width = "";          // クリア
+      container.style.flexGrow = "";       // クリア
+      container.style.maxWidth = "";       // クリア
       reviewPanel.style.display = 'none';  // 對局中は隠す
       container.style.alignItems = 'flex-start';
     } else {
       boardWrapper.classList.remove('playing-size');
       reviewPanel.style.display = 'flex';  // 感想戦は表示
       
-      // 感想戦用の幅
-      boardWrapper.style.width = "66vw";
-      boardWrapper.style.maxWidth = "430px";
+      // 感想戦用の幅（余白を無くして限界まで大きく表示）
+      container.style.flexGrow = "1";
+      container.style.maxWidth = "550px"; /* 対局中と同じサイズに制限 */
       container.style.alignItems = 'stretch';
+      
+      boardWrapper.style.width = "100%";
+      boardWrapper.style.maxWidth = "550px";
     }
 
     // いったん上下の回転クラスをリセット
