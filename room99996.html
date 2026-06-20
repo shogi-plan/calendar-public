@@ -810,7 +810,7 @@ btnCallStart.onclick = async () => {
     sessionStorage.setItem(`isManualEnd_${roomName}`, 'true');
 
     // 1. Firebase上のステータスを「終了」にする
-    // usersをnullにすることで、両方の「参加中フラ跨」を完全に消去します
+    // usersをnullにすることで、両方の「参加中フラグ」を完全に消去します
     await update(callStatusRef, { 
       status: 'ended', 
       users: null,
@@ -1731,9 +1731,8 @@ function render() {
       const bgX = (pos.x / 7) * 100;
       const bgY = (pos.y / 3) * 100;
 
-      // 【修正箇所】盤上ではなく、取った駒を配置するエリアの駒の向き
-      // 駒台（.hand）自体が視点や配置に合わせて.left-rotated等で回転するため、
-      // 中の駒は一律で反転（opposite）をオフにすることで、盤外エリアの駒が上下反転表示になります。
+      // 持ち駒は対戦相手や自分の位置、および親要素（.hand）の回転状態（.left-rotated）によって
+      // 自動的に正しい向きへと反転されるため、駒個別での回転装飾（oppositeクラス）は適用しません（常に不使用とします）。
       const isOpposite = false;
 
       s.innerHTML = `<div class="piece ${isOpposite ? 'opposite' : ''}">
