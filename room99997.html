@@ -1159,6 +1159,12 @@
   const btnReady = document.getElementById('btnReady');
 
   function updateReadyButton() {
+    if (isReviewMode) {
+      btnReady.disabled = true;
+      btnReady.textContent = "感想戦中";
+      btnReady.style.background = "#607d8b";
+      return;
+    }
     const isDuringGame = (state.lastTick !== 0 && !state.winner);
     if (isDuringGame) {
       btnReady.disabled = true;
@@ -1178,6 +1184,7 @@
   }
 
   btnReady.onclick = async () => {
+    if (isReviewMode) return;
     if (!mySide) return;
     const snap = await get(readyRef);
     let readyData = snap.exists() ? snap.val() : { S: false, G: false };
@@ -1309,6 +1316,7 @@
     document.getElementById('review-panel').style.display = bool ? 'flex' : 'none';
     
     updateDisplayRotation(currentFlip);
+    updateReadyButton();
     
     if (bool) pushReviewUpdate();
   }
