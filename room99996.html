@@ -499,6 +499,124 @@
   let sel = null, selH = null, possibleMoves = [], pendingProm = null;
   let isReviewMode = sessionStorage.getItem(`isReview_${roomName}`) === "true";
   let viewIdx = -1, rvState = null;
+  let selectedBranches = {};
+
+  function buildActiveLine() {
+    const line = [];
+    if (!state.history || state.history.length === 0) return line;
+
+    function traverse(moveList) {
+      for (let i = 0; i < moveList.length; i++) {
+        const move = moveList[i];
+        if (!move.id) {
+          move.id = i === 0 ? "start" : "mid_" + i + "_" + Math.floor(Math.random() * 1000000);
+        }
+        line.push(move);
+        const bIdx = selectedBranches[move.id];
+        if (typeof bIdx === 'number' && move.branches && move.branches[bIdx]) {
+          traverse(move.branches[bIdx]);
+          break; 
+        }
+      }
+    }
+
+    traverse(state.history);
+    return line;
+  }
+
+  function findMoveNodeById(moveList, targetId) {
+    for (let i = 0; i < moveList.length; i++) {
+      const move = moveList[i];
+      if (move.id === targetId) return move;
+      if (move.branches) {
+        for (let b = 0; b < move.branches.length; b++) {
+          const res = findMoveNodeById(move.branches[b], targetId);
+          if (res) return res;
+        }
+      }
+    }
+    return null;
+  }
+
+  function findMoveArrayContainingId(moveList, targetId) {
+    for (let i = 0; i < moveList.length; i++) {
+      if (moveList[i].id === targetId) return moveList;
+      if (moveList[i].branches) {
+        for (let b = 0; b < moveList[i].branches.length; b++) {
+          const res = findMoveArrayContainingId(moveList[i].branches[b], targetId);
+          if (res) return res;
+        }
+      }
+    }
+    return null;
+  }
+
+  function addReviewMove(moveData, newBoard, newHandS, newHandG) {
+    const currentLine = buildActiveLine();
+    if (viewIdx < 0 || viewIdx >= currentLine.length) viewIdx = currentLine.length - 1;
+    const parentMove = currentLine[viewIdx]; 
+
+    const newMove = {
+      ...moveData,
+      id: "move_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+      board: JSON.stringify(newBoard),
+      handS: [...(newHandS || [])],
+      handG: [...(newHandG || [])]
+    };
+
+    if (viewIdx === currentLine.length - 1) {
+      if (parentMove.id === "start") {
+        state.history.push(newMove);
+      } else {
+        const parentArray = findMoveArrayContainingId(state.history, parentMove.id);
+        if (parentArray) {
+          parentArray.push(newMove);
+        } else {
+          state.history.push(newMove);
+        }
+      }
+    } else {
+      const parentNode = findMoveNodeById(state.history, parentMove.id);
+      if (parentNode) {
+        if (!parentNode.branches) parentNode.branches = [];
+
+        let existingIdx = -1;
+        for (let i = 0; i < parentNode.branches.length; i++) {
+          const branchFirstMove = parentNode.branches[i][0];
+          if (branchFirstMove && 
+              branchFirstMove.toX === moveData.toX && 
+              branchFirstMove.toY === moveData.toY && 
+              branchFirstMove.fromX === moveData.fromX && 
+              branchFirstMove.fromY === moveData.fromY && 
+              branchFirstMove.type === moveData.type && 
+              branchFirstMove.isDrop === moveData.isDrop) {
+            existingIdx = i;
+            break;
+          }
+        }
+
+        if (existingIdx !== -1) {
+          selectedBranches[parentMove.id] = existingIdx;
+        } else {
+          parentNode.branches.push([newMove]);
+          selectedBranches[parentMove.id] = parentNode.branches.length - 1;
+        }
+      }
+    }
+
+    set(ref(db, `${roomName}/shogiData/history`), state.history);
+
+    viewIdx++; 
+    rvState = {
+      board: newBoard,
+      handS: [...(newHandS || [])],
+      handG: [...(newHandG || [])],
+      turn: (moveData.side === 'S' ? 'G' : 'S')
+    };
+    pushReviewUpdate();
+    render();
+    updateKifuList();
+  }
   const boardEl = document.getElementById('board'); 
 
   let mySide = sessionStorage.getItem(`mySide_${roomName}`) || '';
@@ -992,7 +1110,15 @@
     }
     state.winner = data.winner || null;    
     state.winReason = data.winReason || "";
-    state.history = data.history || [];
+    
+    // id 補完処理
+    const rawHistory = data.history || [];
+    state.history = rawHistory.map((h, idx) => {
+      if (!h.id) {
+        h.id = idx === 0 ? "start" : "mid_" + idx + "_" + Math.floor(Math.random() * 1000000);
+      }
+      return h;
+    });
 
     if (state.winner) {
       showGameOverPopup(state.winner, state.winReason || "");
@@ -1100,6 +1226,7 @@
     const data = snap.val();
     if (data) {
         viewIdx = data.viewIdx;
+        selectedBranches = data.selectedBranches || {};
         rvState = { board: JSON.parse(data.board), handS: data.handS || [], handG: data.handG || [], turn: data.turn || 'S' };
         render();
         updateKifuList();
@@ -1194,7 +1321,15 @@
 
   function pushReviewUpdate() {
     if (!isReviewMode) return;
-    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], turn: rvState.turn || 'S', timestamp: getServerNow() });
+    set(reviewRef, { 
+      viewIdx: viewIdx, 
+      board: JSON.stringify(rvState.board), 
+      handS: rvState.handS || [], 
+      handG: rvState.handG || [], 
+      turn: rvState.turn || 'S', 
+      selectedBranches: selectedBranches || {},
+      timestamp: getServerNow() 
+    });
   }
 
   function finish(moveData) {
@@ -1391,7 +1526,7 @@
       winner: null, 
       winReason: "", 
       initAt: serverTimestamp(), 
-      history: [{ board: bStr, handS: [], handG: [], type: `${hType} (${mainMin}分/${byoSec}秒)` }] 
+      history: [{ id: "start", board: bStr, handS: [], handG: [], type: `${hType} (${mainMin}分/${byoSec}秒)` }] 
     });
 
     await set(readyRef, { S: false, G: false, lastResetAt: serverTimestamp() });
@@ -1409,8 +1544,10 @@
   };
 
   function syncReviewStateLocally() { 
-    if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; 
-    const hist = state.history[viewIdx]; 
+    const currentLine = buildActiveLine();
+    if (viewIdx < 0 || viewIdx >= currentLine.length) viewIdx = currentLine.length - 1; 
+    const hist = currentLine[viewIdx]; 
+    if (!hist) return;
     let t = 'S';
     if (viewIdx > 0 && hist.side) {
       t = (hist.side === 'S') ? 'G' : 'S';
@@ -1457,22 +1594,24 @@
         };
         const promLine = (fromP.owner === 'S') ? [0, 1, 2] : [6, 7, 8];
 
+        let nextHandS = [...rvState.handS];
+        let nextHandG = [...rvState.handG];
         if (target && target.owner !== fromP.owner) {
-          (fromP.owner === 'S' ? rvState.handS : rvState.handG).push(UNPROMOTE_MAP[target.type] || target.type);
+          (fromP.owner === 'S' ? nextHandS : nextHandG).push(UNPROMOTE_MAP[target.type] || target.type);
         }
 
         if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
-          pendingProm = { x, y, moveData };
+          pendingProm = { x, y, moveData, nextHandS, nextHandG };
           document.getElementById('promote-dialog').style.display = 'block';
         } else {
           playPieceSound();
-          const movingPiece = { type: fromP.type, owner: fromP.owner };
-          rvState.board[sel.y][sel.x] = null;
-          rvState.board[y][x] = movingPiece;
+          const nextBoard = JSON.parse(JSON.stringify(rvState.board));
+          nextBoard[sel.y][sel.x] = null;
+          nextBoard[y][x] = { type: fromP.type, owner: fromP.owner };
+          
           sel = null;
           possibleMoves = [];
-          rvState.turn = (rvState.turn === 'S' ? 'G' : 'S'); // 手番交代
-          pushReviewUpdate();
+          addReviewMove(moveData, nextBoard, nextHandS, nextHandG);
         }
         render();
         return;
@@ -1487,17 +1626,28 @@
             return;
           }
 
-          const targetHand = (selH.owner === 'S' ? rvState.handS : rvState.handG);
+          const targetHand = (selH.owner === 'S' ? [...rvState.handS] : [...rvState.handG]);
           if (targetHand && targetHand[selH.idx] === selH.type) {
             playPieceSound();
-            rvState.board[y][x] = { type: selH.type, owner: selH.owner };
             targetHand.splice(selH.idx, 1);
+            
+            const nextBoard = JSON.parse(JSON.stringify(rvState.board));
+            nextBoard[y][x] = { type: selH.type, owner: selH.owner };
+            
+            const moveData = {
+              side: selH.owner, fromX: -1, fromY: -1,
+              toX: x, toY: y, type: selH.type, isDrop: true, isPromoted: false
+            };
+
+            const nextHandS = (selH.owner === 'S' ? targetHand : rvState.handS);
+            const nextHandG = (selH.owner === 'G' ? targetHand : rvState.handG);
+
             selH = null;
-            rvState.turn = (rvState.turn === 'S' ? 'G' : 'S'); // 手番交代
-            pushReviewUpdate();
+            addReviewMove(moveData, nextBoard, nextHandS, nextHandG);
           }
+        } else {
+          selH = null;
         }
-        selH = null;
         render();
         return;
       }
@@ -1730,29 +1880,140 @@
       st.style.color = "black";
     }
 
-    document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
+    document.getElementById('nav-pos').textContent = `${viewIdx}/${buildActiveLine().length-1}`;
     const activeTurn = isReviewMode ? (rvState?.turn || 'S') : state.turn;
     document.getElementById('timer-S').className = `timer ${activeTurn==='S'?'your-turn':''}`;
     document.getElementById('timer-G').className = `timer ${activeTurn==='G'?'your-turn':''}`;
   }
 
+  function formatKifuTextForBranch(move, idx) {
+    if (!move) return `不明`;
+    const side = move.side === 'S' ? "▲" : "△";
+    if (move.type.includes("投了")) return `${side}投了`;
+    if (move.type.includes("時間切れ")) return `${side}切れ負`;
+    const x = 9 - move.toX, y = KANJI_NUM[move.toY + 1];
+    let typeName = move.type.replace("(反則)","").replace("投了","").replace("時間切れ","");
+    let type = SYMBOLS[typeName] || "？";
+    if (move.isPromoted) type += "成"; 
+    else if (move.isDrop) type += "打";
+    return `${side}${x}${y}${type}`;
+  }
+
   function updateKifuList() {
     const container = document.getElementById('kifu-container'); 
     container.innerHTML = '';
-    state.history.forEach((h, i) => {
+    const currentLine = buildActiveLine();
+    
+    currentLine.forEach((h, i) => {
+      const rowDiv = document.createElement('div');
+      rowDiv.style.display = 'flex';
+      rowDiv.style.flexDirection = 'column';
+      rowDiv.style.width = '100%';
+      rowDiv.style.borderBottom = '1px solid #eee';
+
       const div = document.createElement('div'); 
       div.className = `kifu-item ${isReviewMode && viewIdx === i ? 'active' : ''}`;
-      div.textContent = formatKifuText(h, i);
-      div.onclick = () => { 
+      div.style.display = 'flex';
+      div.style.justifyContent = 'space-between';
+      div.style.alignItems = 'center';
+      div.style.padding = '5px 8px';
+      div.style.flex = '1';
+      div.style.borderBottom = 'none';
+
+      const textSpan = document.createElement('span');
+      textSpan.textContent = formatKifuText(h, i, currentLine);
+      textSpan.style.cursor = 'pointer';
+      textSpan.onclick = () => { 
         if (!isReviewMode) setReviewMode(true); 
         viewIdx = i; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); 
       };
-      container.appendChild(div); 
+      div.appendChild(textSpan);
+
+      if (isReviewMode && h.branches && h.branches.length > 0) {
+        const branchBtn = document.createElement('button');
+        branchBtn.textContent = '＋';
+        branchBtn.style.padding = '0px 4px';
+        branchBtn.style.fontSize = '8px';
+        branchBtn.style.marginLeft = '4px';
+        branchBtn.style.background = '#4caf50';
+        branchBtn.style.color = 'white';
+        branchBtn.style.border = 'none';
+        branchBtn.style.borderRadius = '2px';
+        branchBtn.style.cursor = 'pointer';
+        branchBtn.style.lineHeight = '1.2';
+        
+        branchBtn.onclick = (e) => {
+          e.stopPropagation();
+          const existingMenu = rowDiv.querySelector('.branch-menu');
+          if (existingMenu) {
+            existingMenu.remove();
+          } else {
+            const menu = document.createElement('div');
+            menu.className = 'branch-menu';
+            menu.style.background = '#eef5ee';
+            menu.style.padding = '4px 8px';
+            menu.style.fontSize = '8px';
+            menu.style.display = 'flex';
+            menu.style.flexDirection = 'column';
+            menu.style.gap = '3px';
+            menu.style.borderTop = '1px dashed #4caf50';
+
+            const honDiv = document.createElement('div');
+            honDiv.style.cursor = 'pointer';
+            honDiv.style.padding = '2px';
+            honDiv.style.borderRadius = '2px';
+            const isUsingMain = (selectedBranches[h.id] === undefined);
+            honDiv.textContent = `● 本線 (※次の手)`;
+            if (isUsingMain) {
+              honDiv.style.fontWeight = 'bold';
+              honDiv.style.background = '#c8e6c9';
+            }
+            honDiv.onclick = () => {
+              delete selectedBranches[h.id]; 
+              pushReviewUpdate();
+              syncReviewStateLocally();
+              render();
+              updateKifuList();
+            };
+            menu.appendChild(honDiv);
+
+            h.branches.forEach((b, bIdx) => {
+              const itemDiv = document.createElement('div');
+              itemDiv.style.cursor = 'pointer';
+              itemDiv.style.padding = '2px';
+              itemDiv.style.borderRadius = '2px';
+              
+              const firstMoveText = formatKifuTextForBranch(b[0], i + 1);
+              const isSelected = (selectedBranches[h.id] === bIdx);
+              itemDiv.textContent = `${isSelected ? '★' : '○'} 変化${bIdx + 1}: ${firstMoveText}`;
+              if (isSelected) {
+                itemDiv.style.fontWeight = 'bold';
+                itemDiv.style.background = '#a5d6a7';
+              }
+              
+              itemDiv.onclick = () => {
+                selectedBranches[h.id] = bIdx;
+                pushReviewUpdate();
+                syncReviewStateLocally();
+                render();
+                updateKifuList();
+              };
+              menu.appendChild(itemDiv);
+            });
+
+            rowDiv.appendChild(menu);
+          }
+        };
+        div.appendChild(branchBtn);
+      }
+
+      rowDiv.appendChild(div);
+      container.appendChild(rowDiv); 
       if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
   }
 
-  function formatKifuText(move, idx) {
+  function formatKifuText(move, idx, currentLine) {
     if (idx === 0) return "開始";
     if (!move) return `${idx}.不明`;
     const side = move.side === 'S' ? "▲" : "△";
@@ -1763,7 +2024,8 @@
     if (typeof move.toX !== 'number' || typeof move.toY !== 'number') return `${idx}.${side}中断`;
 
     const x = 9 - move.toX, y = KANJI_NUM[move.toY + 1];
-    const isSame = (idx > 1 && move.toX === state.history[idx-1].toX && move.toY === state.history[idx-1].toY);
+    const targetLine = currentLine || buildActiveLine();
+    const isSame = (idx > 1 && targetLine[idx-1] && move.toX === targetLine[idx-1].toX && move.toY === targetLine[idx-1].toY);
     
     let typeName = move.type.replace("(反則)","").replace("投了","").replace("時間切れ","");
     let type = SYMBOLS[typeName] || "？";
@@ -1837,9 +2099,9 @@
 
   document.getElementById('btnToggleReview').onclick = () => { setReviewMode(!isReviewMode); if(isReviewMode) { syncReviewStateLocally(); pushReviewUpdate(); } render(); updateKifuList(); };
   document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
-  document.getElementById('nav-next').onclick = () => { if (viewIdx < state.history.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-next').onclick = () => { const curLine = buildActiveLine(); if (viewIdx < curLine.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
-  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { viewIdx = state.history.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
+  document.getElementById('nav-last').onclick = () => { if (isReviewMode) { const curLine = buildActiveLine(); viewIdx = curLine.length - 1; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   
   document.getElementById('btn-prom-yes').onclick = () => { 
     pendingProm.moveData.type = PROMOTE_MAP[pendingProm.moveData.type]; 
@@ -1855,12 +2117,16 @@
 
     if (isReviewMode) {
       playPieceSound();
-      rvState.board[ty][tx] = { type: d.type, owner: d.side };
-      rvState.board[d.fromY][d.fromX] = null;
+      const nextBoard = JSON.parse(JSON.stringify(rvState.board));
+      nextBoard[ty][tx] = { type: d.type, owner: d.side };
+      nextBoard[d.fromY][d.fromX] = null;
+      
+      const nextH_S = pendingProm.nextHandS || rvState.handS;
+      const nextH_G = pendingProm.nextHandG || rvState.handG;
+
       sel = null; 
       possibleMoves = [];
-      rvState.turn = (rvState.turn === 'S' ? 'G' : 'S'); // 手番交代
-      pushReviewUpdate();
+      addReviewMove(d, nextBoard, nextH_S, nextH_G);
     } else {
       state.board[ty][tx] = { type: d.type, owner: d.side };
       state.board[d.fromY][d.fromX] = null;
@@ -1962,18 +2228,63 @@
       kif += `${lineNum} ${moveText}( 0:00/00:00:00)\n`;
     });
 
+    const variations = [];
+
+    function collectVariations(move, startIdx) {
+      if (move.branches && move.branches.length > 0) {
+        move.branches.forEach((branch, bIdx) => {
+          variations.push({
+            startAt: startIdx,
+            moves: branch
+          });
+          branch.forEach((bMove, bMoveIdx) => {
+            collectVariations(bMove, startIdx + bMoveIdx + 1);
+          });
+        });
+      }
+    }
+
+    state.history.forEach((h, i) => {
+      collectVariations(h, i + 1); 
+    });
+
+    variations.forEach(v => {
+      kif += `\n変化：${v.startAt}手\n`;
+      v.moves.forEach((h, index) => {
+        const i = v.startAt + index;
+        let moveText = "";
+        if (h.type.includes("投了") || h.type.includes("時間切れ") || h.type.includes("反則")) {
+          moveText = "投了       ";
+        } else if (typeof h.toX !== 'number') {
+          moveText = "中断       ";
+        } else {
+          let prevTo = null;
+          if (index > 0) {
+            prevTo = v.moves[index - 1];
+          }
+          const isSame = (prevTo && h.toX === prevTo.toX && h.toY === prevTo.toY);
+          const pos = isSame ? "同　" : ZEN_NUM[9 - h.toX] + KANJI_NUM[h.toY + 1];
+          let pieceName = h.isPromoted ? (SYMBOLS[UNPROMOTE_MAP[h.type] || h.type] + "成") : SYMBOLS[h.type.replace("(反則)", "")];
+          const from = h.isDrop ? "打" : `(${9 - h.fromX}${h.fromY + 1})`;
+          moveText = (pos + pieceName + from).padEnd(11, " ");
+        }
+        const lineNum = String(i).padStart(4, " ");
+        kif += `${lineNum} ${moveText}( 0:00/00:00:00)\n`;
+      });
+    });
+
     const area = document.createElement("textarea");
     area.value = kif;
     document.body.appendChild(area);
     area.select();
     try {
       document.execCommand("copy");
-      alert("KIF形式でコピーしました");
+      alert("KIF形式（変化手順を含む）でコピーしました");
     } catch (err) {
       alert("コピー失敗");
     }
     document.body.removeChild(area);
-  };  
+  };
 
   function isCheckmate(board, turn, handS, handG) {
     for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (board[y][x]?.owner === turn) { const moves = getRawMoves(x, y, board, turn); for (let m of moves) { const tb = JSON.parse(JSON.stringify(board)); tb[m.y][m.x] = tb[y][x]; tb[y][x] = null; if (!isChecked(tb, turn)) return false; } }
