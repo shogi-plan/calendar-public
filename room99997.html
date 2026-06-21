@@ -418,8 +418,8 @@
       <button id="nav-next" class="nav-btn">次＞</button>
       <button id="nav-first" class="nav-btn">最初</button>
       <button id="nav-last" class="nav-btn">最後</button>
-      <button id="btnKif" class="nav-btn" style="background: #4caf50; color: white;">KIFコピー</button>
       <button id="btnResetBranches" class="nav-btn" style="background: #2196f3; color: white;">本線に戻る</button>
+      <button id="btnKif" class="nav-btn" style="background: #4caf50; color: white;">KIFコピー</button>
     </div>
   </div>
 </div>
@@ -1602,8 +1602,29 @@
         }
 
         if (PROMOTE_MAP[fromP.type] && (promLine.includes(y) || promLine.includes(sel.y))) {
-          pendingProm = { x, y, moveData, nextHandS, nextHandG };
-          document.getElementById('promote-dialog').style.display = 'block';
+          const deadLine = (fromP.owner === 'S') ? 0 : 8;
+          const isKeiForce = (fromP.type === 'KE' && (fromP.owner === 'S' ? y <= 1 : y >= 7));
+          const isFuKyForce = ((fromP.type === 'FU' || fromP.type === 'KY') && y === deadLine);
+
+          if (isKeiForce || isFuKyForce) {
+            playPieceSound();
+            const nextBoard = JSON.parse(JSON.stringify(rvState.board));
+            nextBoard[sel.y][sel.x] = null;
+            nextBoard[y][x] = { type: PROMOTE_MAP[fromP.type], owner: fromP.owner };
+            
+            const nextMoveData = {
+              ...moveData,
+              type: PROMOTE_MAP[fromP.type],
+              isPromoted: true
+            };
+            
+            sel = null;
+            possibleMoves = [];
+            addReviewMove(nextMoveData, nextBoard, nextHandS, nextHandG);
+          } else {
+            pendingProm = { x, y, moveData, nextHandS, nextHandG };
+            document.getElementById('promote-dialog').style.display = 'block';
+          }
         } else {
           playPieceSound();
           const nextBoard = JSON.parse(JSON.stringify(rvState.board));
@@ -1619,10 +1640,11 @@
       }
 
       if (selH) {
-        if (!target) {
+        if (!target && possibleMoves.some(m => m.x === x && m.y === y)) {
           // 手番制限チェック：現在の手番の持ち駒のみ打てる
           if (selH.owner !== rvState.turn) {
             selH = null;
+            possibleMoves = [];
             render();
             return;
           }
@@ -1644,10 +1666,12 @@
             const nextHandG = (selH.owner === 'G' ? targetHand : rvState.handG);
 
             selH = null;
+            possibleMoves = [];
             addReviewMove(moveData, nextBoard, nextHandS, nextHandG);
           }
         } else {
           selH = null;
+          possibleMoves = [];
         }
         render();
         return;
@@ -1663,7 +1687,7 @@
         }
 
         sel = { x, y };
-        possibleMoves = getRawMoves(x, y, rvState.board, target.owner);
+        possibleMoves = getLegalMoves(x, y, rvState.board, target.owner);
       } else {
         sel = null;
         possibleMoves = [];
@@ -1721,23 +1745,25 @@
     }
 
     if (selH) {
-      if (!target) {
+      if (!target && possibleMoves.some(m => m.x === x && m.y === y)) {
         const targetHand = (mySide === 'S' ? state.handS : state.handG);
         if (targetHand && targetHand[selH.idx] === selH.type) {
           state.board[y][x] = { type: selH.type, owner: mySide };
           targetHand.splice(selH.idx, 1);
+          possibleMoves = [];
           finish({ side: mySide, toX: x, toY: y, type: selH.type, isDrop: true });
           return;
         }
       }
       selH = null;
+      possibleMoves = [];
       render();
       return;
     }
 
     if (target && target.owner === mySide) {
       sel = { x, y };
-      possibleMoves = getRawMoves(x, y, state.board, mySide);
+      possibleMoves = getLegalMoves(x, y, state.board, mySide);
     } else {
       sel = null;
       possibleMoves = [];
@@ -1847,13 +1873,19 @@
             e.stopPropagation();
             if (!isReviewMode) {
               if (state.lastTick === 0 || state.winner || state.turn !== mySide || owner !== mySide) return;
+            } else {
+              if (owner !== rvState.turn) return;
             }
             if (selH && selH.type === type && selH.owner === owner) {
               selH = null;
+              possibleMoves = [];
             } else {
               selH = { type: type, owner, idx: firstIdx };
               sel = null;
-              possibleMoves = [];
+              const currentBoard = isReviewMode ? rvState.board : state.board;
+              const currentHandS = isReviewMode ? rvState.handS : state.handS;
+              const currentHandG = isReviewMode ? rvState.handG : state.handG;
+              possibleMoves = getLegalDrops(type, owner, currentBoard, currentHandS, currentHandG);
             }
             render();
           };
@@ -2198,6 +2230,77 @@
     else if (t==='UM') { [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>slide(vx,vy)); [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     else if (t==='RY') { [[0,1],[0,-1],[1,0],[-1,0]].forEach(([vx,vy])=>slide(vx,vy)); [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([vx,vy])=>add(x+vx,y+vy)); }
     return moves;
+  };
+
+  const getLegalMoves = (x, y, board, owner) => {
+    const raw = getRawMoves(x, y, board, owner);
+    const p = board[y][x];
+    if (!p) return [];
+    
+    return raw.filter(m => {
+      const tb = JSON.parse(JSON.stringify(board));
+      tb[m.y][m.x] = { type: p.type, owner: p.owner };
+      tb[y][x] = null;
+      if (isChecked(tb, owner)) return false;
+      return true;
+    });
+  };
+
+  const getLegalDrops = (type, owner, board, handS, handG) => {
+    const drops = [];
+    const deadLine = (owner === 'S') ? 0 : 8;
+    const keLines = (owner === 'S') ? [0, 1] : [8, 7];
+
+    for (let y = 0; y < 9; y++) {
+      for (let x = 0; x < 9; x++) {
+        if (board[y][x]) continue;
+
+        if (type === 'FU' || type === 'KY') {
+          if (y === deadLine) continue;
+        }
+        if (type === 'KE') {
+          if (keLines.includes(y)) continue;
+        }
+
+        if (type === 'FU') {
+          let hasOwnPawn = false;
+          for (let rowY = 0; rowY < 9; rowY++) {
+            const piece = board[rowY][x];
+            if (piece && piece.type === 'FU' && piece.owner === owner) {
+              hasOwnPawn = true;
+              break;
+            }
+          }
+          if (hasOwnPawn) continue;
+        }
+
+        const tb = JSON.parse(JSON.stringify(board));
+        tb[y][x] = { type, owner };
+        if (isChecked(tb, owner)) continue;
+
+        if (type === 'FU') {
+          const enemy = (owner === 'S' ? 'G' : 'S');
+          if (isChecked(tb, enemy)) {
+            const nextHandS = [...(handS || [])];
+            const nextHandG = [...(handG || [])];
+            if (owner === 'S') {
+              const idx = nextHandS.indexOf('FU');
+              if (idx !== -1) nextHandS.splice(idx, 1);
+            } else {
+              const idx = nextHandG.indexOf('FU');
+              if (idx !== -1) nextHandG.splice(idx, 1);
+            }
+
+            if (isCheckmate(tb, enemy, nextHandS, nextHandG)) {
+              continue;
+            }
+          }
+        }
+
+        drops.push({ x, y });
+      }
+    }
+    return drops;
   };
   
   document.getElementById('btnResign').onclick = () => { 
