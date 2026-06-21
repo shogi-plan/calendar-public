@@ -253,8 +253,8 @@
       min-height: 0; 
     }
 
-    :root { --setting-btn: #607d8b; }
-    #btnSetting { background: var(--setting-btn); color: white; }
+    :root { --setting-btn: #ff5722; }
+    #btnSetting { background: var(--setting-btn); color: white; font-weight: bold; box-shadow: 0 0 8px rgba(255, 87, 34, 0.5); }
     #setting-dialog { 
       display: none; 
       position: fixed; 
@@ -305,7 +305,7 @@
 
 <div class="controls">
   <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
-    <button id="btnSetting">設定</button>
+    <button id="btnSetting">対局準備</button>
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
     <button id="btnResign">投了</button>
@@ -375,6 +375,7 @@
   </div>
 </div>
 <div id="status-txt" style="font-size:11px; font-weight:bold; margin-left:10px; text-align:center;">接続待ち...</div>
+<div id="prep-guide-txt" style="font-size: 11px; color: #555; margin: 6px auto; text-align: center; max-width: 95%; background: #fffde7; border: 1px solid #fff59d; padding: 6px; border-radius: 4px; line-height: 1.4; display: none; box-sizing: border-box;"></div>
 
 <div class="call-area">
   <button id="btnCallStart">通話開始</button>
@@ -501,6 +502,7 @@
   let isReviewMode = sessionStorage.getItem(`isReview_${roomName}`) === "true";
   let viewIdx = -1, rvState = null;
   let selectedBranches = {};
+  let currentReadyData = { S: false, G: false };
 
   function buildActiveLine() {
     const line = [];
@@ -697,6 +699,7 @@
     }
     currentFlip = (mySide === 'G');
     updateDisplayRotation(currentFlip);
+    updateReadyButton();
     render(); 
   };
 
@@ -1147,23 +1150,35 @@
     updateTimerDisplay();
     
     get(readyRef).then(rsnap => {
-      const rData = rsnap.val() || { S: false, G: false };
-      const isDuringGame = (state.lastTick !== 0 && !state.winner);
-      if (isDuringGame) {
-        btnReady.disabled = true;
-        btnReady.textContent = "対局中";
-        btnReady.style.background = "#607d8b";
-      } else {
-        btnReady.disabled = false;
-        btnReady.textContent = rData[mySide] ? "準備解除" : "対局準備完了";
-        btnReady.style.background = rData[mySide] ? "#757575" : "#ff9800";
-      }
+      currentReadyData = rsnap.val() || { S: false, G: false };
+      updateReadyButton();
     });
   });
 
   // --- 準備完了ステータス ---
   const btnReady = document.getElementById('btnReady');
+
+  function updateReadyButton() {
+    const isDuringGame = (state.lastTick !== 0 && !state.winner);
+    if (isDuringGame) {
+      btnReady.disabled = true;
+      btnReady.textContent = "対局中";
+      btnReady.style.background = "#607d8b";
+    } else {
+      if (!mySide) {
+        btnReady.disabled = true;
+        btnReady.textContent = "手番未選択";
+        btnReady.style.background = "#ccc";
+      } else {
+        btnReady.disabled = false;
+        btnReady.textContent = currentReadyData[mySide] ? "準備解除" : "対局準備完了";
+        btnReady.style.background = currentReadyData[mySide] ? "#757575" : "#ff9800";
+      }
+    }
+  }
+
   btnReady.onclick = async () => {
+    if (!mySide) return;
     const snap = await get(readyRef);
     let readyData = snap.exists() ? snap.val() : { S: false, G: false };
     readyData[mySide] = !readyData[mySide];
@@ -1171,25 +1186,16 @@
   };
 
   onValue(readyRef, (snap) => {
-    const data = snap.val() || { S: false, G: false };
-    document.getElementById('lamp-S').className = `ready-lamp ${data.S ? 'on' : ''}`;
-    document.getElementById('lamp-G').className = `ready-lamp ${data.G ? 'on' : ''}`;
+    currentReadyData = snap.val() || { S: false, G: false };
+    document.getElementById('lamp-S').className = `ready-lamp ${currentReadyData.S ? 'on' : ''}`;
+    document.getElementById('lamp-G').className = `ready-lamp ${currentReadyData.G ? 'on' : ''}`;
 
-    const isDuringGame = (state.lastTick !== 0 && !state.winner);
+    updateReadyButton();
 
-    if (isDuringGame) {
-      btnReady.disabled = true;
-      btnReady.textContent = "対局中";
-      btnReady.style.background = "#607d8b";
-    } else {
-      btnReady.disabled = false;
-      btnReady.textContent = data[mySide] ? "準備解除" : "対局準備完了";
-      btnReady.style.background = data[mySide] ? "#757575" : "#ff9800";
-    }
-
-    if (data.S && data.G && state.lastTick === 0 && !state.winner && !isCountingDown) {
+    if (currentReadyData.S && currentReadyData.G && state.lastTick === 0 && !state.winner && !isCountingDown) {
       startCountdown();
     }
+    render();
   });
 
   async function startCountdown() {
@@ -1911,6 +1917,57 @@
     } else {
       st.textContent = state.turn === mySide ? "手番" : "待機";
       st.style.color = "black";
+    }
+
+    // 感想戦モードかどうかで、戻る（btnToggleReview）ボタンおよび投了（btnResign）ボタンを非表示にする
+    const toggleBtn = document.getElementById('btnToggleReview');
+    const resignBtn = document.getElementById('btnResign');
+    if (toggleBtn && resignBtn) {
+      if (isReviewMode) {
+        toggleBtn.style.display = 'none';
+        resignBtn.style.display = 'none';
+      } else {
+        toggleBtn.style.display = 'inline-block';
+        if (state.lastTick === 0 || state.winner) {
+          resignBtn.style.display = 'none';
+        } else {
+          resignBtn.style.display = 'inline-block';
+        }
+      }
+    }
+
+    // 準備画面中の分かりやすい手順解説テキストを動的に提供
+    const guideEl = document.getElementById('prep-guide-txt');
+    const isDuringGame = (state.lastTick !== 0 && !state.winner);
+    if (guideEl) {
+      if (isDuringGame || isReviewMode || state.winner) {
+        guideEl.style.display = 'none';
+      } else {
+        guideEl.style.display = 'block';
+        if (!mySide) {
+          guideEl.innerHTML = `<strong>【手順1：手番選択】</strong><br>プルダウンメニューから「先手▲」または「後手△」を選択してください。`;
+          guideEl.style.background = '#fffde7';
+          guideEl.style.borderColor = '#fff59d';
+        } else if (!currentReadyData[mySide]) {
+          const sideText = mySide === 'S' ? '先手▲' : '後手△';
+          guideEl.innerHTML = `<strong>【手順2：準備完了の報告】</strong><br>${sideText}を選択中。「対局準備完了」ボタンをクリックして準備状態にしてください。`;
+          guideEl.style.background = '#e3f2fd';
+          guideEl.style.borderColor = '#90caf9';
+        } else {
+          const opponentSide = mySide === 'S' ? 'G' : 'S';
+          const opponentText = opponentSide === 'S' ? '先手▲' : '後手△';
+          const isOpponentReady = currentReadyData[opponentSide];
+          if (isOpponentReady) {
+            guideEl.innerHTML = `<strong>【手順3：対局開始】</strong><br>両者の準備が整いました。カウントダウン後に自動で対局が始まります！`;
+            guideEl.style.background = '#e8f5e9';
+            guideEl.style.borderColor = '#a5d6a7';
+          } else {
+            guideEl.innerHTML = `<strong>【手順3：相手の準備待ち】</strong><br>あなたの準備は完了しています。対戦相手（${opponentText}）の準備完了を待っています。`;
+            guideEl.style.background = '#fff3e0';
+            guideEl.style.borderColor = '#ffb74d';
+          }
+        }
+      }
     }
 
     document.getElementById('nav-pos').textContent = `${viewIdx}/${buildActiveLine().length-1}`;
