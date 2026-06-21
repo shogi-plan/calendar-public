@@ -1100,7 +1100,7 @@
     const data = snap.val();
     if (data) {
         viewIdx = data.viewIdx;
-        rvState = { board: JSON.parse(data.board), handS: data.handS || [], handG: data.handG || [] };
+        rvState = { board: JSON.parse(data.board), handS: data.handS || [], handG: data.handG || [], turn: data.turn || 'S' };
         render();
         updateKifuList();
     }
@@ -1194,7 +1194,7 @@
 
   function pushReviewUpdate() {
     if (!isReviewMode) return;
-    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], timestamp: getServerNow() });
+    set(reviewRef, { viewIdx: viewIdx, board: JSON.stringify(rvState.board), handS: rvState.handS || [], handG: rvState.handG || [], turn: rvState.turn || 'S', timestamp: getServerNow() });
   }
 
   function finish(moveData) {
@@ -1411,7 +1411,20 @@
   function syncReviewStateLocally() { 
     if (viewIdx < 0 || viewIdx >= state.history.length) viewIdx = state.history.length - 1; 
     const hist = state.history[viewIdx]; 
-    rvState = { board: JSON.parse(hist.board), handS: [...(hist.handS || [])], handG: [...(hist.handG || [])] }; 
+    let t = 'S';
+    if (viewIdx > 0 && hist.side) {
+      t = (hist.side === 'S') ? 'G' : 'S';
+    } else if (viewIdx === 0) {
+      t = 'S';
+    } else {
+      t = (viewIdx % 2 === 0) ? 'S' : 'G';
+    }
+    rvState = { 
+      board: JSON.parse(hist.board), 
+      handS: [...(hist.handS || [])], 
+      handG: [...(hist.handG || [])],
+      turn: t
+    }; 
     sel = null; selH = null; possibleMoves = []; 
   }
 
@@ -1429,6 +1442,14 @@
       if (sel && possibleMoves.some(m => m.x === x && m.y === y)) {
         const fromP = rvState.board[sel.y][sel.x];
         if (!fromP) return;
+
+        // 手番制限チェック：現在の感想戦手番の駒のみ動かせる
+        if (fromP.owner !== rvState.turn) {
+          sel = null;
+          possibleMoves = [];
+          render();
+          return;
+        }
 
         const moveData = {
           side: fromP.owner, fromX: sel.x, fromY: sel.y,
@@ -1450,6 +1471,7 @@
           rvState.board[y][x] = movingPiece;
           sel = null;
           possibleMoves = [];
+          rvState.turn = (rvState.turn === 'S' ? 'G' : 'S'); // 手番交代
           pushReviewUpdate();
         }
         render();
@@ -1458,12 +1480,20 @@
 
       if (selH) {
         if (!target) {
+          // 手番制限チェック：現在の手番の持ち駒のみ打てる
+          if (selH.owner !== rvState.turn) {
+            selH = null;
+            render();
+            return;
+          }
+
           const targetHand = (selH.owner === 'S' ? rvState.handS : rvState.handG);
           if (targetHand && targetHand[selH.idx] === selH.type) {
             playPieceSound();
             rvState.board[y][x] = { type: selH.type, owner: selH.owner };
             targetHand.splice(selH.idx, 1);
             selH = null;
+            rvState.turn = (rvState.turn === 'S' ? 'G' : 'S'); // 手番交代
             pushReviewUpdate();
           }
         }
@@ -1473,6 +1503,14 @@
       }
 
       if (target) {
+        // 現在の手番以外の駒へのタップは無視/選択解除
+        if (target.owner !== rvState.turn) {
+          sel = null;
+          possibleMoves = [];
+          render();
+          return;
+        }
+
         sel = { x, y };
         possibleMoves = getRawMoves(x, y, rvState.board, target.owner);
       } else {
@@ -1684,16 +1722,18 @@
       st.textContent = `${state.winner === 'S' ? '先手' : '後手'}勝`;
       st.style.color = "red";
     } else if (isReviewMode) {
-      st.textContent = "感想戦";
-      st.style.color = "orange";
+      const turnJp = (rvState && rvState.turn === 'S') ? '先手番' : '後手番';
+      st.textContent = `感想戦 (${turnJp})`;
+      st.style.color = "darkorange";
     } else {
       st.textContent = state.turn === mySide ? "手番" : "待機";
       st.style.color = "black";
     }
 
     document.getElementById('nav-pos').textContent = `${viewIdx}/${state.history.length-1}`;
-    document.getElementById('timer-S').className = `timer ${!isReviewMode && state.turn==='S'?'your-turn':''}`;
-    document.getElementById('timer-G').className = `timer ${!isReviewMode && state.turn==='G'?'your-turn':''}`;
+    const activeTurn = isReviewMode ? (rvState?.turn || 'S') : state.turn;
+    document.getElementById('timer-S').className = `timer ${activeTurn==='S'?'your-turn':''}`;
+    document.getElementById('timer-G').className = `timer ${activeTurn==='G'?'your-turn':''}`;
   }
 
   function updateKifuList() {
@@ -1819,6 +1859,7 @@
       rvState.board[d.fromY][d.fromX] = null;
       sel = null; 
       possibleMoves = [];
+      rvState.turn = (rvState.turn === 'S' ? 'G' : 'S'); // 手番交代
       pushReviewUpdate();
     } else {
       state.board[ty][tx] = { type: d.type, owner: d.side };
