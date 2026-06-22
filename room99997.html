@@ -1470,6 +1470,17 @@
   function showGameOverPopup(winner, reason = "") {
     if (!winner) return;
     
+    // 棋譜取り込み時はポップアップを表示しない
+    if (sessionStorage.getItem(`skipGameOver_${roomName}`) === "true") {
+      sessionStorage.removeItem(`skipGameOver_${roomName}`);
+      return;
+    }
+
+    // 感想戦・検討モード中、または勝因に対局取り込みなどの文脈がある場合はポップアップを抑制する
+    if (isReviewMode || (reason && reason.includes("取り込み"))) {
+      return;
+    }
+    
     const key = `shown_${roomName}_${state.history.length}_${winner}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "true");
@@ -2900,6 +2911,9 @@
     }
 
     try {
+      // 棋譜取り込みの際は勝敗判定に関連する不要なアラートを表示しないようにフラグを設定
+      sessionStorage.setItem(`skipGameOver_${roomName}`, "true");
+
       await set(gameRef, {
         board: JSON.stringify(parsed.board),
         handS: parsed.handS,
@@ -2908,8 +2922,8 @@
         timers: { S: 0, G: 0 },
         config: { main: 0, byo: 30, handicap: parsed.handicapType },
         lastTick: getServerNow() - 3600000, 
-        winner: parsed.winner || "S",
-        winReason: parsed.winReason || "棋譜取り込み",
+        winner: parsed.winner || null,
+        winReason: parsed.winReason || "",
         initAt: serverTimestamp(),
         history: parsed.history
       });
