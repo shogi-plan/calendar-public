@@ -2230,6 +2230,8 @@
     const diff = now - state.lastTick;
     const elapsed = (state.lastTick === 0 || isReviewMode || state.winner) ? 0 : Math.floor(Math.max(0, diff - 200) / 1000);
 
+    const isImported = !!(state.history && state.history[0] && state.history[0].type && state.history[0].type.includes("取り込み"));
+
     ['S', 'G'].forEach(s => {
       let remMain = state.timers[s]; 
       let displayStr = ""; 
@@ -2237,6 +2239,12 @@
       const el = document.getElementById(`timer-${s}`);
       if (!el) return;
       const mark = (s === 'S' ? '▲' : '△');
+
+      if (isImported) {
+        el.textContent = `${mark} -`;
+        el.classList.remove('timer-alert');
+        return;
+      }
 
       const isMainInf = (remMain >= 900000);
       const isByoInf = (state.config.byo >= 900000);
