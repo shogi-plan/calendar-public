@@ -268,6 +268,21 @@
       z-index: 3000; 
       width: 280px; 
     }
+    #import-dialog {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      border: 3px solid #4caf50;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      z-index: 3000;
+      width: 280px;
+      text-align: center;
+    }
     .setting-row { margin-bottom: 15px; }
     .setting-row label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; }
     .setting-row select { width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
@@ -308,7 +323,21 @@
     <button id="btnSetting">対局準備</button>
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
+    <button id="btnImportKif" style="background:#4caf50; color:white;">棋譜検討</button>
     <button id="btnResign">投了</button>
+  </div>
+
+  <div id="import-dialog">
+    <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px; font-size:14px; color:#333;">棋譜検討（データ取り込み）</h3>
+    <p style="font-size:11px; color:#666; margin-bottom:15px; text-align:left; line-height:1.4;">
+      他のアプリで対局したKIF形式の棋譜データを取り込み、感想戦を開始します。
+    </p>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <button id="btnImportClipboard" style="background: #2196f3; color: white; padding: 8px 12px; font-size: 11px;">クリップボードから取り込み</button>
+      <button id="btnImportFile" style="background: #ff9800; color: white; padding: 8px 12px; font-size: 11px;">KIFファイルの取り込み</button>
+      <button id="btnImportCancel" style="background: #ccc; color: #333; padding: 8px 12px; font-size: 11px; font-weight: normal;">閉じる</button>
+    </div>
+    <input type="file" id="kifFileInput" accept=".kif,.txt" style="display: none;">
   </div>
 
   <div id="setting-dialog">
@@ -1930,6 +1959,9 @@
     // 感想戦モードかどうかで、戻る（btnToggleReview）ボタンおよび投了（btnResign）ボタンを非表示にする
     const toggleBtn = document.getElementById('btnToggleReview');
     const resignBtn = document.getElementById('btnResign');
+    const importKifBtn = document.getElementById('btnImportKif');
+    const isDuringGame = (state.lastTick !== 0 && !state.winner);
+
     if (toggleBtn && resignBtn) {
       if (isReviewMode) {
         toggleBtn.style.display = 'none';
@@ -1944,9 +1976,16 @@
       }
     }
 
+    if (importKifBtn) {
+      if (isDuringGame) {
+        importKifBtn.style.display = 'none';
+      } else {
+        importKifBtn.style.display = 'inline-block';
+      }
+    }
+
     // 準備画面中の分かりやすい手順解説テキストを動的に提供
     const guideEl = document.getElementById('prep-guide-txt');
-    const isDuringGame = (state.lastTick !== 0 && !state.winner);
     if (guideEl) {
       if (isDuringGame || isReviewMode || state.winner) {
         guideEl.style.display = 'none';
@@ -2475,6 +2514,361 @@
       remove(configLockRef);
     }
   });
+
+  // --- KIF 棋譜検討・取り込み機能 ---
+  const importDialog = document.getElementById('import-dialog');
+  const btnImportKif = document.getElementById('btnImportKif');
+  const btnImportCancel = document.getElementById('btnImportCancel');
+  const btnImportClipboard = document.getElementById('btnImportClipboard');
+  const btnImportFile = document.getElementById('btnImportFile');
+  const kifFileInput = document.getElementById('kifFileInput');
+
+  if (btnImportKif) {
+    btnImportKif.onclick = () => {
+      const isDuringGame = (state.lastTick !== 0 && !state.winner);
+      if (isDuringGame) {
+        alert("対局中は棋譜検討機能を利用できません。");
+        return;
+      }
+      importDialog.style.display = 'block';
+    };
+  }
+
+  if (btnImportCancel) {
+    btnImportCancel.onclick = () => {
+      importDialog.style.display = 'none';
+    };
+  }
+
+  function parseKif(kifText) {
+    const lines = kifText.split(/\r?\n/);
+    
+    let handicapType = "平手";
+    let uwateSide = "G";
+    
+    for (const line of lines) {
+      if (line.includes("手合割：")) {
+        const match = line.match(/手合割：\s*(\S+)/);
+        if (match) {
+          const typeStr = match[1];
+          if (typeStr.includes("香落ち")) handicapType = "香落ち";
+          else if (typeStr.includes("角落ち")) handicapType = "角落ち";
+          else if (typeStr.includes("飛車落ち") || typeStr.includes("飛落ち")) handicapType = "飛車落ち";
+          else if (typeStr.includes("飛香落ち")) handicapType = "飛香落ち";
+          else if (typeStr.includes("二枚落ち")) handicapType = "二枚落ち";
+          else if (typeStr.includes("四枚落ち")) handicapType = "四枚落ち";
+          else if (typeStr.includes("六枚落ち")) handicapType = "六枚落ち";
+          else if (typeStr.includes("八枚落ち")) handicapType = "八枚落ち";
+          else handicapType = "平手";
+        }
+      }
+    }
+    
+    let board = generateInitialBoard(handicapType, uwateSide);
+    let handS = [];
+    let handG = [];
+    
+    for (const line of lines) {
+      if (line.startsWith("上手の持駒：") || line.startsWith("後手の持駒：")) {
+        const gHandStr = line.split("：")[1]?.trim();
+        if (gHandStr && gHandStr !== "なし") {
+          const parts = gHandStr.split(/\s+/);
+          for (const p of parts) {
+            const cleanP = p.replace(/[一二三四五六七八九十]/g, "");
+            const type = reversePieceSymbol(cleanP);
+            if (type) handG.push(type);
+          }
+        }
+      }
+      if (line.startsWith("下手の持駒：") || line.startsWith("先手の持駒：")) {
+        const sHandStr = line.split("：")[1]?.trim();
+        if (sHandStr && sHandStr !== "なし") {
+          const parts = sHandStr.split(/\s+/);
+          for (const p of parts) {
+            const cleanP = p.replace(/[一二三四五六七八九十]/g, "");
+            const type = reversePieceSymbol(cleanP);
+            if (type) handS.push(type);
+          }
+        }
+      }
+    }
+
+    let firstTurn = 'S';
+    for (const line of lines) {
+      if (line.includes("上手番") || line.includes("後手番")) {
+        firstTurn = 'G';
+        break;
+      } else if (line.includes("下手番") || line.includes("先手番")) {
+        firstTurn = 'S';
+        break;
+      }
+    }
+
+    const history = [
+      {
+        id: "start",
+        board: JSON.stringify(board),
+        handS: [...handS],
+        handG: [...handG],
+        type: `${handicapType} (取り込み)`
+      }
+    ];
+
+    let winner = null;
+    let winReason = "";
+    
+    const zenToNum = { '１':1, '２':2, '３':3, '４':4, '５':5, '６':6, '７':7, '８':8, '９':9 };
+    const kanToNum = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9 };
+    const symbolMap = {
+      '歩': 'FU', '香': 'KY', '桂': 'KE', '銀': 'GI', '金': 'KI', '角': 'KA', '飛': 'HI', '玉': 'OU', '王': 'OU',
+      'と': 'TO', '杏': 'NY', '圭': 'NK', '全': 'NG', '馬': 'UM', '龍': 'RY', '竜': 'RY'
+    };
+    const unpromoteMap = { 'TO': 'FU', 'NY': 'KY', 'NK': 'KE', 'NG': 'GI', 'UM': 'KA', 'RY': 'HI' };
+
+    function reversePieceSymbol(kanji) {
+      if (!kanji) return null;
+      return symbolMap[kanji[0]] || null;
+    }
+
+    let lastToX = null;
+    let lastToY = null;
+    let currentTurn = firstTurn;
+
+    for (let rawLine of lines) {
+      const lineText = rawLine.trim();
+      if (!lineText) continue;
+      
+      const numMatch = lineText.match(/^([0-9]+)\s+(\S+)/);
+      if (!numMatch) continue;
+      
+      const moveIdx = parseInt(numMatch[1]);
+      const moveTxt = numMatch[2].trim(); 
+      
+      if (moveTxt.includes("投了") || moveTxt.includes("中断") || moveTxt.includes("持時間切れ") || moveTxt.includes("時間切れ") || moveTxt.includes("千日手") || moveTxt.includes("反則")) {
+        winner = currentTurn === 'S' ? 'G' : 'S';
+        winReason = moveTxt;
+        break;
+      }
+      
+      let toX = null, toY = null;
+      let isDrop = false;
+      let fromX = null, fromY = null;
+      let pieceChar = "";
+      let isPromoted = false;
+
+      if (moveTxt.startsWith("同")) {
+        if (lastToX === null || lastToY === null) {
+          throw new Error("Invalid 'same' coordinate reference");
+        }
+        toX = lastToX;
+        toY = lastToY;
+        const afterSame = moveTxt.substring(1).trim();
+        pieceChar = afterSame[0];
+        if (afterSame.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
+          isPromoted = true;
+        }
+      } else {
+        const xChar = moveTxt[0];
+        const yChar = moveTxt[1];
+        toX = 9 - (zenToNum[xChar] || parseInt(xChar));
+        toY = (kanToNum[yChar] || parseInt(yChar)) - 1;
+        pieceChar = moveTxt[2];
+        if (moveTxt.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
+          isPromoted = true;
+        }
+      }
+
+      if (isNaN(toX) || isNaN(toY) || toX < 0 || toX > 8 || toY < 0 || toY > 8) {
+        throw new Error("Index out of bounds");
+      }
+
+      lastToX = toX;
+      lastToY = toY;
+
+      let rawType = symbolMap[pieceChar];
+      if (!rawType) {
+        throw new Error("Unknown piece character: " + pieceChar);
+      }
+
+      if (moveTxt.includes("打")) {
+        isDrop = true;
+      } else {
+        const srcMatch = moveTxt.match(/\(([1-9])([1-9])\)/);
+        if (srcMatch) {
+          fromX = 9 - parseInt(srcMatch[1]);
+          fromY = parseInt(srcMatch[2]) - 1;
+        } else {
+          throw new Error("Missing source coordinate reference for movement");
+        }
+      }
+
+      if (isDrop) {
+        const hand = (currentTurn === 'S' ? handS : handG);
+        const idx = hand.indexOf(rawType);
+        if (idx !== -1) {
+          hand.splice(idx, 1);
+        }
+        board[toY][toX] = { type: rawType, owner: currentTurn };
+      } else {
+        const movingPiece = board[fromY][fromX];
+        if (!movingPiece) {
+          throw new Error("No moving piece found at source index");
+        }
+        board[fromY][fromX] = null;
+
+        const destPiece = board[toY][toX];
+        if (destPiece) {
+          const destTypeRaw = destPiece.type;
+          const capturedType = unpromoteMap[destTypeRaw] || destTypeRaw;
+          const hand = (currentTurn === 'S' ? handS : handG);
+          hand.push(capturedType);
+        }
+
+        let finalType = rawType;
+        if (isPromoted) {
+          const promoteMap = { 'FU':'TO', 'KY':'NY', 'KE':'NK', 'GI':'NG', 'KA':'UM', 'HI':'RY' };
+          finalType = promoteMap[rawType] || rawType;
+        } else {
+          finalType = movingPiece.type;
+        }
+
+        board[toY][toX] = { type: finalType, owner: currentTurn };
+      }
+
+      const moveData = {
+        side: currentTurn,
+        type: rawType,
+        fromX: fromX,
+        fromY: fromY,
+        toX: toX,
+        toY: toY,
+        isDrop: isDrop,
+        isPromoted: isPromoted
+      };
+
+      history.push({
+        id: "mid_" + moveIdx + "_" + Math.floor(Math.random() * 1000000),
+        board: JSON.stringify(board),
+        handS: [...handS],
+        handG: [...handG],
+        type: moveTxt,
+        lastMove: moveData
+      });
+
+      currentTurn = currentTurn === 'S' ? 'G' : 'S';
+    }
+
+    return {
+      history,
+      winner,
+      winReason,
+      board,
+      handS,
+      handG,
+      turn: currentTurn,
+      handicapType
+    };
+  }
+
+  async function loadImportedKif(parsed) {
+    if (!parsed || !parsed.history || parsed.history.length === 0) {
+      alert("取り込めませんでした");
+      return;
+    }
+
+    try {
+      await set(gameRef, {
+        board: JSON.stringify(parsed.board),
+        handS: parsed.handS,
+        handG: parsed.handG,
+        turn: parsed.turn,
+        timers: { S: 0, G: 0 },
+        config: { main: 0, byo: 30, handicap: parsed.handicapType },
+        lastTick: getServerNow() - 3600000, 
+        winner: parsed.winner || "S",
+        winReason: parsed.winReason || "棋譜取り込み",
+        initAt: serverTimestamp(),
+        history: parsed.history
+      });
+
+      await set(readyRef, { S: false, G: false });
+
+      sessionStorage.setItem(`isReview_${roomName}`, "true");
+      isReviewMode = true;
+
+      viewIdx = parsed.history.length - 1;
+      syncReviewStateLocally();
+      pushReviewUpdate();
+
+      importDialog.style.display = 'none';
+
+      render();
+      updateKifuList();
+
+      alert("棋譜の取り込みに成功しました。感想戦モードを開始します。");
+    } catch (err) {
+      console.error(err);
+      alert("取り込めませんでした");
+    }
+  }
+
+  if (btnImportClipboard) {
+    btnImportClipboard.onclick = async () => {
+      let text = "";
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          text = await navigator.clipboard.readText();
+        }
+      } catch (err) {
+        console.warn("Clipboard access denied, falling back to prompt:", err);
+      }
+
+      if (!text) {
+        text = prompt("KIF形式の棋譜テキストを入力（ペースト）してください：");
+      }
+
+      if (!text || !text.trim()) {
+        alert("取り込みをキャンセルしました");
+        return;
+      }
+
+      try {
+        const parsed = parseKif(text);
+        await loadImportedKif(parsed);
+      } catch (err) {
+        console.error("Clipboard Parse Error:", err);
+        alert("取り込めませんでした");
+      }
+    };
+  }
+
+  if (btnImportFile) {
+    btnImportFile.onclick = () => {
+      kifFileInput.value = "";
+      kifFileInput.click();
+    };
+  }
+
+  if (kifFileInput) {
+    kifFileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const text = evt.target.result;
+        try {
+          const parsed = parseKif(text);
+          await loadImportedKif(parsed);
+        } catch (err) {
+          console.error("File Parse Error:", err);
+          alert("取り込めませんでした");
+        }
+      };
+      // 日本語のKIFファイルでよく使用されるShift_JIS（CP932）を指定
+      reader.readAsText(file, "Shift_JIS");
+    };
+  }
 
   updateCallUI();
   
