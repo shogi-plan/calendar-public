@@ -2659,7 +2659,8 @@
       const lineText = line.trim();
       if (!lineText) continue;
 
-      const changeMatch = lineText.match(/^変化：\s*([0-9]+)手?/);
+      // 変化：30手順などの様々なバリエーションに対応
+      const changeMatch = lineText.match(/^変化[\s:：]+([0-9]+)/);
       if (changeMatch) {
          if (currentSection.lines.length > 0) {
            sections.push(currentSection);
@@ -2695,11 +2696,16 @@
       let expectedMoveIdx = startIndex;
 
       for (const lineText of moveLines) {
-        const numMatch = lineText.match(/^\s*([0-9]+)\s+(\S+)/);
+        // 全角・半角スペースで行を分割
+        const parts = lineText.trim().split(/[\s　]+/);
+        if (parts.length < 2) continue;
+
+        // 手合/手数が数値から始まることを確認
+        const numMatch = parts[0].match(/^([0-9]+)/);
         if (!numMatch) continue;
         
         const moveIdx = parseInt(numMatch[1]);
-        const moveTxt = numMatch[2].trim();
+        const moveTxt = parts[1].trim();
         
         if (moveIdx !== expectedMoveIdx) {
           continue;
@@ -2709,29 +2715,33 @@
           break;
         }
 
+        // 先頭の ▲、△、▽、▼ などの手番記号を綺麗にクレンジングする
+        let cleanMove = moveTxt.replace(/^[▲△▼▽先手後手]+/g, "").trim();
+
         let toX = null, toY = null;
         let isDrop = false;
         let fromX = null, fromY = null;
         let pieceChar = "";
         let isPromoted = false;
 
-        if (moveTxt.startsWith("同")) {
+        if (cleanMove.startsWith("同")) {
           if (lastToX === null || lastToY === null) continue;
           toX = lastToX;
           toY = lastToY;
-          const afterSame = moveTxt.substring(1).replace(/[\s　]+/g, "");
+          // "同" 以外の部分から駒名と成情報を切り出す
+          const afterSame = cleanMove.substring(1).replace(/[\s　]+/g, "");
           pieceChar = afterSame[0];
           if (afterSame.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
             isPromoted = true;
           }
         } else {
-          const xChar = moveTxt[0];
-          const yChar = moveTxt[1];
+          const xChar = cleanMove[0];
+          const yChar = cleanMove[1];
           toX = 9 - (zenToNum[xChar] || parseInt(xChar));
           toY = (kanToNum[yChar] || parseInt(yChar)) - 1;
-          pieceChar = moveTxt[2];
+          pieceChar = cleanMove[2];
           if (!pieceChar) continue;
-          if (moveTxt.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
+          if (cleanMove.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
             isPromoted = true;
           }
         }
@@ -2748,10 +2758,10 @@
           continue;
         }
 
-        if (moveTxt.includes("打")) {
+        if (cleanMove.includes("打")) {
           isDrop = true;
         } else {
-          const srcMatch = moveTxt.match(/\(([1-9])([1-9])\)/);
+          const srcMatch = cleanMove.match(/\(([1-9])([1-9])\)/);
           if (srcMatch) {
             fromX = 9 - parseInt(srcMatch[1]);
             fromY = parseInt(srcMatch[2]) - 1;
@@ -2804,13 +2814,14 @@
           isPromoted: isPromoted
         };
 
+        // 通常の history の要素と同じ平坦なプロパティ構造にする
         const node = {
+          ...moveData,
           id: "mid_" + moveIdx + "_" + Math.floor(Math.random() * 1000000),
           board: JSON.stringify(b),
           handS: [...hS],
           handG: [...hG],
-          type: moveTxt,
-          lastMove: moveData
+          kifType: moveTxt
         };
 
         parsedHistory.push(node);
