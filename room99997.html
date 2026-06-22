@@ -1118,14 +1118,17 @@
       lastInitAt = data.initAt;
     }
 
-    if (data.lastTick === 0 && !data.winner) {
+    const isImported = !!(data.history && data.history[0] && data.history[0].type && data.history[0].type.includes("取り込み"));
+    const isGameOver = !!data.winner || isImported;
+
+    if (data.lastTick === 0 && !isGameOver) {
       isReviewMode = false;
       sessionStorage.removeItem(`isReview_${roomName}`);
       Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
       rvState = null; 
     }
 
-    if (!data.winner || data.lastTick === 0) {
+    if (!isGameOver || data.lastTick === 0) {
       document.getElementById('btnToggleReview').disabled = true;
     } else {
       document.getElementById('btnToggleReview').disabled = false;
@@ -1159,7 +1162,7 @@
 
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
     
-    if (data.winner && storedReview) {
+    if (isGameOver && storedReview) {
       isReviewMode = true;
       document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
