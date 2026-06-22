@@ -1991,7 +1991,10 @@
     }
 
     if (importKifBtn) {
-      if (isDuringGame) {
+      const isImported = !!(state.history && state.history[0] && state.history[0].type && state.history[0].type.includes("取り込み"));
+      const isActuallyDuringGame = (state.lastTick !== 0 && !state.winner && !isImported);
+
+      if (isActuallyDuringGame && !isReviewMode) {
         importKifBtn.style.display = 'none';
       } else {
         importKifBtn.style.display = 'inline-block';
@@ -2539,8 +2542,9 @@
 
   if (btnImportKif) {
     btnImportKif.onclick = () => {
-      const isDuringGame = (state.lastTick !== 0 && !state.winner);
-      if (isDuringGame) {
+      const isImported = !!(state.history && state.history[0] && state.history[0].type && state.history[0].type.includes("取り込み"));
+      const isDuringGame = (state.lastTick !== 0 && !state.winner && !isImported);
+      if (isDuringGame && !isReviewMode) {
         alert("対局中は棋譜検討機能を利用できません。");
         return;
       }
@@ -2696,27 +2700,28 @@
       let expectedMoveIdx = startIndex;
 
       for (const lineText of moveLines) {
-        // 全角・半角スペースで行を分割
-        const parts = lineText.trim().split(/[\s　]+/);
-        if (parts.length < 2) continue;
+        // 手数とその後の部分を分離
+        const lineTrimmed = lineText.trim();
+        const matchMove = lineTrimmed.match(/^([0-9]+)\s+(.+)$/);
+        if (!matchMove) continue;
 
-        // 手合/手数が数値から始まることを確認
-        const numMatch = parts[0].match(/^([0-9]+)/);
-        if (!numMatch) continue;
-        
-        const moveIdx = parseInt(numMatch[1]);
-        const moveTxt = parts[1].trim();
+        const moveIdx = parseInt(matchMove[1]);
+        const remaining = matchMove[2].trim();
         
         if (moveIdx !== expectedMoveIdx) {
           continue;
         }
+
+        // コロンを含む消費時間カッコ ( 0:00/00:00:00) などを完全に除去
+        let moveTxt = remaining.replace(/\(\s*[0-9]+:[0-9]+[^\)]*\)/, "").trim();
 
         if (moveTxt.includes("投了") || moveTxt.includes("中断") || moveTxt.includes("持時間切れ") || moveTxt.includes("時間切れ") || moveTxt.includes("千日手") || moveTxt.includes("反則")) {
           break;
         }
 
         // 先頭の ▲、△、▽、▼ などの手番記号を綺麗にクレンジングする
-        let cleanMove = moveTxt.replace(/^[▲△▼▽先手後手]+/g, "").trim();
+        // さらに、スペースをすべて除去（"同　銀(22)" -> "同銀(22)" のように、中にあるスペースを詰める）
+        let cleanMove = moveTxt.replace(/^[▲△▼▽先手後手]+/g, "").replace(/[\s　]+/g, "");
 
         let toX = null, toY = null;
         let isDrop = false;
@@ -2729,7 +2734,7 @@
           toX = lastToX;
           toY = lastToY;
           // "同" 以外の部分から駒名と成情報を切り出す
-          const afterSame = cleanMove.substring(1).replace(/[\s　]+/g, "");
+          const afterSame = cleanMove.substring(1);
           pieceChar = afterSame[0];
           if (afterSame.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
             isPromoted = true;
