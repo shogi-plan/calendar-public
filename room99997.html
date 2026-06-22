@@ -2568,28 +2568,57 @@
     let handS = [];
     let handG = [];
     
-    for (const line of lines) {
-      if (line.startsWith("上手の持駒：") || line.startsWith("後手の持駒：")) {
-        const gHandStr = line.split("：")[1]?.trim();
-        if (gHandStr && gHandStr !== "なし") {
-          const parts = gHandStr.split(/\s+/);
-          for (const p of parts) {
-            const cleanP = p.replace(/[一二三四五六七八九十]/g, "");
-            const type = reversePieceSymbol(cleanP);
-            if (type) handG.push(type);
+    // 持ち駒パーサ用の漢数字・数字変換マップ
+    const countMap = {
+      '': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+      '十': 10, '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15, '十六': 16, '十七': 17, '十八': 18
+    };
+
+    const zenToNum = { '１':1, '２':2, '３':3, '４':4, '５':5, '６':6, '７':7, '８':8, '９':9 };
+    const kanToNum = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9 };
+    const symbolMap = {
+      '歩': 'FU', '香': 'KY', '桂': 'KE', '銀': 'GI', '金': 'KI', '角': 'KA', '飛': 'HI', '玉': 'OU', '王': 'OU',
+      'と': 'TO', '杏': 'NY', '圭': 'NK', '全': 'NG', '馬': 'UM', '龍': 'RY', '竜': 'RY'
+    };
+    const unpromoteMap = { 'TO': 'FU', 'NY': 'KY', 'NK': 'KE', 'NG': 'GI', 'UM': 'KA', 'RY': 'HI' };
+
+    function reversePieceSymbol(kanji) {
+      if (!kanji) return null;
+      return symbolMap[kanji[0]] || null;
+    }
+
+    function parseHandPieces(handStr, handArray) {
+      if (!handStr || handStr === "なし") return;
+      const parts = handStr.split(/[\s　]+/);
+      for (const p of parts) {
+        if (!p) continue;
+        const pieceNameChar = p[0];
+        const type = reversePieceSymbol(pieceNameChar);
+        if (type) {
+          const countStr = p.substring(1);
+          let count = 1;
+          if (countStr) {
+            if (/^[0-9]+$/.test(countStr)) {
+              count = parseInt(countStr);
+            } else if (countMap[countStr] !== undefined) {
+              count = countMap[countStr];
+            }
+          }
+          for (let c = 0; c < count; c++) {
+            handArray.push(type);
           }
         }
       }
+    }
+
+    for (const line of lines) {
+      if (line.startsWith("上手の持駒：") || line.startsWith("後手の持駒：")) {
+        const gHandStr = line.split("：")[1]?.trim();
+        parseHandPieces(gHandStr, handG);
+      }
       if (line.startsWith("下手の持駒：") || line.startsWith("先手の持駒：")) {
         const sHandStr = line.split("：")[1]?.trim();
-        if (sHandStr && sHandStr !== "なし") {
-          const parts = sHandStr.split(/\s+/);
-          for (const p of parts) {
-            const cleanP = p.replace(/[一二三四五六七八九十]/g, "");
-            const type = reversePieceSymbol(cleanP);
-            if (type) handS.push(type);
-          }
-        }
+        parseHandPieces(sHandStr, handS);
       }
     }
 
@@ -2604,168 +2633,262 @@
       }
     }
 
-    const history = [
-      {
-        id: "start",
-        board: JSON.stringify(board),
-        handS: [...handS],
-        handG: [...handG],
-        type: `${handicapType} (取り込み)`
-      }
-    ];
+    // セクションに分割
+    const sections = [];
+    let currentSection = {
+      type: 'main',
+      index: 0,
+      lines: []
+    };
 
+    for (const line of lines) {
+      const lineText = line.trim();
+      if (!lineText) continue;
+
+      const changeMatch = lineText.match(/^変化：\s*([0-9]+)手?/);
+      if (changeMatch) {
+         if (currentSection.lines.length > 0) {
+           sections.push(currentSection);
+         }
+         currentSection = {
+           type: 'variation',
+           index: parseInt(changeMatch[1]),
+           lines: []
+         };
+      } else {
+         currentSection.lines.push(lineText);
+      }
+    }
+    if (currentSection.lines.length > 0) {
+      sections.push(currentSection);
+    }
+
+    const mainSec = sections.find(s => s.type === 'main') || { lines: [] };
+    const varSecs = sections.filter(s => s.type === 'variation');
+
+    // 動きをシミュレートするメインのパーサー
+    function parseMoves(moveLines, startBoard, startHandS, startHandG, startTurn, startIndex) {
+      const b = JSON.parse(JSON.stringify(startBoard));
+      const hS = [...startHandS];
+      const hG = [...startHandG];
+      let turn = startTurn;
+      
+      const parsedHistory = [];
+      const states = [];
+      
+      let lastToX = null;
+      let lastToY = null;
+      let expectedMoveIdx = startIndex;
+
+      for (const lineText of moveLines) {
+        const numMatch = lineText.match(/^\s*([0-9]+)\s+(\S+)/);
+        if (!numMatch) continue;
+        
+        const moveIdx = parseInt(numMatch[1]);
+        const moveTxt = numMatch[2].trim();
+        
+        if (moveIdx !== expectedMoveIdx) {
+          continue;
+        }
+
+        if (moveTxt.includes("投了") || moveTxt.includes("中断") || moveTxt.includes("持時間切れ") || moveTxt.includes("時間切れ") || moveTxt.includes("千日手") || moveTxt.includes("反則")) {
+          break;
+        }
+
+        let toX = null, toY = null;
+        let isDrop = false;
+        let fromX = null, fromY = null;
+        let pieceChar = "";
+        let isPromoted = false;
+
+        if (moveTxt.startsWith("同")) {
+          if (lastToX === null || lastToY === null) continue;
+          toX = lastToX;
+          toY = lastToY;
+          const afterSame = moveTxt.substring(1).replace(/[\s　]+/g, "");
+          pieceChar = afterSame[0];
+          if (afterSame.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
+            isPromoted = true;
+          }
+        } else {
+          const xChar = moveTxt[0];
+          const yChar = moveTxt[1];
+          toX = 9 - (zenToNum[xChar] || parseInt(xChar));
+          toY = (kanToNum[yChar] || parseInt(yChar)) - 1;
+          pieceChar = moveTxt[2];
+          if (!pieceChar) continue;
+          if (moveTxt.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
+            isPromoted = true;
+          }
+        }
+
+        if (isNaN(toX) || isNaN(toY) || toX < 0 || toX > 8 || toY < 0 || toY > 8) {
+          continue;
+        }
+
+        lastToX = toX;
+        lastToY = toY;
+
+        let rawType = symbolMap[pieceChar];
+        if (!rawType) {
+          continue;
+        }
+
+        if (moveTxt.includes("打")) {
+          isDrop = true;
+        } else {
+          const srcMatch = moveTxt.match(/\(([1-9])([1-9])\)/);
+          if (srcMatch) {
+            fromX = 9 - parseInt(srcMatch[1]);
+            fromY = parseInt(srcMatch[2]) - 1;
+          } else {
+            isDrop = true;
+          }
+        }
+
+        if (isDrop) {
+          const hand = (turn === 'S' ? hS : hG);
+          const idx = hand.indexOf(rawType);
+          if (idx !== -1) {
+            hand.splice(idx, 1);
+          }
+          b[toY][toX] = { type: rawType, owner: turn };
+        } else {
+          const movingPiece = b[fromY][fromX];
+          if (!movingPiece) {
+            continue;
+          }
+          b[fromY][fromX] = null;
+
+          const destPiece = b[toY][toX];
+          if (destPiece) {
+            const destTypeRaw = destPiece.type;
+            const capturedType = unpromoteMap[destTypeRaw] || destTypeRaw;
+            const hand = (turn === 'S' ? hS : hG);
+            hand.push(capturedType);
+          }
+
+          let finalType = rawType;
+          if (isPromoted) {
+            const promoteMap = { 'FU':'TO', 'KY':'NY', 'KE':'NK', 'GI':'NG', 'KA':'UM', 'HI':'RY' };
+            finalType = promoteMap[rawType] || rawType;
+          } else {
+            finalType = movingPiece.type;
+          }
+
+          b[toY][toX] = { type: finalType, owner: turn };
+        }
+
+        const moveData = {
+          side: turn,
+          type: rawType,
+          fromX: fromX,
+          fromY: fromY,
+          toX: toX,
+          toY: toY,
+          isDrop: isDrop,
+          isPromoted: isPromoted
+        };
+
+        const node = {
+          id: "mid_" + moveIdx + "_" + Math.floor(Math.random() * 1000000),
+          board: JSON.stringify(b),
+          handS: [...hS],
+          handG: [...hG],
+          type: moveTxt,
+          lastMove: moveData
+        };
+
+        parsedHistory.push(node);
+
+        turn = turn === 'S' ? 'G' : 'S';
+        states.push({
+          board: JSON.parse(JSON.stringify(b)),
+          handS: [...hS],
+          handG: [...hG],
+          turn: turn,
+          historyNode: node
+        });
+
+        expectedMoveIdx++;
+      }
+
+      return {
+        history: parsedHistory,
+        states
+      };
+    }
+
+    // 1. 本線を動かす
+    const mainResult = parseMoves(mainSec.lines, board, handS, handG, firstTurn, 1);
+    
+    const history = [];
+    const mainStates = []; // インデックスを保持した局面遷移配列
+
+    // 開始局面
+    const startNode = {
+      id: "start",
+      board: JSON.stringify(board),
+      handS: [...handS],
+      handG: [...handG],
+      type: `${handicapType} (取り込み)`
+    };
+    history.push(startNode);
+    
+    mainStates.push({
+      board: JSON.parse(JSON.stringify(board)),
+      handS: [...handS],
+      handG: [...handG],
+      turn: firstTurn,
+      historyNode: startNode
+    });
+
+    // 本線を履歴にプッシュ
+    for (const node of mainResult.history) {
+      history.push(node);
+    }
+    for (const st of mainResult.states) {
+      mainStates.push(st);
+    }
+
+    // 2. 変化手順を解決して親に追加
+    for (const vSec of varSecs) {
+      const N = vSec.index; // 変化する手数（例：30手目の変化）
+      const parentIdx = N - 1; // 親は29手目
+      if (parentIdx >= 0 && parentIdx < mainStates.length) {
+        const parentState = mainStates[parentIdx];
+        const parentNode = parentState.historyNode;
+
+        const varResult = parseMoves(vSec.lines, parentState.board, parentState.handS, parentState.handG, parentState.turn, N);
+        if (varResult.history.length > 0) {
+          if (!parentNode.branches) {
+            parentNode.branches = [];
+          }
+          parentNode.branches.push(varResult.history);
+        }
+      }
+    }
+
+    // 勝者や理由の最終結論
     let winner = null;
     let winReason = "";
-    
-    const zenToNum = { '１':1, '２':2, '３':3, '４':4, '５':5, '６':6, '７':7, '８':8, '９':9 };
-    const kanToNum = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9 };
-    const symbolMap = {
-      '歩': 'FU', '香': 'KY', '桂': 'KE', '銀': 'GI', '金': 'KI', '角': 'KA', '飛': 'HI', '玉': 'OU', '王': 'OU',
-      'と': 'TO', '杏': 'NY', '圭': 'NK', '全': 'NG', '馬': 'UM', '龍': 'RY', '竜': 'RY'
-    };
-    const unpromoteMap = { 'TO': 'FU', 'NY': 'KY', 'NK': 'KE', 'NG': 'GI', 'UM': 'KA', 'RY': 'HI' };
-
-    function reversePieceSymbol(kanji) {
-      if (!kanji) return null;
-      return symbolMap[kanji[0]] || null;
+    const lastLine = mainSec.lines[mainSec.lines.length - 1] || "";
+    if (lastLine.includes("投了") || lastLine.includes("中断") || lastLine.includes("持時間切れ") || lastLine.includes("時間切れ") || lastLine.includes("千日手") || lastLine.includes("反則")) {
+      const finalTurn = mainStates[mainStates.length - 1]?.turn || firstTurn;
+      winner = finalTurn === 'S' ? 'G' : 'S'; // 反転した勝者
+      winReason = lastLine.trim();
     }
 
-    let lastToX = null;
-    let lastToY = null;
-    let currentTurn = firstTurn;
-
-    for (let rawLine of lines) {
-      const lineText = rawLine.trim();
-      if (!lineText) continue;
-      
-      const numMatch = lineText.match(/^([0-9]+)\s+(\S+)/);
-      if (!numMatch) continue;
-      
-      const moveIdx = parseInt(numMatch[1]);
-      const moveTxt = numMatch[2].trim(); 
-      
-      if (moveTxt.includes("投了") || moveTxt.includes("中断") || moveTxt.includes("持時間切れ") || moveTxt.includes("時間切れ") || moveTxt.includes("千日手") || moveTxt.includes("反則")) {
-        winner = currentTurn === 'S' ? 'G' : 'S';
-        winReason = moveTxt;
-        break;
-      }
-      
-      let toX = null, toY = null;
-      let isDrop = false;
-      let fromX = null, fromY = null;
-      let pieceChar = "";
-      let isPromoted = false;
-
-      if (moveTxt.startsWith("同")) {
-        if (lastToX === null || lastToY === null) {
-          throw new Error("Invalid 'same' coordinate reference");
-        }
-        toX = lastToX;
-        toY = lastToY;
-        const afterSame = moveTxt.substring(1).trim();
-        pieceChar = afterSame[0];
-        if (afterSame.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
-          isPromoted = true;
-        }
-      } else {
-        const xChar = moveTxt[0];
-        const yChar = moveTxt[1];
-        toX = 9 - (zenToNum[xChar] || parseInt(xChar));
-        toY = (kanToNum[yChar] || parseInt(yChar)) - 1;
-        pieceChar = moveTxt[2];
-        if (moveTxt.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
-          isPromoted = true;
-        }
-      }
-
-      if (isNaN(toX) || isNaN(toY) || toX < 0 || toX > 8 || toY < 0 || toY > 8) {
-        throw new Error("Index out of bounds");
-      }
-
-      lastToX = toX;
-      lastToY = toY;
-
-      let rawType = symbolMap[pieceChar];
-      if (!rawType) {
-        throw new Error("Unknown piece character: " + pieceChar);
-      }
-
-      if (moveTxt.includes("打")) {
-        isDrop = true;
-      } else {
-        const srcMatch = moveTxt.match(/\(([1-9])([1-9])\)/);
-        if (srcMatch) {
-          fromX = 9 - parseInt(srcMatch[1]);
-          fromY = parseInt(srcMatch[2]) - 1;
-        } else {
-          throw new Error("Missing source coordinate reference for movement");
-        }
-      }
-
-      if (isDrop) {
-        const hand = (currentTurn === 'S' ? handS : handG);
-        const idx = hand.indexOf(rawType);
-        if (idx !== -1) {
-          hand.splice(idx, 1);
-        }
-        board[toY][toX] = { type: rawType, owner: currentTurn };
-      } else {
-        const movingPiece = board[fromY][fromX];
-        if (!movingPiece) {
-          throw new Error("No moving piece found at source index");
-        }
-        board[fromY][fromX] = null;
-
-        const destPiece = board[toY][toX];
-        if (destPiece) {
-          const destTypeRaw = destPiece.type;
-          const capturedType = unpromoteMap[destTypeRaw] || destTypeRaw;
-          const hand = (currentTurn === 'S' ? handS : handG);
-          hand.push(capturedType);
-        }
-
-        let finalType = rawType;
-        if (isPromoted) {
-          const promoteMap = { 'FU':'TO', 'KY':'NY', 'KE':'NK', 'GI':'NG', 'KA':'UM', 'HI':'RY' };
-          finalType = promoteMap[rawType] || rawType;
-        } else {
-          finalType = movingPiece.type;
-        }
-
-        board[toY][toX] = { type: finalType, owner: currentTurn };
-      }
-
-      const moveData = {
-        side: currentTurn,
-        type: rawType,
-        fromX: fromX,
-        fromY: fromY,
-        toX: toX,
-        toY: toY,
-        isDrop: isDrop,
-        isPromoted: isPromoted
-      };
-
-      history.push({
-        id: "mid_" + moveIdx + "_" + Math.floor(Math.random() * 1000000),
-        board: JSON.stringify(board),
-        handS: [...handS],
-        handG: [...handG],
-        type: moveTxt,
-        lastMove: moveData
-      });
-
-      currentTurn = currentTurn === 'S' ? 'G' : 'S';
-    }
+    const finalMainState = mainStates[mainStates.length - 1] || { board: JSON.stringify(board), handS: [...handS], handG: [...handG], turn: firstTurn };
 
     return {
       history,
       winner,
       winReason,
-      board,
-      handS,
-      handG,
-      turn: currentTurn,
+      board: finalMainState.board ? (typeof finalMainState.board === 'string' ? JSON.parse(finalMainState.board) : finalMainState.board) : board,
+      handS: finalMainState.handS,
+      handG: finalMainState.handG,
+      turn: finalMainState.turn,
       handicapType
     };
   }
@@ -2857,16 +2980,49 @@
       const reader = new FileReader();
       reader.onload = async (evt) => {
         const text = evt.target.result;
-        try {
-          const parsed = parseKif(text);
-          await loadImportedKif(parsed);
-        } catch (err) {
-          console.error("File Parse Error:", err);
-          alert("取り込めませんでした");
+        
+        // UTF-8で読み込んだ際、最重要の将棋/KIFキーワードが検出できなかった場合は、
+        // 文字化けまたはShift_JISである可能性が高いため、Shift_JISでデコードし直す
+        const hasKifKeywords = text.includes("手合割") || text.includes("指手") || text.includes("先手") || text.includes("後手") || text.includes("歩") || text.includes("玉");
+        
+        if (!hasKifKeywords) {
+          // Shift_JIS で読み直す
+          const sjisReader = new FileReader();
+          sjisReader.onload = async (sjisEvt) => {
+            const sjisText = sjisEvt.target.result;
+            try {
+              const parsed = parseKif(sjisText);
+              await loadImportedKif(parsed);
+            } catch (err) {
+              console.error("File Parse (Shift_JIS) Error:", err);
+              alert("取り込めませんでした。文字コードまたはファイル形式が正しいか確認してください。");
+            }
+          };
+          sjisReader.readAsText(file, "Shift_JIS");
+        } else {
+          try {
+            const parsed = parseKif(text);
+            await loadImportedKif(parsed);
+          } catch (err) {
+            console.warn("UTF-8 parsing failed, trying Shift_JIS fallback...", err);
+            // パースに失敗した時も Shift_JIS でのリトライをフォールバックとして行う
+            const sjisReader = new FileReader();
+            sjisReader.onload = async (sjisEvt) => {
+              const sjisText = sjisEvt.target.result;
+              try {
+                const parsed = parseKif(sjisText);
+                await loadImportedKif(parsed);
+              } catch (err2) {
+                console.error("File Parse (Shift_JIS fallback) Error:", err2);
+                alert("取り込めませんでした。文字コードまたはファイル形式が正しいか確認してください。");
+              }
+            };
+            sjisReader.readAsText(file, "Shift_JIS");
+          }
         }
       };
-      // 日本語のKIFファイルでよく使用されるShift_JIS（CP932）を指定
-      reader.readAsText(file, "Shift_JIS");
+      // まずは UTF-8 でエンコーディングをトライする
+      reader.readAsText(file, "UTF-8");
     };
   }
 
