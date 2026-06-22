@@ -268,6 +268,21 @@
       z-index: 3000; 
       width: 280px; 
     }
+    #import-dialog {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      border: 3px solid #4caf50;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      z-index: 3000;
+      width: 280px;
+      text-align: center;
+    }
     .setting-row { margin-bottom: 15px; }
     .setting-row label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; }
     .setting-row select { width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
@@ -308,7 +323,21 @@
     <button id="btnSetting">対局準備</button>
     <button id="btnFlip">反転</button>
     <button id="btnToggleReview" disabled>感想戦</button>
+    <button id="btnImportKif" style="background:#4caf50; color:white;">棋譜検討</button>
     <button id="btnResign">投了</button>
+  </div>
+
+  <div id="import-dialog">
+    <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px; font-size:14px; color:#333;">棋譜検討（データ取り込み）</h3>
+    <p style="font-size:11px; color:#666; margin-bottom:15px; text-align:left; line-height:1.4;">
+      他のアプリで対局したKIF形式の棋譜データを取り込み、感想戦を開始します。
+    </p>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <button id="btnImportClipboard" style="background: #2196f3; color: white; padding: 8px 12px; font-size: 11px;">クリップボードから取り込み</button>
+      <button id="btnImportFile" style="background: #ff9800; color: white; padding: 8px 12px; font-size: 11px;">KIFファイルの取り込み</button>
+      <button id="btnImportCancel" style="background: #ccc; color: #333; padding: 8px 12px; font-size: 11px; font-weight: normal;">閉じる</button>
+    </div>
+    <input type="file" id="kifFileInput" accept=".kif,.txt" style="display: none;">
   </div>
 
   <div id="setting-dialog">
@@ -1089,14 +1118,17 @@
       lastInitAt = data.initAt;
     }
 
-    if (data.lastTick === 0 && !data.winner) {
+    const isImported = !!(data.history && data.history[0] && data.history[0].type && data.history[0].type.includes("取り込み"));
+    const isGameOver = !!data.winner || isImported;
+
+    if (data.lastTick === 0 && !isGameOver) {
       isReviewMode = false;
       sessionStorage.removeItem(`isReview_${roomName}`);
       Object.keys(sessionStorage).forEach(k => { if(k.startsWith("shown_")) sessionStorage.removeItem(k); });
       rvState = null; 
     }
 
-    if (!data.winner || data.lastTick === 0) {
+    if (!isGameOver || data.lastTick === 0) {
       document.getElementById('btnToggleReview').disabled = true;
     } else {
       document.getElementById('btnToggleReview').disabled = false;
@@ -1130,7 +1162,7 @@
 
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
     
-    if (data.winner && storedReview) {
+    if (isGameOver && storedReview) {
       isReviewMode = true;
       document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
@@ -1440,6 +1472,17 @@
 
   function showGameOverPopup(winner, reason = "") {
     if (!winner) return;
+    
+    // 棋譜取り込み時はポップアップを表示しない
+    if (sessionStorage.getItem(`skipGameOver_${roomName}`) === "true") {
+      sessionStorage.removeItem(`skipGameOver_${roomName}`);
+      return;
+    }
+
+    // 感想戦・検討モード中、または勝因に対局取り込みなどの文脈がある場合はポップアップを抑制する
+    if (isReviewMode || (reason && reason.includes("取り込み"))) {
+      return;
+    }
     
     const key = `shown_${roomName}_${state.history.length}_${winner}`;
     if (sessionStorage.getItem(key)) return;
@@ -1930,6 +1973,9 @@
     // 感想戦モードかどうかで、戻る（btnToggleReview）ボタンおよび投了（btnResign）ボタンを非表示にする
     const toggleBtn = document.getElementById('btnToggleReview');
     const resignBtn = document.getElementById('btnResign');
+    const importKifBtn = document.getElementById('btnImportKif');
+    const isDuringGame = (state.lastTick !== 0 && !state.winner);
+
     if (toggleBtn && resignBtn) {
       if (isReviewMode) {
         toggleBtn.style.display = 'none';
@@ -1944,9 +1990,19 @@
       }
     }
 
+    if (importKifBtn) {
+      const isImported = !!(state.history && state.history[0] && state.history[0].type && state.history[0].type.includes("取り込み"));
+      const isActuallyDuringGame = (state.lastTick !== 0 && !state.winner && !isImported);
+
+      if (isActuallyDuringGame && !isReviewMode) {
+        importKifBtn.style.display = 'none';
+      } else {
+        importKifBtn.style.display = 'inline-block';
+      }
+    }
+
     // 準備画面中の分かりやすい手順解説テキストを動的に提供
     const guideEl = document.getElementById('prep-guide-txt');
-    const isDuringGame = (state.lastTick !== 0 && !state.winner);
     if (guideEl) {
       if (isDuringGame || isReviewMode || state.winner) {
         guideEl.style.display = 'none';
@@ -2475,6 +2531,533 @@
       remove(configLockRef);
     }
   });
+
+  // --- KIF 棋譜検討・取り込み機能 ---
+  const importDialog = document.getElementById('import-dialog');
+  const btnImportKif = document.getElementById('btnImportKif');
+  const btnImportCancel = document.getElementById('btnImportCancel');
+  const btnImportClipboard = document.getElementById('btnImportClipboard');
+  const btnImportFile = document.getElementById('btnImportFile');
+  const kifFileInput = document.getElementById('kifFileInput');
+
+  if (btnImportKif) {
+    btnImportKif.onclick = () => {
+      const isImported = !!(state.history && state.history[0] && state.history[0].type && state.history[0].type.includes("取り込み"));
+      const isDuringGame = (state.lastTick !== 0 && !state.winner && !isImported);
+      if (isDuringGame && !isReviewMode) {
+        alert("対局中は棋譜検討機能を利用できません。");
+        return;
+      }
+      importDialog.style.display = 'block';
+    };
+  }
+
+  if (btnImportCancel) {
+    btnImportCancel.onclick = () => {
+      importDialog.style.display = 'none';
+    };
+  }
+
+  function parseKif(kifText) {
+    const lines = kifText.split(/\r?\n/);
+    
+    let handicapType = "平手";
+    let uwateSide = "G";
+    
+    for (const line of lines) {
+      if (line.includes("手合割：")) {
+        const match = line.match(/手合割：\s*(\S+)/);
+        if (match) {
+          const typeStr = match[1];
+          if (typeStr.includes("香落ち")) handicapType = "香落ち";
+          else if (typeStr.includes("角落ち")) handicapType = "角落ち";
+          else if (typeStr.includes("飛車落ち") || typeStr.includes("飛落ち")) handicapType = "飛車落ち";
+          else if (typeStr.includes("飛香落ち")) handicapType = "飛香落ち";
+          else if (typeStr.includes("二枚落ち")) handicapType = "二枚落ち";
+          else if (typeStr.includes("四枚落ち")) handicapType = "四枚落ち";
+          else if (typeStr.includes("六枚落ち")) handicapType = "六枚落ち";
+          else if (typeStr.includes("八枚落ち")) handicapType = "八枚落ち";
+          else handicapType = "平手";
+        }
+      }
+    }
+    
+    let board = generateInitialBoard(handicapType, uwateSide);
+    let handS = [];
+    let handG = [];
+    
+    // 持ち駒パーサ用の漢数字・数字変換マップ
+    const countMap = {
+      '': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+      '十': 10, '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15, '十六': 16, '十七': 17, '十八': 18
+    };
+
+    const zenToNum = { '１':1, '２':2, '３':3, '４':4, '５':5, '６':6, '７':7, '８':8, '９':9 };
+    const kanToNum = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9 };
+    const symbolMap = {
+      '歩': 'FU', '香': 'KY', '桂': 'KE', '銀': 'GI', '金': 'KI', '角': 'KA', '飛': 'HI', '玉': 'OU', '王': 'OU',
+      'と': 'TO', '杏': 'NY', '圭': 'NK', '全': 'NG', '馬': 'UM', '龍': 'RY', '竜': 'RY'
+    };
+    const unpromoteMap = { 'TO': 'FU', 'NY': 'KY', 'NK': 'KE', 'NG': 'GI', 'UM': 'KA', 'RY': 'HI' };
+
+    function reversePieceSymbol(kanji) {
+      if (!kanji) return null;
+      return symbolMap[kanji[0]] || null;
+    }
+
+    function parseHandPieces(handStr, handArray) {
+      if (!handStr || handStr === "なし") return;
+      const parts = handStr.split(/[\s　]+/);
+      for (const p of parts) {
+        if (!p) continue;
+        const pieceNameChar = p[0];
+        const type = reversePieceSymbol(pieceNameChar);
+        if (type) {
+          const countStr = p.substring(1);
+          let count = 1;
+          if (countStr) {
+            if (/^[0-9]+$/.test(countStr)) {
+              count = parseInt(countStr);
+            } else if (countMap[countStr] !== undefined) {
+              count = countMap[countStr];
+            }
+          }
+          for (let c = 0; c < count; c++) {
+            handArray.push(type);
+          }
+        }
+      }
+    }
+
+    for (const line of lines) {
+      if (line.startsWith("上手の持駒：") || line.startsWith("後手の持駒：")) {
+        const gHandStr = line.split("：")[1]?.trim();
+        parseHandPieces(gHandStr, handG);
+      }
+      if (line.startsWith("下手の持駒：") || line.startsWith("先手の持駒：")) {
+        const sHandStr = line.split("：")[1]?.trim();
+        parseHandPieces(sHandStr, handS);
+      }
+    }
+
+    let firstTurn = 'S';
+    for (const line of lines) {
+      if (line.includes("上手番") || line.includes("後手番")) {
+        firstTurn = 'G';
+        break;
+      } else if (line.includes("下手番") || line.includes("先手番")) {
+        firstTurn = 'S';
+        break;
+      }
+    }
+
+    // セクションに分割
+    const sections = [];
+    let currentSection = {
+      type: 'main',
+      index: 0,
+      lines: []
+    };
+
+    for (const line of lines) {
+      const lineText = line.trim();
+      if (!lineText) continue;
+
+      // 変化：30手順などの様々なバリエーションに対応
+      const changeMatch = lineText.match(/^変化[\s:：]+([0-9]+)/);
+      if (changeMatch) {
+         if (currentSection.lines.length > 0) {
+           sections.push(currentSection);
+         }
+         currentSection = {
+           type: 'variation',
+           index: parseInt(changeMatch[1]),
+           lines: []
+         };
+      } else {
+         currentSection.lines.push(lineText);
+      }
+    }
+    if (currentSection.lines.length > 0) {
+      sections.push(currentSection);
+    }
+
+    const mainSec = sections.find(s => s.type === 'main') || { lines: [] };
+    const varSecs = sections.filter(s => s.type === 'variation');
+
+    // 動きをシミュレートするメインのパーサー
+    function parseMoves(moveLines, startBoard, startHandS, startHandG, startTurn, startIndex) {
+      const b = JSON.parse(JSON.stringify(startBoard));
+      const hS = [...startHandS];
+      const hG = [...startHandG];
+      let turn = startTurn;
+      
+      const parsedHistory = [];
+      const states = [];
+      
+      let lastToX = null;
+      let lastToY = null;
+      let expectedMoveIdx = startIndex;
+
+      for (const lineText of moveLines) {
+        // 手数とその後の部分を分離
+        const lineTrimmed = lineText.trim();
+        const matchMove = lineTrimmed.match(/^([0-9]+)\s+(.+)$/);
+        if (!matchMove) continue;
+
+        const moveIdx = parseInt(matchMove[1]);
+        const remaining = matchMove[2].trim();
+        
+        if (moveIdx !== expectedMoveIdx) {
+          continue;
+        }
+
+        // コロンを含む消費時間カッコ ( 0:00/00:00:00) などを完全に除去
+        let moveTxt = remaining.replace(/\(\s*[0-9]+:[0-9]+[^\)]*\)/, "").trim();
+
+        if (moveTxt.includes("投了") || moveTxt.includes("中断") || moveTxt.includes("持時間切れ") || moveTxt.includes("時間切れ") || moveTxt.includes("千日手") || moveTxt.includes("反則")) {
+          break;
+        }
+
+        // 先頭の ▲、△、▽、▼ などの手番記号を綺麗にクレンジングする
+        // さらに、スペースをすべて除去（"同　銀(22)" -> "同銀(22)" のように、中にあるスペースを詰める）
+        let cleanMove = moveTxt.replace(/^[▲△▼▽先手後手]+/g, "").replace(/[\s　]+/g, "");
+
+        let toX = null, toY = null;
+        let isDrop = false;
+        let fromX = null, fromY = null;
+        let pieceChar = "";
+        let isPromoted = false;
+
+        if (cleanMove.startsWith("同")) {
+          if (lastToX === null || lastToY === null) continue;
+          toX = lastToX;
+          toY = lastToY;
+          // "同" 以外の部分から駒名と成情報を切り出す
+          const afterSame = cleanMove.substring(1);
+          pieceChar = afterSame[0];
+          if (afterSame.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
+            isPromoted = true;
+          }
+        } else {
+          const xChar = cleanMove[0];
+          const yChar = cleanMove[1];
+          toX = 9 - (zenToNum[xChar] || parseInt(xChar));
+          toY = (kanToNum[yChar] || parseInt(yChar)) - 1;
+          pieceChar = cleanMove[2];
+          if (!pieceChar) continue;
+          if (cleanMove.includes("成") && !['と','杏','圭','全','馬','龍'].includes(pieceChar)) {
+            isPromoted = true;
+          }
+        }
+
+        if (isNaN(toX) || isNaN(toY) || toX < 0 || toX > 8 || toY < 0 || toY > 8) {
+          continue;
+        }
+
+        lastToX = toX;
+        lastToY = toY;
+
+        let rawType = symbolMap[pieceChar];
+        if (!rawType) {
+          continue;
+        }
+
+        if (cleanMove.includes("打")) {
+          isDrop = true;
+        } else {
+          const srcMatch = cleanMove.match(/\(([1-9])([1-9])\)/);
+          if (srcMatch) {
+            fromX = 9 - parseInt(srcMatch[1]);
+            fromY = parseInt(srcMatch[2]) - 1;
+          } else {
+            isDrop = true;
+          }
+        }
+
+        if (isDrop) {
+          const hand = (turn === 'S' ? hS : hG);
+          const idx = hand.indexOf(rawType);
+          if (idx !== -1) {
+            hand.splice(idx, 1);
+          }
+          b[toY][toX] = { type: rawType, owner: turn };
+        } else {
+          const movingPiece = b[fromY][fromX];
+          if (!movingPiece) {
+            continue;
+          }
+          b[fromY][fromX] = null;
+
+          const destPiece = b[toY][toX];
+          if (destPiece) {
+            const destTypeRaw = destPiece.type;
+            const capturedType = unpromoteMap[destTypeRaw] || destTypeRaw;
+            const hand = (turn === 'S' ? hS : hG);
+            hand.push(capturedType);
+          }
+
+          let finalType = rawType;
+          if (isPromoted) {
+            const promoteMap = { 'FU':'TO', 'KY':'NY', 'KE':'NK', 'GI':'NG', 'KA':'UM', 'HI':'RY' };
+            finalType = promoteMap[rawType] || rawType;
+          } else {
+            finalType = movingPiece.type;
+          }
+
+          b[toY][toX] = { type: finalType, owner: turn };
+        }
+
+        const moveData = {
+          side: turn,
+          type: rawType,
+          fromX: fromX,
+          fromY: fromY,
+          toX: toX,
+          toY: toY,
+          isDrop: isDrop,
+          isPromoted: isPromoted
+        };
+
+        // 通常の history の要素と同じ平坦なプロパティ構造にする
+        const node = {
+          ...moveData,
+          id: "mid_" + moveIdx + "_" + Math.floor(Math.random() * 1000000),
+          board: JSON.stringify(b),
+          handS: [...hS],
+          handG: [...hG],
+          kifType: moveTxt
+        };
+
+        parsedHistory.push(node);
+
+        turn = turn === 'S' ? 'G' : 'S';
+        states.push({
+          board: JSON.parse(JSON.stringify(b)),
+          handS: [...hS],
+          handG: [...hG],
+          turn: turn,
+          historyNode: node
+        });
+
+        expectedMoveIdx++;
+      }
+
+      return {
+        history: parsedHistory,
+        states
+      };
+    }
+
+    // 1. 本線を動かす
+    const mainResult = parseMoves(mainSec.lines, board, handS, handG, firstTurn, 1);
+    
+    const history = [];
+    const mainStates = []; // インデックスを保持した局面遷移配列
+
+    // 開始局面
+    const startNode = {
+      id: "start",
+      board: JSON.stringify(board),
+      handS: [...handS],
+      handG: [...handG],
+      type: `${handicapType} (取り込み)`
+    };
+    history.push(startNode);
+    
+    mainStates.push({
+      board: JSON.parse(JSON.stringify(board)),
+      handS: [...handS],
+      handG: [...handG],
+      turn: firstTurn,
+      historyNode: startNode
+    });
+
+    // 本線を履歴にプッシュ
+    for (const node of mainResult.history) {
+      history.push(node);
+    }
+    for (const st of mainResult.states) {
+      mainStates.push(st);
+    }
+
+    // 2. 変化手順を解決して親に追加
+    for (const vSec of varSecs) {
+      const N = vSec.index; // 変化する手数（例：30手目の変化）
+      const parentIdx = N - 1; // 親は29手目
+      if (parentIdx >= 0 && parentIdx < mainStates.length) {
+        const parentState = mainStates[parentIdx];
+        const parentNode = parentState.historyNode;
+
+        const varResult = parseMoves(vSec.lines, parentState.board, parentState.handS, parentState.handG, parentState.turn, N);
+        if (varResult.history.length > 0) {
+          if (!parentNode.branches) {
+            parentNode.branches = [];
+          }
+          parentNode.branches.push(varResult.history);
+        }
+      }
+    }
+
+    // 勝者や理由の最終結論
+    let winner = null;
+    let winReason = "";
+    const lastLine = mainSec.lines[mainSec.lines.length - 1] || "";
+    if (lastLine.includes("投了") || lastLine.includes("中断") || lastLine.includes("持時間切れ") || lastLine.includes("時間切れ") || lastLine.includes("千日手") || lastLine.includes("反則")) {
+      const finalTurn = mainStates[mainStates.length - 1]?.turn || firstTurn;
+      winner = finalTurn === 'S' ? 'G' : 'S'; // 反転した勝者
+      winReason = lastLine.trim();
+    }
+
+    const finalMainState = mainStates[mainStates.length - 1] || { board: JSON.stringify(board), handS: [...handS], handG: [...handG], turn: firstTurn };
+
+    return {
+      history,
+      winner,
+      winReason,
+      board: finalMainState.board ? (typeof finalMainState.board === 'string' ? JSON.parse(finalMainState.board) : finalMainState.board) : board,
+      handS: finalMainState.handS,
+      handG: finalMainState.handG,
+      turn: finalMainState.turn,
+      handicapType
+    };
+  }
+
+  async function loadImportedKif(parsed) {
+    if (!parsed || !parsed.history || parsed.history.length === 0) {
+      alert("取り込めませんでした");
+      return;
+    }
+
+    try {
+      // 棋譜取り込みの際は勝敗判定に関連する不要なアラートを表示しないようにフラグを設定
+      sessionStorage.setItem(`skipGameOver_${roomName}`, "true");
+
+      await set(gameRef, {
+        board: JSON.stringify(parsed.board),
+        handS: parsed.handS,
+        handG: parsed.handG,
+        turn: parsed.turn,
+        timers: { S: 0, G: 0 },
+        config: { main: 0, byo: 30, handicap: parsed.handicapType },
+        lastTick: getServerNow() - 3600000, 
+        winner: parsed.winner || null,
+        winReason: parsed.winReason || "",
+        initAt: serverTimestamp(),
+        history: parsed.history
+      });
+
+      await set(readyRef, { S: false, G: false });
+
+      sessionStorage.setItem(`isReview_${roomName}`, "true");
+      isReviewMode = true;
+
+      viewIdx = parsed.history.length - 1;
+      syncReviewStateLocally();
+      pushReviewUpdate();
+
+      importDialog.style.display = 'none';
+
+      render();
+      updateKifuList();
+
+      alert("棋譜の取り込みに成功しました。感想戦モードを開始します。");
+    } catch (err) {
+      console.error(err);
+      alert("取り込めませんでした");
+    }
+  }
+
+  if (btnImportClipboard) {
+    btnImportClipboard.onclick = async () => {
+      let text = "";
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          text = await navigator.clipboard.readText();
+        }
+      } catch (err) {
+        console.warn("Clipboard access denied, falling back to prompt:", err);
+      }
+
+      if (!text) {
+        text = prompt("KIF形式の棋譜テキストを入力（ペースト）してください：");
+      }
+
+      if (!text || !text.trim()) {
+        alert("取り込みをキャンセルしました");
+        return;
+      }
+
+      try {
+        const parsed = parseKif(text);
+        await loadImportedKif(parsed);
+      } catch (err) {
+        console.error("Clipboard Parse Error:", err);
+        alert("取り込めませんでした");
+      }
+    };
+  }
+
+  if (btnImportFile) {
+    btnImportFile.onclick = () => {
+      kifFileInput.value = "";
+      kifFileInput.click();
+    };
+  }
+
+  if (kifFileInput) {
+    kifFileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const text = evt.target.result;
+        
+        // UTF-8で読み込んだ際、最重要の将棋/KIFキーワードが検出できなかった場合は、
+        // 文字化けまたはShift_JISである可能性が高いため、Shift_JISでデコードし直す
+        const hasKifKeywords = text.includes("手合割") || text.includes("指手") || text.includes("先手") || text.includes("後手") || text.includes("歩") || text.includes("玉");
+        
+        if (!hasKifKeywords) {
+          // Shift_JIS で読み直す
+          const sjisReader = new FileReader();
+          sjisReader.onload = async (sjisEvt) => {
+            const sjisText = sjisEvt.target.result;
+            try {
+              const parsed = parseKif(sjisText);
+              await loadImportedKif(parsed);
+            } catch (err) {
+              console.error("File Parse (Shift_JIS) Error:", err);
+              alert("取り込めませんでした。文字コードまたはファイル形式が正しいか確認してください。");
+            }
+          };
+          sjisReader.readAsText(file, "Shift_JIS");
+        } else {
+          try {
+            const parsed = parseKif(text);
+            await loadImportedKif(parsed);
+          } catch (err) {
+            console.warn("UTF-8 parsing failed, trying Shift_JIS fallback...", err);
+            // パースに失敗した時も Shift_JIS でのリトライをフォールバックとして行う
+            const sjisReader = new FileReader();
+            sjisReader.onload = async (sjisEvt) => {
+              const sjisText = sjisEvt.target.result;
+              try {
+                const parsed = parseKif(sjisText);
+                await loadImportedKif(parsed);
+              } catch (err2) {
+                console.error("File Parse (Shift_JIS fallback) Error:", err2);
+                alert("取り込めませんでした。文字コードまたはファイル形式が正しいか確認してください。");
+              }
+            };
+            sjisReader.readAsText(file, "Shift_JIS");
+          }
+        }
+      };
+      // まずは UTF-8 でエンコーディングをトライする
+      reader.readAsText(file, "UTF-8");
+    };
+  }
 
   updateCallUI();
   
