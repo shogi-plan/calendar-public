@@ -232,9 +232,9 @@
     #review-panel {
       display: none;
       flex-direction: column;
-      width: 22vw;
-      min-width: 85px;
-      max-width: 100px;
+      width: 32vw;
+      min-width: 215px;
+      max-width: 275px;
       background: #ccc;
       border: 1px solid #999;
       box-sizing: border-box;
@@ -482,7 +482,7 @@
 <div id="analysis-floating-panel" style="
   display: none;
   position: fixed;
-  right: calc(22vw + 25px);
+  right: calc(32vw + 25px);
   bottom: 80px;
   width: 260px;
   background: #ffffff;
@@ -498,7 +498,7 @@
   overflow: hidden;
 ">
   <!-- Header -->
-  <div style="
+  <div id="analysis-floating-header" style="
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -507,8 +507,8 @@
     padding: 6px 10px;
     font-weight: bold;
     user-select: none;
-    cursor: pointer;
-  " onclick="toggleAnalysisMinimize(event)">
+    cursor: move;
+  ">
     <div style="display: flex; align-items: center; gap: 4px;">
       <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; box-shadow: 0 0 6px #4caf50;"></span>
       <span>WASMやねうら王 解析 <span id="analysis-minimize-indicator" style="font-size: 8px; color: #bbb; margin-left: 2px;">▼</span></span>
@@ -1039,7 +1039,7 @@
   };
 
   window.toggleAnalysisMinimize = function(event) {
-    if (event) event.stopPropagation();
+    if (event && event.stopPropagation) event.stopPropagation();
     const body = document.getElementById('analysis-floating-body');
     const indicator = document.getElementById('analysis-minimize-indicator');
     if (!body) return;
@@ -1051,6 +1051,109 @@
       if (indicator) indicator.textContent = '▲';
     }
   };
+
+  // --- 解析フローティングパネルのドラッグ&ドロップ移動制御 ---
+  setTimeout(() => {
+    const panel = document.getElementById('analysis-floating-panel');
+    const header = document.getElementById('analysis-floating-header');
+    if (!panel || !header) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+    let hasMoved = false;
+
+    header.addEventListener('mousedown', startDrag);
+    header.addEventListener('touchstart', startDrag, { passive: false });
+
+    function startDrag(e) {
+      if (e.target.closest('button')) return; // ボタン押下時はドラッグ無視
+      
+      isDragging = true;
+      hasMoved = false;
+
+      let clientX = e.clientX;
+      let clientY = e.clientY;
+      if (e.type === 'touchstart') {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      }
+
+      startX = clientX;
+      startY = clientY;
+
+      const rect = panel.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      // absolute/fixed の top/left 指定に切り替える
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.left = initialLeft + 'px';
+      panel.style.top = initialTop + 'px';
+
+      document.addEventListener('mousemove', drag);
+      document.addEventListener('mouseup', endDrag);
+      document.addEventListener('touchmove', drag, { passive: false });
+      document.addEventListener('touchend', endDrag);
+
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function drag(e) {
+      if (!isDragging) return;
+
+      let clientX = e.clientX;
+      let clientY = e.clientY;
+      if (e.type === 'touchmove') {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      }
+
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        hasMoved = true;
+      }
+
+      let newLeft = initialLeft + dx;
+      let newTop = initialTop + dy;
+
+      const panelWidth = panel.offsetWidth;
+      const panelHeight = panel.offsetHeight;
+      const winWidth = window.innerWidth;
+      const winHeight = window.innerHeight;
+
+      // はみ出し制限
+      if (newLeft < 0) newLeft = 0;
+      if (newLeft + panelWidth > winWidth) newLeft = winWidth - panelWidth;
+      if (newTop < 0) newTop = 0;
+      if (newTop + panelHeight > winHeight) newTop = winHeight - panelHeight;
+
+      panel.style.left = newLeft + 'px';
+      panel.style.top = newTop + 'px';
+
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function endDrag(e) {
+      if (!isDragging) return;
+      isDragging = false;
+
+      document.removeEventListener('mousemove', drag);
+      document.removeEventListener('mouseup', endDrag);
+      document.removeEventListener('touchmove', drag);
+      document.removeEventListener('touchend', endDrag);
+
+      // 移動距離が小さければ、ドラッグではなく単なるクリック/タップによる最小化切り替えと判定
+      if (!hasMoved) {
+        window.toggleAnalysisMinimize(e);
+      }
+    }
+  }, 500);
 
   function buildActiveLine() {
     const line = [];
@@ -1198,13 +1301,13 @@
       boardWrapper.classList.remove('playing-size');
       reviewPanel.style.display = 'flex';  // 感想戦は表示
       
-      // 感想戦用の幅（右側の感想戦パネル(最大100px)が画面外にはみ出さないように、確実にマージンを残す）
+      // 感想戦用の幅（余白を無くして限界まで大きく表示）
       container.style.flexGrow = "1";
-      container.style.maxWidth = "min(550px, calc(100% - 110px))"; /* 対局中と同じサイズに制限しつつ、感想戦パネルの幅100px＋隙間を確保 */
+      container.style.maxWidth = "550px"; /* 対局中と同じサイズに制限 */
       container.style.alignItems = 'stretch';
       
       boardWrapper.style.width = "100%";
-      boardWrapper.style.maxWidth = "min(550px, calc(100% - 110px))";
+      boardWrapper.style.maxWidth = "550px";
     }
 
     // いったん上下の回転クラスをリセット
