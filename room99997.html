@@ -313,30 +313,14 @@
     .ready-lamp { width: 12px; height: 12px; border-radius: 50%; background: #ccc; border: 1px solid #999; }
     .ready-lamp.on { background: #4caf50; box-shadow: 0 0 8px #4caf50; border-color: #fff; }
 
-    /* 解析パネルとレイアウト全体のモバイルレスポンシブ対応 */
+    /* 解析パネルのモバイルレスポンシブ対応（既存の将棋盤・棋譜リストのレイアウトには一切影響を与えません） */
     @media (max-width: 768px) {
-      #game-main {
-        flex-direction: column !important;
-        align-items: center !important;
-        overflow: visible !important;
-      }
-      #board-wrapper {
-        width: 95vw !important;
-        max-width: 460px !important;
-      }
-      #review-panel {
-        width: 95vw !important;
-        min-width: 95vw !important;
-        max-width: 95vw !important;
-        margin: 10px auto !important;
-        height: 250px !important;
-      }
       #analysis-floating-panel {
         right: 12px !important;
-        bottom: 75px !important;
-        width: calc(100vw - 24px) !important;
-        max-width: 320px !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+        bottom: 85px !important;
+        width: 280px !important;
+        max-width: calc(100vw - 24px) !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.35) !important;
       }
     }
   </style>
@@ -3506,12 +3490,12 @@
 
       await set(readyRef, { S: false, G: false });
 
-      sessionStorage.setItem(`isReview_${roomName}`, "true");
-      isReviewMode = true;
-
       viewIdx = parsed.history.length - 1;
       syncReviewStateLocally();
-      pushReviewUpdate();
+
+      // 感想戦用のフラグ設定、解析パネルの表示状態、UI連携などを包括的に処理する
+      // setReviewMode() 関数を使用して感想戦モードを開始。これにより棋譜パネルやフローティング解析パネルが正しく表示されます。
+      setReviewMode(true);
 
       importDialog.style.display = 'none';
 
