@@ -232,9 +232,9 @@
     #review-panel {
       display: none;
       flex-direction: column;
-      width: 32vw;
-      min-width: 215px;
-      max-width: 275px;
+      width: 22vw;
+      min-width: 85px;
+      max-width: 100px;
       background: #ccc;
       border: 1px solid #999;
       box-sizing: border-box;
@@ -316,11 +316,11 @@
     /* 解析パネルのモバイルレスポンシブ対応（既存の将棋盤・棋譜リストのレイアウトには一切影響を与えません） */
     @media (max-width: 768px) {
       #analysis-floating-panel {
-        right: 12px !important;
-        bottom: 85px !important;
-        width: 280px !important;
-        max-width: calc(100vw - 24px) !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.35) !important;
+        right: 10px !important;
+        bottom: 80px !important;
+        width: 250px !important;
+        max-width: calc(100vw - 20px) !important;
+        z-index: 10000 !important;
       }
     }
   </style>
@@ -482,7 +482,7 @@
 <div id="analysis-floating-panel" style="
   display: none;
   position: fixed;
-  right: 295px;
+  right: calc(22vw + 25px);
   bottom: 80px;
   width: 260px;
   background: #ffffff;
@@ -1198,13 +1198,13 @@
       boardWrapper.classList.remove('playing-size');
       reviewPanel.style.display = 'flex';  // 感想戦は表示
       
-      // 感想戦用の幅（余白を無くして限界まで大きく表示）
+      // 感想戦用の幅（右側の感想戦パネル(最大100px)が画面外にはみ出さないように、確実にマージンを残す）
       container.style.flexGrow = "1";
-      container.style.maxWidth = "550px"; /* 対局中と同じサイズに制限 */
+      container.style.maxWidth = "min(550px, calc(100% - 110px))"; /* 対局中と同じサイズに制限しつつ、感想戦パネルの幅100px＋隙間を確保 */
       container.style.alignItems = 'stretch';
       
       boardWrapper.style.width = "100%";
-      boardWrapper.style.maxWidth = "550px";
+      boardWrapper.style.maxWidth = "min(550px, calc(100% - 110px))";
     }
 
     // いったん上下の回転クラスをリセット
@@ -1680,16 +1680,25 @@
     }
 
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
+    const floatingPanel = document.getElementById('analysis-floating-panel');
     
-    if (isGameOver && storedReview) {
+    if (storedReview) {
       isReviewMode = true;
       document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
+      if (floatingPanel) floatingPanel.style.display = 'flex';
       if (!rvState) syncReviewStateLocally(); 
+      if (isAnalysisActive) {
+        triggerAnalysis();
+      }
     } else {
       isReviewMode = false;
       document.getElementById('btnToggleReview').textContent = "感想戦";
       document.getElementById('review-panel').style.display = 'none';
+      if (floatingPanel) {
+        floatingPanel.style.display = 'none';
+        stopAnalysisEngine();
+      }
       viewIdx = state.history.length - 1; 
       syncReviewStateLocally(); 
     }
