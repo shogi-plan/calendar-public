@@ -312,6 +312,17 @@
     .ready-area { display: flex; gap: 8px; align-items: center; justify-content: center; margin: 4px 0; }
     .ready-lamp { width: 12px; height: 12px; border-radius: 50%; background: #ccc; border: 1px solid #999; }
     .ready-lamp.on { background: #4caf50; box-shadow: 0 0 8px #4caf50; border-color: #fff; }
+
+    /* 解析パネルのモバイルレスポンシブ対応 */
+    @media (max-width: 768px) {
+      #analysis-floating-panel {
+        right: 12px !important;
+        bottom: 75px !important;
+        width: calc(100vw - 24px) !important;
+        max-width: 320px !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -496,10 +507,11 @@
     padding: 6px 10px;
     font-weight: bold;
     user-select: none;
-  ">
+    cursor: pointer;
+  " onclick="toggleAnalysisMinimize(event)">
     <div style="display: flex; align-items: center; gap: 4px;">
       <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; box-shadow: 0 0 6px #4caf50;"></span>
-      <span>WASMやねうら王 解析</span>
+      <span>WASMやねうら王 解析 <span id="analysis-minimize-indicator" style="font-size: 8px; color: #bbb; margin-left: 2px;">▼</span></span>
     </div>
     <button id="btnToggleAnalysis" style="
       font-size: 9px;
@@ -510,7 +522,7 @@
       background: #f0f0f0;
       color: black;
       font-weight: bold;
-    " onclick="toggleAnalysisEngine()">
+    " onclick="event.stopPropagation(); toggleAnalysisEngine();">
       解析開始
     </button>
   </div>
@@ -553,6 +565,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
   import { getDatabase, ref, set, onValue, push, remove, update, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
+  // --- 環境変数またはダミーフォールバックからFirebaseConfigを設定し、参照エラーを完璧に回避する ---
   const firebaseConfig = {
     apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
       authDomain: "calendar-chousei.firebaseapp.com",
@@ -1022,6 +1035,20 @@
       triggerAnalysis();
     } else {
       stopAnalysisEngine();
+    }
+  };
+
+  window.toggleAnalysisMinimize = function(event) {
+    if (event) event.stopPropagation();
+    const body = document.getElementById('analysis-floating-body');
+    const indicator = document.getElementById('analysis-minimize-indicator');
+    if (!body) return;
+    if (body.style.display === 'none') {
+      body.style.display = 'flex';
+      if (indicator) indicator.textContent = '▼';
+    } else {
+      body.style.display = 'none';
+      if (indicator) indicator.textContent = '▲';
     }
   };
 
