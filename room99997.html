@@ -232,9 +232,9 @@
     #review-panel {
       display: none;
       flex-direction: column;
-      width: 22vw;
-      min-width: 85px;
-      max-width: 100px;
+      width: 32vw;
+      min-width: 215px;
+      max-width: 275px;
       background: #ccc;
       border: 1px solid #999;
       box-sizing: border-box;
@@ -313,8 +313,24 @@
     .ready-lamp { width: 12px; height: 12px; border-radius: 50%; background: #ccc; border: 1px solid #999; }
     .ready-lamp.on { background: #4caf50; box-shadow: 0 0 8px #4caf50; border-color: #fff; }
 
-    /* 解析パネルのモバイルレスポンシブ対応 */
+    /* 解析パネルとレイアウト全体のモバイルレスポンシブ対応 */
     @media (max-width: 768px) {
+      #game-main {
+        flex-direction: column !important;
+        align-items: center !important;
+        overflow: visible !important;
+      }
+      #board-wrapper {
+        width: 95vw !important;
+        max-width: 460px !important;
+      }
+      #review-panel {
+        width: 95vw !important;
+        min-width: 95vw !important;
+        max-width: 95vw !important;
+        margin: 10px auto !important;
+        height: 250px !important;
+      }
       #analysis-floating-panel {
         right: 12px !important;
         bottom: 75px !important;
@@ -482,7 +498,7 @@
 <div id="analysis-floating-panel" style="
   display: none;
   position: fixed;
-  right: calc(22vw + 25px);
+  right: 295px;
   bottom: 80px;
   width: 260px;
   background: #ffffff;
