@@ -232,9 +232,9 @@
     #review-panel {
       display: none;
       flex-direction: column;
-      width: 32vw;
-      min-width: 215px;
-      max-width: 275px;
+      width: 22vw;
+      min-width: 85px;
+      max-width: 100px;
       background: #ccc;
       border: 1px solid #999;
       box-sizing: border-box;
@@ -312,17 +312,6 @@
     .ready-area { display: flex; gap: 8px; align-items: center; justify-content: center; margin: 4px 0; }
     .ready-lamp { width: 12px; height: 12px; border-radius: 50%; background: #ccc; border: 1px solid #999; }
     .ready-lamp.on { background: #4caf50; box-shadow: 0 0 8px #4caf50; border-color: #fff; }
-
-    /* 解析パネルのモバイルレスポンシブ対応（既存の将棋盤・棋譜リストのレイアウトには一切影響を与えません） */
-    @media (max-width: 768px) {
-      #analysis-floating-panel {
-        right: 10px !important;
-        bottom: 80px !important;
-        width: 250px !important;
-        max-width: calc(100vw - 20px) !important;
-        z-index: 10000 !important;
-      }
-    }
   </style>
 </head>
 <body>
@@ -454,7 +443,6 @@
   <div id="review-panel">
     <div id="nav-pos">0/0</div>
     <div id="kifu-container" class="kifu-list"></div>
-
     <div class="nav-controls">
       <button id="nav-prev" class="nav-btn">＜前</button>
       <button id="nav-next" class="nav-btn">次＞</button>
@@ -478,89 +466,6 @@
 <audio id="remote-audio" autoplay></audio>
 <audio id="localAudio" autoplay muted style="display:none;"></audio>
 
-<!-- YaneuraOu WASM Shogi Analysis Floating Panel -->
-<div id="analysis-floating-panel" style="
-  display: none;
-  position: fixed;
-  right: calc(32vw + 25px);
-  bottom: 80px;
-  width: 260px;
-  background: #ffffff;
-  border: 1px solid #999;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-  z-index: 5000;
-  font-family: sans-serif;
-  font-size: 11px;
-  line-height: 1.3;
-  box-sizing: border-box;
-  flex-direction: column;
-  overflow: hidden;
-">
-  <!-- Header -->
-  <div id="analysis-floating-header" style="
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #1a237e;
-    color: white;
-    padding: 6px 10px;
-    font-weight: bold;
-    user-select: none;
-    cursor: move;
-  ">
-    <div style="display: flex; align-items: center; gap: 4px;">
-      <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; box-shadow: 0 0 6px #4caf50;"></span>
-      <span>WASMやねうら王 解析 <span id="analysis-minimize-indicator" style="font-size: 8px; color: #bbb; margin-left: 2px;">▼</span></span>
-    </div>
-    <button id="btnToggleAnalysis" style="
-      font-size: 9px;
-      padding: 1px 6px;
-      cursor: pointer;
-      border-radius: 3px;
-      border: 1px solid #777;
-      background: #f0f0f0;
-      color: black;
-      font-weight: bold;
-    " onclick="event.stopPropagation(); toggleAnalysisEngine();">
-      解析開始
-    </button>
-  </div>
-
-  <!-- Body Content -->
-  <div id="analysis-floating-body" style="padding: 8px; display: flex; flex-direction: column; gap: 6px; background: #fafafa;">
-    <!-- Initial Status Display (Shown when analysis is inactive) -->
-    <div id="analysis-waiting-message" style="text-align: center; color: #888; padding: 15px 0; font-size: 10px; line-height: 1.4;">
-      「解析開始」ボタンをクリックすると、WASMやねうら王による盤面解析を開始します。
-    </div>
-
-    <!-- Analysis Results Area (Shown when analysis is active) -->
-    <div id="analysis-results" style="display: none; flex-direction: column; gap: 6px;">
-      <!-- Evaluation Bar & Score -->
-      <div style="display: flex; gap: 6px; align-items: center; padding-top: 2px;">
-        <div style="font-weight: bold; font-size: 10px; min-width: 85px;" id="analysis-eval-text">▲ 0 (互角)</div>
-        <div style="flex: 1; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; position: relative;">
-          <div id="analysis-eval-bar" style="height: 100%; width: 50%; background: linear-gradient(to right, #f44336 45%, #4caf50 55%); transition: width 0.3s; position: absolute; left: 0;"></div>
-          <div id="analysis-eval-pointer" style="height: 100%; width: 2px; background: #000; position: absolute; left: 50%; transition: left 0.3s;"></div>
-        </div>
-      </div>
-
-      <!-- Engine stats: Depth, Nodes, NPS -->
-      <div style="display: flex; justify-content: space-between; font-size: 8px; color: #555; background: #eee; padding: 2px 5px; border-radius: 3px;">
-        <span id="analysis-depth">深さ: 0/18</span>
-        <span id="analysis-nps">NPS: -</span>
-        <span id="analysis-nodes">ノード: -</span>
-      </div>
-
-      <!-- Candidates List -->
-      <div style="font-weight: bold; font-size: 9px; color: #333; margin-top: 2px;">候補手 (Top 3):</div>
-      <div id="analysis-candidates" style="display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto;">
-        <!-- Items go here -->
-      </div>
-    </div>
-  </div>
-</div>
-
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
   import { getDatabase, ref, set, onValue, push, remove, update, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
@@ -568,12 +473,12 @@
   // --- 環境変数またはダミーフォールバックからFirebaseConfigを設定し、参照エラーを完璧に回避する ---
   const firebaseConfig = {
     apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
-      authDomain: "calendar-chousei.firebaseapp.com",
-      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "calendar-chousei",
-      storageBucket: "calendar-chousei.firebasestorage.app",
-      messagingSenderId: "368704703397",
-      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+    authDomain: "calendar-chousei.firebaseapp.com",
+    databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "calendar-chousei",
+    storageBucket: "calendar-chousei.firebasestorage.app",
+    messagingSenderId: "368704703397",
+    appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
   
   // --- Firebase 初期化 ---
@@ -627,533 +532,6 @@
   let viewIdx = -1, rvState = null;
   let selectedBranches = {};
   let currentReadyData = { S: false, G: false };
-
-  // --- WASMやねうら王 解析エンジン (ローカル実装) 変数 & ロジック ---
-  let isAnalysisActive = false;
-  let analysisIntervalId = null;
-  let currentAnalysisDepth = 0;
-  let currentAnalysisNodes = 0;
-  let analysisCurrentPositionId = null;
-
-  function evaluateBoard(board, handS, handG) {
-    const values = {
-      'FU': 100, 'KY': 300, 'KE': 400, 'GI': 500, 'KI': 600, 'KA': 850, 'HI': 1000, 'OU': 20000,
-      'TO': 600, 'NY': 600, 'NK': 600, 'NG': 600, 'UM': 1200, 'RY': 1300
-    };
-    
-    let score = 0;
-    for (let y = 0; y < 9; y++) {
-      for (let x = 0; x < 9; x++) {
-        const p = board[y][x];
-        if (!p) continue;
-        const val = values[p.type] || 0;
-        let positionalBonus = 0;
-        
-        if (p.type === 'FU') {
-          positionalBonus = (p.owner === 'S') ? (8 - y) * 5 : y * 5;
-        } else if (p.type === 'TO' || p.type === 'RY' || p.type === 'UM') {
-          if (p.owner === 'S') {
-            if (y <= 2) positionalBonus = 30;
-          } else {
-            if (y >= 6) positionalBonus = 30;
-          }
-        }
-        
-        const pieceVal = val + positionalBonus;
-        if (p.owner === 'S') score += pieceVal;
-        else score -= pieceVal;
-      }
-    }
-    
-    if (handS) {
-      for (const piece of handS) {
-        score += (values[piece] || 0) + 15;
-      }
-    }
-    if (handG) {
-      for (const piece of handG) {
-        score -= (values[piece] || 0) + 15;
-      }
-    }
-    return score;
-  }
-
-  function generateAllLegalMoves(board, turn, handS, handG) {
-    const list = [];
-    for (let y = 0; y < 9; y++) {
-      for (let x = 0; x < 9; x++) {
-        const p = board[y][x];
-        if (p && p.owner === turn) {
-          const mvs = getLegalMoves(x, y, board, turn);
-          for (const m of mvs) {
-            const isPromotePossible = PROMOTE_MAP[p.type] && (
-              (turn === 'S' && (m.y <= 2 || y <= 2)) ||
-              (turn === 'G' && (m.y >= 6 || y >= 6))
-            );
-            const isKeiForce = (p.type === 'KE' && (turn === 'S' ? m.y <= 1 : m.y >= 7));
-            const isFuKyForce = ((p.type === 'FU' || p.type === 'KY' || p.type === 'FU(反則)' || p.type === 'KY(反則)') && (turn === 'S' ? m.y === 0 : m.y === 8));
-            
-            if (isKeiForce || isFuKyForce) {
-              list.push({
-                side: turn, fromX: x, fromY: y, toX: m.x, toY: m.y,
-                type: PROMOTE_MAP[p.type], originalType: p.type, isDrop: false, isPromoted: true
-              });
-            } else if (isPromotePossible) {
-              list.push({
-                side: turn, fromX: x, fromY: y, toX: m.x, toY: m.y,
-                type: p.type, originalType: p.type, isDrop: false, isPromoted: false
-              });
-              list.push({
-                side: turn, fromX: x, fromY: y, toX: m.x, toY: m.y,
-                type: PROMOTE_MAP[p.type], originalType: p.type, isDrop: false, isPromoted: true
-              });
-            } else {
-              list.push({
-                side: turn, fromX: x, fromY: y, toX: m.x, toY: m.y,
-                type: p.type, originalType: p.type, isDrop: false, isPromoted: false
-              });
-            }
-          }
-        }
-      }
-    }
-    
-    const h = (turn === 'S' ? handS : handG) || [];
-    const uniqueTypes = [...new Set(h)];
-    for (const type of uniqueTypes) {
-      const drops = getLegalDrops(type, turn, board, handS, handG);
-      for (const d of drops) {
-        list.push({
-          side: turn, fromX: -1, fromY: -1, toX: d.x, toY: d.y,
-          type: type, originalType: type, isDrop: true, isPromoted: false
-        });
-      }
-    }
-    return list;
-  }
-
-  function searchBestMoves(board, turn, handS, handG, depth = 2) {
-    const moves = generateAllLegalMoves(board, turn, handS, handG);
-    if (moves.length === 0) return [];
-    
-    const opponent = (turn === 'S' ? 'G' : 'S');
-    const scoredMoves = [];
-    
-    for (const m of moves) {
-      const simulatedBoard = JSON.parse(JSON.stringify(board));
-      let nextHandS = [...(handS || [])];
-      let nextHandG = [...(handG || [])];
-      
-      if (m.isDrop) {
-        const h = (turn === 'S' ? nextHandS : nextHandG);
-        const idx = h.indexOf(m.type);
-        if (idx !== -1) h.splice(idx, 1);
-        simulatedBoard[m.toY][m.toX] = { type: m.type, owner: turn };
-      } else {
-        const destPiece = simulatedBoard[m.toY][m.toX];
-        if (destPiece) {
-          const rawCap = UNPROMOTE_MAP[destPiece.type] || destPiece.type;
-          (turn === 'S' ? nextHandS : nextHandG).push(rawCap);
-        }
-        simulatedBoard[m.fromY][m.fromX] = null;
-        simulatedBoard[m.toY][m.toX] = { type: m.type, owner: turn };
-      }
-      
-      let score = evaluateBoard(simulatedBoard, nextHandS, nextHandG);
-      
-      if (depth >= 2) {
-        const oppMoves = generateAllLegalMoves(simulatedBoard, opponent, nextHandS, nextHandG);
-        if (oppMoves.length > 0) {
-          let bestOpponentScore = (opponent === 'S') ? -999999 : 999999;
-          for (const oppM of oppMoves.slice(0, 30)) { 
-            const oppBoard = JSON.parse(JSON.stringify(simulatedBoard));
-            let oppHandS = [...nextHandS];
-            let oppHandG = [...nextHandG];
-            
-            if (oppM.isDrop) {
-              const h = (opponent === 'S' ? oppHandS : oppHandG);
-              const idx = h.indexOf(oppM.type);
-              if (idx !== -1) h.splice(idx, 1);
-              oppBoard[oppM.toY][oppM.toX] = { type: oppM.type, owner: opponent };
-            } else {
-              const destPiece = oppBoard[oppM.toY][oppM.toX];
-              if (destPiece) {
-                const rawCap = UNPROMOTE_MAP[destPiece.type] || destPiece.type;
-                (opponent === 'S' ? oppHandS : oppHandG).push(rawCap);
-              }
-              oppBoard[oppM.fromY][oppM.fromX] = null;
-              oppBoard[oppM.toY][oppM.toX] = { type: oppM.type, owner: opponent };
-            }
-            const oppScore = evaluateBoard(oppBoard, oppHandS, oppHandG);
-            if (opponent === 'S') {
-              if (oppScore > bestOpponentScore) bestOpponentScore = oppScore;
-            } else {
-              if (oppScore < bestOpponentScore) bestOpponentScore = oppScore;
-            }
-          }
-          score = bestOpponentScore;
-        }
-      }
-      
-      let moveKif = "";
-      const sideChar = (turn === 'S' ? '▲' : '△');
-      const isSame = (viewIdx >= 0 && buildActiveLine()[viewIdx] && m.toX === buildActiveLine()[viewIdx].toX && m.toY === buildActiveLine()[viewIdx].toY);
-      const posStr = isSame ? "同" : ZEN_NUM[9 - m.toX] + KANJI_NUM[m.toY + 1];
-      let pieceChar = SYMBOLS[m.isPromoted ? (UNPROMOTE_MAP[m.type] || m.type) : m.type];
-      if (m.isPromoted) pieceChar += "成";
-      else if (m.isDrop) pieceChar += "打";
-      const fromStr = m.isDrop ? "" : `(${9 - m.fromX}${m.fromY + 1})`;
-      moveKif = sideChar + posStr + pieceChar + fromStr;
-      
-      scoredMoves.push({
-        move: m,
-        score: score,
-        text: moveKif,
-        nextBoard: simulatedBoard,
-        nextHandS, nextHandG,
-        side: m.side, fromX: m.fromX, fromY: m.fromY, toX: m.toX, toY: m.toY, type: m.type, isDrop: m.isDrop, isPromoted: m.isPromoted
-      });
-    }
-    
-    if (turn === 'S') {
-      scoredMoves.sort((a, b) => b.score - a.score);
-    } else {
-      scoredMoves.sort((a, b) => a.score - b.score);
-    }
-    return scoredMoves;
-  }
-
-  function playAnalysisMove(mObj) {
-    playPieceSound();
-    
-    const moveData = {
-      side: mObj.side,
-      fromX: mObj.fromX,
-      fromY: mObj.fromY,
-      toX: mObj.toX,
-      toY: mObj.toY,
-      type: mObj.type,
-      isDrop: mObj.isDrop,
-      isPromoted: mObj.isPromoted
-    };
-    
-    addReviewMove(moveData, mObj.nextBoard, mObj.nextHandS, mObj.nextHandG);
-  }
-
-  function updateAnalysisEvalBar(score, turn) {
-    const textEl = document.getElementById('analysis-eval-text');
-    const barEl = document.getElementById('analysis-eval-bar');
-    const ptrEl = document.getElementById('analysis-eval-pointer');
-    if (!textEl || !barEl || !ptrEl) return;
-    
-    let sign = (score >= 0) ? "▲" : "△";
-    let absScore = Math.abs(score);
-    let desc = "互角";
-    
-    if (absScore < 150) desc = "互角";
-    else if (absScore < 500) desc = (score >= 0) ? "先手有利" : "後手有利";
-    else if (absScore < 1200) desc = (score >= 0) ? "先手優勢" : "後手優勢";
-    else if (absScore < 5000) desc = (score >= 0) ? "先手勝勢" : "後手勝勢";
-    else desc = (score >= 0) ? "先手必勝" : "後手必勝";
-    
-    textEl.textContent = `${sign}${absScore} (${desc})`;
-    
-    let pct = 50;
-    if (score > 0) {
-      pct = 50 + Math.min(45, (score / 2000) * 45);
-    } else {
-      pct = 50 - Math.min(45, (Math.abs(score) / 2000) * 45);
-    }
-    
-    barEl.style.width = `${pct}%`;
-    ptrEl.style.left = `${pct}%`;
-  }
-
-  function renderAnalysisCandidates(scoredMoves) {
-    const container = document.getElementById('analysis-candidates');
-    if (!container) return;
-    container.innerHTML = '';
-    
-    if (scoredMoves.length === 0) {
-      const emptyDiv = document.createElement('div');
-      emptyDiv.style.textAlign = 'center';
-      emptyDiv.style.color = '#777';
-      emptyDiv.style.padding = '10px 0';
-      emptyDiv.textContent = '合法手なし';
-      container.appendChild(emptyDiv);
-      return;
-    }
-    
-    const topMoves = scoredMoves.slice(0, 3);
-    topMoves.forEach((mObj, idx) => {
-      const item = document.createElement('div');
-      item.style.display = 'flex';
-      item.style.justifyContent = 'space-between';
-      item.style.alignItems = 'center';
-      item.style.padding = '4px 6px';
-      item.style.background = '#fcfcfc';
-      item.style.border = '1px solid #ddd';
-      item.style.borderRadius = '3px';
-      item.style.fontSize = '10px';
-      
-      const leftCol = document.createElement('div');
-      leftCol.style.display = 'flex';
-      leftCol.style.flexDirection = 'column';
-      leftCol.style.gap = '1px';
-      
-      const moveTitle = document.createElement('span');
-      moveTitle.innerHTML = `<strong style="color: ${idx === 0 ? '#d32f2f' : '#1976d2'};">#${idx + 1}</strong> <span style="font-size: 11px; font-weight: bold;">${mObj.text}</span>`;
-      
-      const scoreBadge = document.createElement('span');
-      const scoreSign = mObj.score >= 0 ? "+" : "";
-      scoreBadge.style.fontSize = '8px';
-      scoreBadge.style.color = '#555';
-      scoreBadge.textContent = `評価値: ${scoreSign}${mObj.score}`;
-      
-      leftCol.appendChild(moveTitle);
-      leftCol.appendChild(scoreBadge);
-      
-      const rightCol = document.createElement('div');
-      const playBtn = document.createElement('button');
-      playBtn.textContent = '着手';
-      playBtn.style.padding = '2px 6px';
-      playBtn.style.fontSize = '9px';
-      playBtn.style.background = '#4caf50';
-      playBtn.style.color = 'white';
-      playBtn.style.border = 'none';
-      playBtn.style.borderRadius = '2px';
-      playBtn.style.cursor = 'pointer';
-      
-      playBtn.onclick = (e) => {
-        e.stopPropagation();
-        playAnalysisMove(mObj);
-      };
-      
-      rightCol.appendChild(playBtn);
-      
-      item.appendChild(leftCol);
-      item.appendChild(rightCol);
-      container.appendChild(item);
-    });
-  }
-
-  function triggerAnalysis() {
-    if (!isReviewMode || !isAnalysisActive || !rvState) {
-      const resultsArea = document.getElementById('analysis-results');
-      if (resultsArea) resultsArea.style.display = 'none';
-      const waitMsg = document.getElementById('analysis-waiting-message');
-      if (waitMsg) waitMsg.style.display = 'block';
-      return;
-    }
-    
-    const waitMsg = document.getElementById('analysis-waiting-message');
-    if (waitMsg) waitMsg.style.display = 'none';
-    const resultsArea = document.getElementById('analysis-results');
-    if (resultsArea) resultsArea.style.display = 'flex';
-    
-    if (analysisIntervalId) {
-      clearInterval(analysisIntervalId);
-      analysisIntervalId = null;
-    }
-    
-    currentAnalysisDepth = 1;
-    currentAnalysisNodes = 100;
-    
-    const depthEl = document.getElementById('analysis-depth');
-    const npsEl = document.getElementById('analysis-nps');
-    const nodesEl = document.getElementById('analysis-nodes');
-    
-    if (depthEl) depthEl.textContent = `深さ: ${currentAnalysisDepth}/18`;
-    if (npsEl) npsEl.textContent = `NPS: 124K`;
-    if (nodesEl) nodesEl.textContent = `ノード: ${currentAnalysisNodes.toLocaleString()}`;
-    
-    const scoredMoves = searchBestMoves(rvState.board, rvState.turn, rvState.handS, rvState.handG, 2);
-    renderAnalysisCandidates(scoredMoves);
-    
-    if (scoredMoves.length > 0) {
-      updateAnalysisEvalBar(scoredMoves[0].score, rvState.turn);
-    } else {
-      updateAnalysisEvalBar(0, rvState.turn);
-    }
-    
-    analysisIntervalId = setInterval(() => {
-      if (currentAnalysisDepth < 18) {
-        currentAnalysisDepth += Math.floor(Math.random() * 2) + 1;
-        if (currentAnalysisDepth > 18) currentAnalysisDepth = 18;
-      }
-      
-      const npsBase = 120000 + Math.floor(Math.random() * 30000);
-      currentAnalysisNodes += Math.floor(npsBase / 5);
-      
-      const depthEl = document.getElementById('analysis-depth');
-      const npsEl = document.getElementById('analysis-nps');
-      const nodesEl = document.getElementById('analysis-nodes');
-      
-      if (depthEl) depthEl.textContent = `深さ: ${currentAnalysisDepth}/18`;
-      if (npsEl) npsEl.textContent = `NPS: ${(npsBase / 1000).toFixed(0)}K`;
-      if (nodesEl) nodesEl.textContent = `ノード: ${currentAnalysisNodes.toLocaleString()}`;
-      
-      if (Math.random() < 0.25 && scoredMoves.length > 0) {
-        const jitter = Math.floor((Math.random() - 0.5) * 15);
-        updateAnalysisEvalBar(scoredMoves[0].score + jitter, rvState.turn);
-      }
-      
-      if (currentAnalysisDepth >= 18) {
-        clearInterval(analysisIntervalId);
-        analysisIntervalId = null;
-        if (npsEl) npsEl.textContent = `NPS: -`;
-      }
-    }, 200);
-  }
-
-  function stopAnalysisEngine() {
-    if (analysisIntervalId) {
-      clearInterval(analysisIntervalId);
-      analysisIntervalId = null;
-    }
-    const btn = document.getElementById('btnToggleAnalysis');
-    if (btn) {
-      btn.textContent = "解析開始";
-      btn.style.background = "#f0f0f0";
-      btn.style.color = "black";
-    }
-    const resultsArea = document.getElementById('analysis-results');
-    if (resultsArea) resultsArea.style.display = 'none';
-    const waitMsg = document.getElementById('analysis-waiting-message');
-    if (waitMsg) waitMsg.style.display = 'block';
-  }
-
-  window.toggleAnalysisEngine = function() {
-    isAnalysisActive = !isAnalysisActive;
-    if (isAnalysisActive) {
-      const btn = document.getElementById('btnToggleAnalysis');
-      if (btn) {
-        btn.textContent = "解析停止";
-        btn.style.background = "#f44336";
-        btn.style.color = "white";
-      }
-      triggerAnalysis();
-    } else {
-      stopAnalysisEngine();
-    }
-  };
-
-  window.toggleAnalysisMinimize = function(event) {
-    if (event && event.stopPropagation) event.stopPropagation();
-    const body = document.getElementById('analysis-floating-body');
-    const indicator = document.getElementById('analysis-minimize-indicator');
-    if (!body) return;
-    if (body.style.display === 'none') {
-      body.style.display = 'flex';
-      if (indicator) indicator.textContent = '▼';
-    } else {
-      body.style.display = 'none';
-      if (indicator) indicator.textContent = '▲';
-    }
-  };
-
-  // --- 解析フローティングパネルのドラッグ&ドロップ移動制御 ---
-  setTimeout(() => {
-    const panel = document.getElementById('analysis-floating-panel');
-    const header = document.getElementById('analysis-floating-header');
-    if (!panel || !header) return;
-
-    let isDragging = false;
-    let startX = 0;
-    let startY = 0;
-    let initialLeft = 0;
-    let initialTop = 0;
-    let hasMoved = false;
-
-    header.addEventListener('mousedown', startDrag);
-    header.addEventListener('touchstart', startDrag, { passive: false });
-
-    function startDrag(e) {
-      if (e.target.closest('button')) return; // ボタン押下時はドラッグ無視
-      
-      isDragging = true;
-      hasMoved = false;
-
-      let clientX = e.clientX;
-      let clientY = e.clientY;
-      if (e.type === 'touchstart') {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-      }
-
-      startX = clientX;
-      startY = clientY;
-
-      const rect = panel.getBoundingClientRect();
-      initialLeft = rect.left;
-      initialTop = rect.top;
-
-      // absolute/fixed の top/left 指定に切り替える
-      panel.style.right = 'auto';
-      panel.style.bottom = 'auto';
-      panel.style.left = initialLeft + 'px';
-      panel.style.top = initialTop + 'px';
-
-      document.addEventListener('mousemove', drag);
-      document.addEventListener('mouseup', endDrag);
-      document.addEventListener('touchmove', drag, { passive: false });
-      document.addEventListener('touchend', endDrag);
-
-      if (e.cancelable) e.preventDefault();
-    }
-
-    function drag(e) {
-      if (!isDragging) return;
-
-      let clientX = e.clientX;
-      let clientY = e.clientY;
-      if (e.type === 'touchmove') {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-      }
-
-      const dx = clientX - startX;
-      const dy = clientY - startY;
-
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        hasMoved = true;
-      }
-
-      let newLeft = initialLeft + dx;
-      let newTop = initialTop + dy;
-
-      const panelWidth = panel.offsetWidth;
-      const panelHeight = panel.offsetHeight;
-      const winWidth = window.innerWidth;
-      const winHeight = window.innerHeight;
-
-      // はみ出し制限
-      if (newLeft < 0) newLeft = 0;
-      if (newLeft + panelWidth > winWidth) newLeft = winWidth - panelWidth;
-      if (newTop < 0) newTop = 0;
-      if (newTop + panelHeight > winHeight) newTop = winHeight - panelHeight;
-
-      panel.style.left = newLeft + 'px';
-      panel.style.top = newTop + 'px';
-
-      if (e.cancelable) e.preventDefault();
-    }
-
-    function endDrag(e) {
-      if (!isDragging) return;
-      isDragging = false;
-
-      document.removeEventListener('mousemove', drag);
-      document.removeEventListener('mouseup', endDrag);
-      document.removeEventListener('touchmove', drag);
-      document.removeEventListener('touchend', endDrag);
-
-      // 移動距離が小さければ、ドラッグではなく単なるクリック/タップによる最小化切り替えと判定
-      if (!hasMoved) {
-        window.toggleAnalysisMinimize(e);
-      }
-    }
-  }, 500);
 
   function buildActiveLine() {
     const line = [];
@@ -1783,25 +1161,16 @@
     }
 
     const storedReview = sessionStorage.getItem(`isReview_${roomName}`) === "true";
-    const floatingPanel = document.getElementById('analysis-floating-panel');
     
-    if (storedReview) {
+    if (isGameOver && storedReview) {
       isReviewMode = true;
       document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
-      if (floatingPanel) floatingPanel.style.display = 'flex';
       if (!rvState) syncReviewStateLocally(); 
-      if (isAnalysisActive) {
-        triggerAnalysis();
-      }
     } else {
       isReviewMode = false;
       document.getElementById('btnToggleReview').textContent = "感想戦";
       document.getElementById('review-panel').style.display = 'none';
-      if (floatingPanel) {
-        floatingPanel.style.display = 'none';
-        stopAnalysisEngine();
-      }
       viewIdx = state.history.length - 1; 
       syncReviewStateLocally(); 
     }
@@ -1907,10 +1276,6 @@
         rvState = { board: JSON.parse(data.board), handS: data.handS || [], handG: data.handG || [], turn: data.turn || 'S' };
         render();
         updateKifuList();
-        
-        if (isAnalysisActive) {
-          triggerAnalysis();
-        }
     }
   });
   
@@ -1985,17 +1350,7 @@
     updateDisplayRotation(currentFlip);
     updateReadyButton();
     
-    const floatingPanel = document.getElementById('analysis-floating-panel');
-    if (bool) {
-      pushReviewUpdate();
-      if (floatingPanel) floatingPanel.style.display = 'flex';
-      if (isAnalysisActive) {
-        triggerAnalysis();
-      }
-    } else {
-      stopAnalysisEngine();
-      if (floatingPanel) floatingPanel.style.display = 'none';
-    }
+    if (bool) pushReviewUpdate();
   }
 
   const cells = [];
@@ -2886,49 +2241,47 @@
       const mark = (s === 'S' ? '▲' : '△');
 
       if (isImported) {
-        el.textContent = `${mark} -`;
-        el.classList.remove('timer-alert');
-        return;
-      }
+        displayStr = `${mark} --:--`;
+      } else {
+        const isMainInf = (remMain >= 900000);
+        const isByoInf = (state.config.byo >= 900000);
 
-      const isMainInf = (remMain >= 900000);
-      const isByoInf = (state.config.byo >= 900000);
-
-      if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
-        if (isMainInf) {
-          displayStr = `${mark} 無制限`;
-        } else if (remMain > elapsed) {
-          const currentRem = remMain - elapsed;
-          displayStr = `${mark} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
-        } else {
-          if (isByoInf) {
-            displayStr = `${mark} 秒:無制限`;
+        if (state.turn === s && !state.winner && !isReviewMode && state.lastTick !== 0) {
+          if (isMainInf) {
+            displayStr = `${mark} 無制限`;
+          } else if (remMain > elapsed) {
+            const currentRem = remMain - elapsed;
+            displayStr = `${mark} ${Math.floor(currentRem/60)}:${(currentRem%60).toString().padStart(2,'0')}`;
           } else {
-            const overTime = Math.max(0, elapsed - remMain);
-            const byoRem = Math.max(0, (state.config.byo || 30) - overTime);
-            displayStr = `${mark} 秒:${byoRem}`;
-            if (byoRem <= 5) isByoAlert = true;
-            
-            if (byoRem <= 0 && !state.winner && !pendingProm) {
-                if (mySide === 'S' || mySide === 'G') {
-                    finish({ 
-                      side: s, 
-                      type: "時間切れ", 
-                      toX: null, 
-                      toY: null,
-                      isDrop: false 
-                    }); 
-                }
+            if (isByoInf) {
+              displayStr = `${mark} 秒:無制限`;
+            } else {
+              const overTime = Math.max(0, elapsed - remMain);
+              const byoRem = Math.max(0, (state.config.byo || 30) - overTime);
+              displayStr = `${mark} 秒:${byoRem}`;
+              if (byoRem <= 5) isByoAlert = true;
+              
+              if (byoRem <= 0 && !state.winner && !pendingProm) {
+                  if (mySide === 'S' || mySide === 'G') {
+                      finish({ 
+                        side: s, 
+                        type: "時間切れ", 
+                        toX: null, 
+                        toY: null,
+                        isDrop: false 
+                      }); 
+                  }
+              }
             }
           }
-        }
-      } else {
-        if (isMainInf) {
-          displayStr = `${mark} 無制限`;
-        } else if (remMain > 0) {
-          displayStr = `${mark} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
         } else {
-          displayStr = `${mark} 秒:${isByoInf ? '無制限' : (state.config.byo || 30)}`;
+          if (isMainInf) {
+            displayStr = `${mark} 無制限`;
+          } else if (remMain > 0) {
+            displayStr = `${mark} ${Math.floor(remMain/60)}:${(remMain%60).toString().padStart(2,'0')}`;
+          } else {
+            displayStr = `${mark} 秒:${isByoInf ? '無制限' : (state.config.byo || 30)}`;
+          }
         }
       }
       
@@ -3602,12 +2955,12 @@
 
       await set(readyRef, { S: false, G: false });
 
+      sessionStorage.setItem(`isReview_${roomName}`, "true");
+      isReviewMode = true;
+
       viewIdx = parsed.history.length - 1;
       syncReviewStateLocally();
-
-      // 感想戦用のフラグ設定、解析パネルの表示状態、UI連携などを包括的に処理する
-      // setReviewMode() 関数を使用して感想戦モードを開始。これにより棋譜パネルやフローティング解析パネルが正しく表示されます。
-      setReviewMode(true);
+      pushReviewUpdate();
 
       importDialog.style.display = 'none';
 
