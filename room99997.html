@@ -145,7 +145,6 @@
     button { cursor: pointer; border: none; border-radius: 3px; font-weight: bold; padding: 5px 6px; font-size: 11px; }
     button:disabled { background: #bbb !important; opacity: 0.6; cursor: not-allowed; }
     #btnReset { background: var(--danger-btn); color: white; }
-    #btnToggleReview { background: var(--primary-btn); color: white; }
     .status-area { display: flex; gap: 4px; margin-bottom: 4px; width: 100%; justify-content: center; }
     .timer { font-family: monospace; font-size: 14px; font-weight: bold; background: #fff; padding: 2px 4px; border: 1px solid #555; border-radius: 3px; min-width: 70px; text-align: center; }
     .your-turn { border-color: var(--danger-btn); background: #ffebee; }
@@ -322,7 +321,6 @@
   <div style="font-size:10px; margin-bottom:2px; width:100%; text-align:center;">
     <button id="btnSetting">対局準備</button>
     <button id="btnFlip">反転</button>
-    <button id="btnToggleReview" disabled>感想戦</button>
     <button id="btnImportKif" style="background:#4caf50; color:white;">棋譜検討</button>
     <button id="btnResign">投了</button>
   </div>
@@ -1128,12 +1126,6 @@
       rvState = null; 
     }
 
-    if (!isGameOver || data.lastTick === 0) {
-      document.getElementById('btnToggleReview').disabled = true;
-    } else {
-      document.getElementById('btnToggleReview').disabled = false;
-    }
-
     state.board = JSON.parse(data.board);
     state.handS = data.handS || [];
     state.handG = data.handG || [];
@@ -1164,12 +1156,10 @@
     
     if (isGameOver && storedReview) {
       isReviewMode = true;
-      document.getElementById('btnToggleReview').textContent = "戻る";
       document.getElementById('review-panel').style.display = 'flex';
       if (!rvState) syncReviewStateLocally(); 
     } else {
       isReviewMode = false;
-      document.getElementById('btnToggleReview').textContent = "感想戦";
       document.getElementById('review-panel').style.display = 'none';
       viewIdx = state.history.length - 1; 
       syncReviewStateLocally(); 
@@ -1344,7 +1334,6 @@
   function setReviewMode(bool) {
     isReviewMode = bool;
     sessionStorage.setItem(`isReview_${roomName}`, bool.toString());
-    document.getElementById('btnToggleReview').textContent = bool ? "戻る" : "感想戦";
     document.getElementById('review-panel').style.display = bool ? 'flex' : 'none';
     
     updateDisplayRotation(currentFlip);
@@ -1970,18 +1959,15 @@
       st.style.color = "black";
     }
 
-    // 感想戦モードかどうかで、戻る（btnToggleReview）ボタンおよび投了（btnResign）ボタンを非表示にする
-    const toggleBtn = document.getElementById('btnToggleReview');
+    // 感想戦モードかどうかで、投了（btnResign）ボタンを非表示にする
     const resignBtn = document.getElementById('btnResign');
     const importKifBtn = document.getElementById('btnImportKif');
     const isDuringGame = (state.lastTick !== 0 && !state.winner);
 
-    if (toggleBtn && resignBtn) {
+    if (resignBtn) {
       if (isReviewMode) {
-        toggleBtn.style.display = 'none';
         resignBtn.style.display = 'none';
       } else {
-        toggleBtn.style.display = 'inline-block';
         if (state.lastTick === 0 || state.winner) {
           resignBtn.style.display = 'none';
         } else {
@@ -2293,7 +2279,7 @@
 
   setInterval(updateTimerDisplay, 1000);
 
-  document.getElementById('btnToggleReview').onclick = () => { setReviewMode(!isReviewMode); if(isReviewMode) { syncReviewStateLocally(); pushReviewUpdate(); } render(); updateKifuList(); };
+
   document.getElementById('nav-prev').onclick = () => { if (viewIdx > 0) { viewIdx--; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-next').onclick = () => { const curLine = buildActiveLine(); if (viewIdx < curLine.length - 1) { viewIdx++; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
   document.getElementById('nav-first').onclick = () => { if (isReviewMode) { viewIdx = 0; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); } };
@@ -2567,6 +2553,21 @@
   function parseKif(kifText) {
     const lines = kifText.split(/\r?\n/);
     
+    const hasKifKeywords = kifText.includes("手合割") || 
+                           kifText.includes("指手") || 
+                           kifText.includes("先手") || 
+                           kifText.includes("後手") || 
+                           kifText.includes("上手の持駒") || 
+                           kifText.includes("下手の持駒") || 
+                           kifText.includes("後手の持駒") || 
+                           kifText.includes("先手の持駒");
+    
+    const hasMoveLine = lines.some(line => /^\s*[0-9]+\s+[▲△▽▼同同]?[１-９一-九]+/.test(line));
+
+    if (!hasKifKeywords && !hasMoveLine) {
+      throw new Error("KIF形式のデータではありません");
+    }
+
     let handicapType = "平手";
     let uwateSide = "G";
     
