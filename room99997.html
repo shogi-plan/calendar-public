@@ -472,13 +472,13 @@
 
   // --- 環境変数またはダミーフォールバックからFirebaseConfigを設定し、参照エラーを完璧に回避する ---
   const firebaseConfig = {
-    apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
-    authDomain: "calendar-chousei.firebaseapp.com",
-    databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "calendar-chousei",
-    storageBucket: "calendar-chousei.firebasestorage.app",
-    messagingSenderId: "368704703397",
-    appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
+      apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
+      authDomain: "calendar-chousei.firebaseapp.com",
+      databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "calendar-chousei",
+      storageBucket: "calendar-chousei.firebasestorage.app",
+      messagingSenderId: "368704703397",
+      appId: "1:368704703397:web:86ae24d920aaf7c5a0f64c"
   };
   
   // --- Firebase 初期化 ---
@@ -2938,7 +2938,23 @@
     try {
       // 棋譜取り込みの際は勝敗判定に関連する不要なアラートを表示しないようにフラグを設定
       sessionStorage.setItem(`skipGameOver_${roomName}`, "true");
+      // 先に感想戦モードフラグをセッションストレージにセットして、onValue発火時に感想戦モードとして処理させる
+      sessionStorage.setItem(`isReview_${roomName}`, "true");
+      isReviewMode = true;
 
+      // ローカルのstateを先に取り込みデータで更新しておく
+      state.board = parsed.board;
+      state.handS = parsed.handS || [];
+      state.handG = parsed.handG || [];
+      state.turn = parsed.turn || 'S';
+      state.winner = parsed.winner || null;
+      state.winReason = parsed.winReason || "";
+      state.history = parsed.history;
+
+      viewIdx = parsed.history.length - 1;
+      syncReviewStateLocally();
+
+      // Firebaseに書き込む
       await set(gameRef, {
         board: JSON.stringify(parsed.board),
         handS: parsed.handS,
@@ -2955,11 +2971,7 @@
 
       await set(readyRef, { S: false, G: false });
 
-      sessionStorage.setItem(`isReview_${roomName}`, "true");
-      isReviewMode = true;
-
-      viewIdx = parsed.history.length - 1;
-      syncReviewStateLocally();
+      // reviewRefにも現在の検討状態を書き込む
       pushReviewUpdate();
 
       importDialog.style.display = 'none';
