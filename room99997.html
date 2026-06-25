@@ -231,14 +231,16 @@
     #review-panel {
       display: none;
       flex-direction: column;
-      width: 240px;
+      width: 22vw;
+      min-width: 85px;
+      max-width: 100px;
       background: #ccc;
       border: 1px solid #999;
       box-sizing: border-box;
       flex-shrink: 0;
       align-self: stretch; 
       height: auto;
-      margin-left: 4px;
+      margin-left: auto; /* ギリギリまで右端へ移動させる */
     }
     .kifu-list { 
       flex: 1 1 0; 
@@ -439,39 +441,6 @@
   <div id="review-panel">
     <div id="nav-pos">0/0</div>
     <div id="kifu-container" class="kifu-list"></div>
-    
-    <!-- AI解析セクション -->
-    <div id="ai-analysis-section" style="background: #f7f7f7; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 6px; font-size: 11px;">
-      <div style="font-weight: bold; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 3px; color: #333;">
-        <span style="display: flex; align-items: center; gap: 3px;">🤖 AI局面解析</span>
-        <button id="btnExplainAI" style="background: #9c27b0; color: white; border: none; padding: 2px 6px; border-radius: 3px; font-size: 10px; cursor: pointer; font-weight: bold;">AI解説</button>
-      </div>
-      
-      <!-- 評価値表示（形勢ゲージ） -->
-      <div style="margin-bottom: 6px;">
-        <div style="display: flex; justify-content: space-between; font-size: 9px; color: #666; margin-bottom: 2px; font-weight: bold;">
-          <span>▲先手有利</span>
-          <span>△後手有利</span>
-        </div>
-        <div style="background: #e0e0e0; height: 10px; border-radius: 5px; position: relative; overflow: hidden; border: 1px solid #bbb;">
-          <div id="evaluation-bar" style="background: #2196f3; width: 50%; height: 100%; transition: width 0.3s ease;"></div>
-        </div>
-        <div id="evaluation-score" style="font-weight: bold; text-align: center; margin-top: 3px; font-size: 11px; color: #222;">評価値: 0 (互角)</div>
-      </div>
-      
-      <!-- 推奨手（候補手） -->
-      <div style="margin-bottom: 6px;">
-        <div style="font-weight: bold; font-size: 10px; color: #555; margin-bottom: 3px;">💡 AI推奨手（クリックで適用）:</div>
-        <div id="ai-best-moves" style="display: flex; flex-direction: column; gap: 3px;">
-          <!-- ここに推奨手を動的に挿入 -->
-        </div>
-      </div>
-
-      <!-- AI解説表示 -->
-      <div id="ai-explanation-container" style="display: none; background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 5px; max-height: 100px; overflow-y: auto; font-size: 10px; line-height: 1.4; color: #333; word-break: break-all; margin-top: 5px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
-        <!-- AI解説テキストがここに入る -->
-      </div>
-    </div>
     <div class="nav-controls">
       <button id="nav-prev" class="nav-btn">＜前</button>
       <button id="nav-next" class="nav-btn">次＞</button>
@@ -480,6 +449,45 @@
       <button id="btnResetBranches" class="nav-btn" style="background: #2196f3; color: white;">本線に戻る</button>
       <button id="btnKif" class="nav-btn" style="background: #4caf50; color: white;">KIFコピー</button>
     </div>
+  </div>
+</div>
+
+<!-- AI局面解析パネル（検討・感想戦モード時のみ表示） -->
+<div id="ai-analysis-panel" style="display: none; width: 95%; max-width: 500px; margin: 10px auto; background: #fff; border: 1px solid #ff9800; border-radius: 5px; box-sizing: border-box; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <div style="background: #fff3e0; padding: 8px 12px; border-bottom: 1px solid #ffe0b2; display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-weight: bold; color: #e65100; font-size: 13px; display: flex; align-items: center; gap: 4px;">
+      🤖 AI局面解析 (Gemini 2.5)
+    </span>
+    <span id="ai-status-label" style="font-size: 11px; color: #e65100; font-weight: bold;">解析準備完了</span>
+  </div>
+  
+  <div style="padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+    <!-- 形勢評価バー -->
+    <div id="ai-evaluation-area" style="display: none; background: #fafafa; border: 1px solid #eee; border-radius: 4px; padding: 8px;">
+      <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; margin-bottom: 6px;">
+        <span style="color: #2196f3;">▲ 先手</span>
+        <span id="ai-eval-score" style="color: #333; font-family: monospace;">評価中...</span>
+        <span style="color: #4caf50;">後手 △</span>
+      </div>
+      <div style="width: 100%; height: 10px; background: #e0e0e0; border-radius: 5px; overflow: hidden; display: flex; border: 1px solid #ccc;">
+        <div id="ai-eval-bar-s" style="width: 50%; height: 100%; background: #2196f3; transition: width 0.5s;"></div>
+        <div id="ai-eval-bar-g" style="width: 50%; height: 100%; background: #4caf50; transition: width 0.5s;"></div>
+      </div>
+    </div>
+
+    <!-- 推奨手表示 -->
+    <div id="ai-recommended-area" style="display: none; background: #f1f8e9; border: 1px solid #d0e7b5; border-radius: 4px; padding: 8px;">
+      <div style="font-size: 11px; font-weight: bold; color: #33691e; margin-bottom: 4px;">💡 AI推奨の指し手候補:</div>
+      <div id="ai-recommended-list" style="font-size: 12px; color: #1b5e20; font-family: sans-serif; display: flex; flex-direction: column; gap: 2px;"></div>
+    </div>
+
+    <!-- AI解説表示 -->
+    <div id="ai-explanation-box" style="font-size: 12px; line-height: 1.6; color: #333; max-height: 180px; overflow-y: auto; background: #fafafa; padding: 10px; border: 1px solid #eee; border-radius: 4px; white-space: pre-wrap; font-family: sans-serif;">現在の局面について、AIが形勢判断、推奨手、今後の指し針などを詳細に分析・解説します。</div>
+    
+    <!-- 解析実行ボタン -->
+    <button id="btnAiAnalyze" style="background: #ff9800; color: white; width: 100%; padding: 10px; font-size: 12px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; transition: background 0.2s;">
+      この局面をAI解析する
+    </button>
   </div>
 </div>
 
@@ -496,12 +504,10 @@
 <audio id="localAudio" autoplay muted style="display:none;"></audio>
 
 <script type="module">
-  import { evaluateBoard, searchBestMoves } from "./shogi-ai.js";
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
   import { getDatabase, ref, set, onValue, push, remove, update, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-  // --- 環境変数またはダミーフォールバックからFirebaseConfigを設定し、参照エラーを完璧に回避する ---
-  const firebaseConfig = {
+const firebaseConfig = {
     apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
     authDomain: "calendar-chousei.firebaseapp.com",
     databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -711,7 +717,7 @@
       
       // 感想戦用の幅（余白を無くして限界まで大きく表示）
       container.style.flexGrow = "1";
-      container.style.maxWidth = "800px"; /* 盤(550px) ＋ 解析・棋譜パネル(240px) ＋ 余白 を許容 */
+      container.style.maxWidth = "550px"; /* 対局中と同じサイズに制限 */
       container.style.alignItems = 'stretch';
       
       boardWrapper.style.width = "100%";
@@ -1642,6 +1648,32 @@
       turn: t
     }; 
     sel = null; selH = null; possibleMoves = []; 
+    if (typeof resetAiAnalysisUI === 'function') {
+      resetAiAnalysisUI();
+    }
+  }
+
+  function resetAiAnalysisUI() {
+    const statusLabel = document.getElementById('ai-status-label');
+    const evalArea = document.getElementById('ai-evaluation-area');
+    const recommendedArea = document.getElementById('ai-recommended-area');
+    const explanationBox = document.getElementById('ai-explanation-box');
+    const btn = document.getElementById('btnAiAnalyze');
+
+    if (statusLabel) {
+      statusLabel.textContent = "解析準備完了";
+      statusLabel.style.color = "#e65100";
+    }
+    if (evalArea) evalArea.style.display = 'none';
+    if (recommendedArea) recommendedArea.style.display = 'none';
+    if (explanationBox) {
+      explanationBox.textContent = "現在の局面について、AIが形勢判断、推奨手、今後の指し針などを詳細に分析・解説します。";
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.style.background = "#ff9800";
+      btn.textContent = "この局面をAI解析する";
+    }
   }
 
   function handleCellClick(x, y) {
@@ -2056,6 +2088,11 @@
     const activeTurn = isReviewMode ? (rvState?.turn || 'S') : state.turn;
     document.getElementById('timer-S').className = `timer ${activeTurn==='S'?'your-turn':''}`;
     document.getElementById('timer-G').className = `timer ${activeTurn==='G'?'your-turn':''}`;
+
+    const aiPanel = document.getElementById('ai-analysis-panel');
+    if (aiPanel) {
+      aiPanel.style.display = isReviewMode ? 'block' : 'none';
+    }
   }
 
   function formatKifuTextForBranch(move, idx) {
@@ -2219,196 +2256,7 @@
       container.appendChild(rowDiv); 
       if (isReviewMode && viewIdx === i) div.scrollIntoView({ block: 'nearest' });
     });
-    // --- AI解析の連動更新 ---
-    updateAIAnalysis();
   }
-
-  // --- AI局面解析（評価値＆推奨手＆AI解説）の実装 ---
-  let aiBestMovesCached = [];
-
-  async function updateAIAnalysis() {
-    const section = document.getElementById('ai-analysis-section');
-    if (!section) return;
-
-    if (!isReviewMode || !rvState) {
-      section.style.display = 'none';
-      return;
-    }
-
-    section.style.display = 'block';
-
-    const bar = document.getElementById('evaluation-bar');
-    const scoreEl = document.getElementById('evaluation-score');
-    const movesEl = document.getElementById('ai-best-moves');
-
-    try {
-      // 1. 形勢評価値の計算
-      const rawScore = evaluateBoard(rvState.board, rvState.handS, rvState.handG);
-      
-      // 2. AI推奨手の計算
-      const currentLine = buildActiveLine();
-      const bestMoves = searchBestMoves(rvState.board, rvState.turn, rvState.handS, rvState.handG, currentLine, viewIdx, 2);
-      aiBestMovesCached = bestMoves.slice(0, 3); // 上位3手のみ表示
-
-      // 評価バーの割合を計算 (0% 〜 100%)
-      let percent = 50 + (rawScore / 25); // 1石=100点。250点差で10%動く
-      percent = Math.max(5, Math.min(95, percent));
-      
-      bar.style.width = `${percent}%`;
-
-      let scoreText = "";
-      if (rawScore > 1500) {
-        scoreText = `評価値: ▲+${rawScore} (先手勝勢)`;
-      } else if (rawScore > 800) {
-        scoreText = `評価値: ▲+${rawScore} (先手優勢)`;
-      } else if (rawScore > 300) {
-        scoreText = `評価値: ▲+${rawScore} (先手有利)`;
-      } else if (rawScore < -1500) {
-        scoreText = `評価値: △${Math.abs(rawScore)} (後手勝勢)`;
-      } else if (rawScore < -800) {
-        scoreText = `評価値: △${Math.abs(rawScore)} (後手優勢)`;
-      } else if (rawScore < -300) {
-        scoreText = `評価値: △${Math.abs(rawScore)} (後手有利)`;
-      } else {
-        scoreText = `評価値: ${rawScore >= 0 ? '▲+' : '△'}${Math.abs(rawScore)} (互角)`;
-      }
-      scoreEl.textContent = scoreText;
-
-      // 推奨手のレンダリング
-      movesEl.innerHTML = '';
-      if (aiBestMovesCached.length === 0) {
-        movesEl.innerHTML = '<div style="color: #666; font-size: 10px; text-align:center; padding: 4px;">指せる合法手がありません</div>';
-      } else {
-        aiBestMovesCached.forEach((m, idx) => {
-          const btn = document.createElement('button');
-          btn.style.width = '100%';
-          btn.style.textAlign = 'left';
-          btn.style.padding = '4px 6px';
-          btn.style.background = '#e3f2fd';
-          btn.style.border = '1px solid #90caf9';
-          btn.style.borderRadius = '3px';
-          btn.style.fontSize = '10px';
-          btn.style.cursor = 'pointer';
-          btn.style.display = 'flex';
-          btn.style.justifyContent = 'space-between';
-          btn.style.color = '#1565c0';
-          btn.style.fontWeight = 'bold';
-          btn.style.marginBottom = '2px';
-          
-          const scoreDiff = m.score;
-          btn.innerHTML = `<span>${idx + 1}. ${m.text}</span> <span style="font-size: 9px; color: #555;">(評価: ${scoreDiff >= 0 ? '+' + scoreDiff : scoreDiff})</span>`;
-          
-          btn.onclick = () => {
-            applyAIBestMove(m);
-          };
-          movesEl.appendChild(btn);
-        });
-      }
-    } catch (err) {
-      console.error("AI Analysis Error:", err);
-    }
-  }
-
-  function applyAIBestMove(bestMove) {
-    if (!isReviewMode || !rvState) return;
-    playPieceSound();
-
-    const moveData = {
-      side: bestMove.side,
-      fromX: bestMove.fromX,
-      fromY: bestMove.fromY,
-      toX: bestMove.toX,
-      toY: bestMove.toY,
-      type: bestMove.originalType || bestMove.type,
-      isDrop: bestMove.isDrop,
-      isPromoted: bestMove.isPromoted
-    };
-
-    addReviewMove(moveData, bestMove.nextBoard, bestMove.nextHandS, bestMove.nextHandG);
-    render();
-    updateKifuList();
-  }
-
-  // Gemini局面解説の生成
-  setTimeout(() => {
-    const btnExplainAI = document.getElementById('btnExplainAI');
-    const explanationContainer = document.getElementById('ai-explanation-container');
-
-    if (btnExplainAI) {
-      btnExplainAI.onclick = async () => {
-        if (!isReviewMode || !rvState) return;
-        
-        btnExplainAI.disabled = true;
-        btnExplainAI.textContent = "考え中...";
-        explanationContainer.style.display = 'block';
-        explanationContainer.innerHTML = '<div style="text-align:center; color:#666; padding:10px;">🤖 Geminiが局面を解析して解説を生成しています...</div>';
-
-        try {
-          // 現在の盤面状況をテキスト化
-          let boardText = "";
-          for (let y = 0; y < 9; y++) {
-            let rowStr = [];
-            for (let x = 0; x < 9; x++) {
-              const p = rvState.board[y][x];
-              if (!p) {
-                rowStr.push("・");
-              } else {
-                const mark = p.owner === 'S' ? '▲' : '△';
-                const name = SYMBOLS[p.type] || p.type;
-                rowStr.push(mark + name);
-              }
-            }
-            boardText += `${y + 1}段目: ${rowStr.join(" ")}\n`;
-          }
-
-          // 持ち駒のテキスト化
-          const mapCount = (arr) => {
-            const counts = {};
-            arr.forEach(x => counts[x] = (counts[x] || 0) + 1);
-            return Object.entries(counts).map(([type, count]) => `${SYMBOLS[type]}${count > 1 ? count : ''}`).join('、') || 'なし';
-          };
-          const handSText = mapCount(rvState.handS);
-          const handGText = mapCount(rvState.handG);
-
-          // 棋譜履歴のテキスト化
-          const currentLine = buildActiveLine();
-          const activeLineText = currentLine.slice(1, viewIdx + 1).map((h, i) => {
-            return formatKifuText(h, i + 1, currentLine);
-          }).join('\n') || '開始局面';
-
-          // 直前の手
-          const lastMove = currentLine[viewIdx];
-          const lastMoveText = lastMove ? formatKifuText(lastMove, viewIdx, currentLine) : 'なし';
-
-          const response = await fetch("/api/explain", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              boardText,
-              handSText,
-              handGText,
-              activeLineText,
-              turnText: rvState.turn,
-              lastMoveText
-            })
-          });
-
-          if (!response.ok) {
-            throw new Error("HTTP error " + response.status);
-          }
-
-          const data = await response.json();
-          explanationContainer.innerHTML = `<strong>🤖 Gemini解説:</strong><br><span style="white-space: pre-wrap;">${data.explanation}</span>`;
-        } catch (err) {
-          console.error("Explanation Error:", err);
-          explanationContainer.innerHTML = `<span style="color:red;">解説の生成に失敗しました: ${err.message}</span>`;
-        } finally {
-          btnExplainAI.disabled = false;
-          btnExplainAI.textContent = "AI解説";
-        }
-      };
-    }
-  }, 1000);
 
   function formatKifuText(move, idx, currentLine) {
     if (idx === 0) return "開始";
@@ -3296,6 +3144,202 @@
       };
       // まずは UTF-8 でエンコーディングをトライする
       reader.readAsText(file, "UTF-8");
+    };
+  }
+
+  // --- AI 局面解析イベント処理 ---
+  const btnAiAnalyze = document.getElementById('btnAiAnalyze');
+  if (btnAiAnalyze) {
+    btnAiAnalyze.onclick = async () => {
+      const statusLabel = document.getElementById('ai-status-label');
+      const evalArea = document.getElementById('ai-evaluation-area');
+      const recommendedArea = document.getElementById('ai-recommended-area');
+      const explanationBox = document.getElementById('ai-explanation-box');
+      
+      btnAiAnalyze.disabled = true;
+      btnAiAnalyze.style.background = "#ccc";
+      btnAiAnalyze.textContent = "解析中...";
+      if (statusLabel) {
+        statusLabel.textContent = "AI解析実行中...";
+        statusLabel.style.color = "#2196f3";
+      }
+
+      try {
+        // 現在の局面データを動的に作成
+        let bText = "";
+        const board = rvState ? rvState.board : state.board;
+        const SYMBOLS_JP = {
+          'FU': '歩', 'KY': '香', 'KE': '桂', 'GI': '銀', 'KI': '金', 'KA': '角', 'HI': '飛', 'OU': '玉',
+          'TO': 'と', 'NY': '成香', 'NK': '成桂', 'NG': '成銀', 'UM': '馬', 'RY': '竜'
+        };
+
+        for (let y = 0; y < 9; y++) {
+          let row = "";
+          for (let x = 0; x < 9; x++) {
+            const p = board[y][x];
+            if (!p) {
+              row += "・";
+            } else {
+              row += (p.owner === 'S' ? "▲" : "△") + (SYMBOLS_JP[p.type] || p.type);
+            }
+          }
+          bText += row + "\n";
+        }
+
+        const hs = rvState ? rvState.handS : state.handS;
+        const hsCount = {};
+        (hs || []).forEach(t => hsCount[t] = (hsCount[t] || 0) + 1);
+        const handSText = Object.keys(hsCount).length === 0 ? "なし" : 
+          Object.entries(hsCount).map(([type, count]) => `${SYMBOLS_JP[type]}${count > 1 ? count : ""}`).join(" ");
+
+        const hg = rvState ? rvState.handG : state.handG;
+        const hgCount = {};
+        (hg || []).forEach(t => hgCount[t] = (hgCount[t] || 0) + 1);
+        const handGText = Object.keys(hgCount).length === 0 ? "なし" : 
+          Object.entries(hgCount).map(([type, count]) => `${SYMBOLS_JP[type]}${count > 1 ? count : ""}`).join(" ");
+
+        const activeLine = buildActiveLine();
+        const activeLineText = activeLine.map((h, i) => {
+          if (i === 0) return "";
+          return formatKifuTextForBranch(h, i);
+        }).filter(Boolean).join(" → ");
+
+        const turnText = rvState ? rvState.turn : state.turn;
+
+        let lastMoveText = "なし";
+        if (isReviewMode && viewIdx > 0 && activeLine[viewIdx]) {
+          lastMoveText = formatKifuTextForBranch(activeLine[viewIdx], viewIdx);
+        } else if (!isReviewMode && activeLine.length > 1) {
+          lastMoveText = formatKifuTextForBranch(activeLine[activeLine.length - 1], activeLine.length - 1);
+        }
+
+        const response = await fetch("/api/explain", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            boardText: bText,
+            handSText,
+            handGText,
+            activeLineText,
+            turnText,
+            lastMoveText
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error("APIエラーが発生しました");
+        }
+
+        const result = await response.json();
+        const explanation = result.explanation || "";
+
+        // パース処理
+        let evalVal = 0;
+        let recommendedMoves = [];
+        let cleanExplanation = explanation;
+
+        // ===EVAL=== のパース
+        const evalMatch = explanation.match(/===EVAL===\s*([\+\-]?\d+)/);
+        if (evalMatch) {
+          evalVal = parseInt(evalMatch[1]);
+        }
+
+        // ===RECOMMENDED=== のパース
+        const recMatch = explanation.match(/===RECOMMENDED===([\s\S]*?)(===|$)/);
+        if (recMatch) {
+          const recText = recMatch[1];
+          recommendedMoves = recText.split("\n")
+            .map(line => line.trim())
+            .filter(line => /^[1-3]\./.test(line))
+            .map(line => line.replace(/^[1-3]\.\s*/, ""));
+        }
+
+        // ===EXPLANATION=== のパース
+        const expMatch = explanation.match(/===EXPLANATION===([\s\S]*)/);
+        if (expMatch) {
+          cleanExplanation = expMatch[1].trim();
+        } else {
+          // フォールバック: 各タグを取り除く
+          cleanExplanation = explanation
+            .replace(/===EVAL===[\s\S]*?===RECOMMENDED===/, "")
+            .replace(/===RECOMMENDED===[\s\S]*?===EXPLANATION===/, "")
+            .replace(/===EXPLANATION===/, "")
+            .trim();
+        }
+
+        // UIへの反映
+        if (statusLabel) {
+          statusLabel.textContent = "解析完了";
+          statusLabel.style.color = "#4caf50";
+        }
+
+        // 評価値表示
+        if (evalArea) {
+          evalArea.style.display = 'block';
+          const scoreEl = document.getElementById('ai-eval-score');
+          const barS = document.getElementById('ai-eval-bar-s');
+          const barG = document.getElementById('ai-eval-bar-g');
+
+          // スコアテキストのフォーマット
+          let scoreText = "";
+          if (evalVal > 0) scoreText = `▲先手有利 (+${evalVal})`;
+          else if (evalVal < 0) scoreText = `△後手有利 (${evalVal})`;
+          else scoreText = "互角 (±0)";
+          if (scoreEl) scoreEl.textContent = scoreText;
+
+          // バー比率の計算 (-3000 〜 +3000 の範囲を 0% 〜 100% にマッピング)
+          // 0 のときに 50%/50%
+          let sPercent = 50 + (evalVal / 3000) * 50;
+          sPercent = Math.max(5, Math.min(95, sPercent)); // 極端な端にいきすぎないように
+          let gPercent = 100 - sPercent;
+
+          if (barS) barS.style.width = `${sPercent}%`;
+          if (barG) barG.style.width = `${gPercent}%`;
+        }
+
+        // 推奨手表示
+        if (recommendedArea) {
+          const listEl = document.getElementById('ai-recommended-list');
+          if (listEl) {
+            listEl.innerHTML = "";
+            if (recommendedMoves.length > 0) {
+              recommendedArea.style.display = 'block';
+              recommendedMoves.forEach((move, i) => {
+                const div = document.createElement('div');
+                div.style.padding = "2px 0";
+                div.style.borderBottom = i < recommendedMoves.length - 1 ? "1px dashed #e2eccd" : "none";
+                div.innerHTML = `<strong style="color:#33691e;">候補 ${i+1}:</strong> ${move}`;
+                listEl.appendChild(div);
+              });
+            } else {
+              recommendedArea.style.display = 'none';
+            }
+          }
+        }
+
+        // 解説テキスト表示
+        if (explanationBox) {
+          explanationBox.textContent = cleanExplanation;
+        }
+
+      } catch (err) {
+        console.error(err);
+        if (statusLabel) {
+          statusLabel.textContent = "解析エラー";
+          statusLabel.style.color = "#d32f2f";
+        }
+        if (explanationBox) {
+          explanationBox.textContent = "解析中にエラーが発生しました。時間を置いて再度お試しいただくか、管理者にお問い合わせください。";
+        }
+      } finally {
+        if (btnAiAnalyze) {
+          btnAiAnalyze.disabled = false;
+          btnAiAnalyze.style.background = "#ff9800";
+          btnAiAnalyze.textContent = "この局面をAI解析する";
+        }
+      }
     };
   }
 
