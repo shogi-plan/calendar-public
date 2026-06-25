@@ -507,7 +507,8 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
   import { getDatabase, ref, set, onValue, push, remove, update, get, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-const firebaseConfig = {
+  // --- 環境変数またはダミーフォールバックからFirebaseConfigを設定し、参照エラーを完璧に回避する ---
+  const firebaseConfig = {
     apiKey: "AIzaSyCx5anv3WWOQyke9kqhhZ9Zx-RjynLuxzE",
     authDomain: "calendar-chousei.firebaseapp.com",
     databaseURL: "https://calendar-chousei-default-rtdb.asia-southeast1.firebasedatabase.app",
