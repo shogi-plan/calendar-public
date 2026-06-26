@@ -3230,7 +3230,14 @@
         });
 
         if (!response.ok) {
-          throw new Error("APIエラーが発生しました");
+          let errText = "APIエラーが発生しました";
+          try {
+            const errJson = await response.json();
+            if (errJson && errJson.error) {
+              errText = errJson.error;
+            }
+          } catch (e) {}
+          throw new Error(errText);
         }
 
         const result = await response.json();
@@ -3332,7 +3339,7 @@
           statusLabel.style.color = "#d32f2f";
         }
         if (explanationBox) {
-          explanationBox.textContent = "解析中にエラーが発生しました。時間を置いて再度お試しいただくか、管理者にお問い合わせください。";
+          explanationBox.textContent = "解析中にエラーが発生しました:\n" + (err.message || err) + "\n\n設定をご確認いただくか、時間を置いて再度お試しください。";
         }
       } finally {
         if (btnAiAnalyze) {
