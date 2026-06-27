@@ -456,7 +456,7 @@
 <div id="ai-analysis-panel" style="display: none; width: 95%; max-width: 500px; margin: 10px auto; background: #fff; border: 1px solid #ff9800; border-radius: 5px; box-sizing: border-box; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
   <div style="background: #fff3e0; padding: 8px 12px; border-bottom: 1px solid #ffe0b2; display: flex; justify-content: space-between; align-items: center;">
     <span style="font-weight: bold; color: #e65100; font-size: 13px; display: flex; align-items: center; gap: 4px;">
-      🤖 AI局面解析 (Gemini 2.5)
+      🤖 将棋AI局面解析
     </span>
     <span id="ai-status-label" style="font-size: 11px; color: #e65100; font-weight: bold;">解析準備完了</span>
   </div>
@@ -3149,199 +3149,414 @@
   }
 
   // --- AI 局面解析イベント処理 ---
+  // SFEN文字列生成
+  function buildSfen() {
+    const board = rvState ? rvState.board : state.board;
+    const hs = rvState ? rvState.handS : state.handS;
+    const hg = rvState ? rvState.handG : state.handG;
+    const turnText = rvState ? rvState.turn : state.turn;
+
+    const TYPE_TO_CHAR = {
+      'FU': 'P', 'KY': 'L', 'KE': 'N', 'GI': 'S', 'KI': 'G', 'KA': 'B', 'HI': 'R', 'OU': 'K',
+      'TO': 'P', 'NY': 'L', 'NK': 'N', 'NG': 'S', 'UM': 'B', 'RY': 'R'
+    };
+    const PROMOTED_TYPES = ['TO', 'NY', 'NK', 'NG', 'UM', 'RY'];
+
+    const ranks = [];
+    for (let y = 0; y < 9; y++) {
+      let rankStr = "";
+      let emptyCount = 0;
+      for (let x = 0; x < 9; x++) {
+        const p = board[y][x];
+        if (!p) {
+          emptyCount++;
+        } else {
+          if (emptyCount > 0) {
+            rankStr += emptyCount;
+            emptyCount = 0;
+          }
+          let char = TYPE_TO_CHAR[p.type] || 'P';
+          if (PROMOTED_TYPES.includes(p.type)) {
+            char = '+' + char;
+          }
+          if (p.owner === 'G') {
+            if (char.startsWith('+')) {
+              char = '+' + char[1].toLowerCase();
+            } else {
+              char = char.toLowerCase();
+            }
+          }
+          rankStr += char;
+        }
+      }
+      if (emptyCount > 0) {
+        rankStr += emptyCount;
+      }
+      ranks.push(rankStr);
+    }
+
+    const boardPart = ranks.join('/');
+    const turnPart = turnText === 'S' ? 'b' : 'w';
+
+    const order = ['HI', 'KA', 'KI', 'GI', 'KE', 'KY', 'FU'];
+    const mapToCharS = { 'HI': 'R', 'KA': 'B', 'KI': 'G', 'GI': 'S', 'KE': 'N', 'KY': 'L', 'FU': 'P' };
+    const mapToCharG = { 'HI': 'r', 'KA': 'b', 'KI': 'g', 'GI': 's', 'KE': 'n', 'KY': 'l', 'FU': 'p' };
+
+    let handPart = "";
+    order.forEach(type => {
+      const count = (hs || []).filter(t => t === type).length;
+      if (count > 0) {
+        handPart += (count > 1 ? count : "") + mapToCharS[type];
+      }
+    });
+    order.forEach(type => {
+      const count = (hg || []).filter(t => t === type).length;
+      if (count > 0) {
+        handPart += (count > 1 ? count : "") + mapToCharG[type];
+      }
+    });
+
+    if (handPart === "") {
+      handPart = "-";
+    }
+
+    return `${boardPart} ${turnPart} ${handPart} 1`;
+  }
+
+  // USI指し手を日本語棋譜表現に変換
+  function usiMoveToJapanese(usiMove, board) {
+    const ZEN_NUM = ["", "１", "２", "３", "４", "５", "６", "７", "８", "９"];
+    const KANJI_NUM = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+    const SYMBOLS_JP = {
+      'FU': '歩', 'KY': '香', 'KE': '桂', 'GI': '銀', 'KI': '金', 'KA': '角', 'HI': '飛', 'OU': '玉',
+      'TO': 'と', 'NY': '成香', 'NK': '成桂', 'NG': '成銀', 'UM': '馬', 'RY': '竜'
+    };
+    const CHAR_TO_TYPE = { 'P': 'FU', 'L': 'KY', 'N': 'KE', 'S': 'GI', 'G': 'KI', 'B': 'KA', 'R': 'HI' };
+
+    if (usiMove === "resign") return "投了";
+    if (usiMove === "win") return "宣言勝ち";
+
+    if (usiMove.includes('*')) {
+      const [pieceChar, targetCoords] = usiMove.split('*');
+      const type = CHAR_TO_TYPE[pieceChar.toUpperCase()];
+      const toFile = parseInt(targetCoords[0]);
+      const toRank = targetCoords[1].charCodeAt(0) - 'a'.charCodeAt(0) + 1;
+      const pieceKanji = SYMBOLS_JP[type] || type;
+      return `${ZEN_NUM[toFile]}${KANJI_NUM[toRank]}${pieceKanji}打`;
+    } else {
+      const fromFile = parseInt(usiMove[0]);
+      const fromRank = usiMove[1].charCodeAt(0) - 'a'.charCodeAt(0) + 1;
+      const toFile = parseInt(usiMove[2]);
+      const toRank = usiMove[3].charCodeAt(0) - 'a'.charCodeAt(0) + 1;
+      const isPromote = usiMove.endsWith('+');
+
+      const fromX = 9 - fromFile;
+      const fromY = fromRank - 1;
+      const p = board[fromY] && board[fromY][fromX];
+
+      if (!p) {
+        return `${ZEN_NUM[toFile]}${KANJI_NUM[toRank]}(${fromFile}${fromRank})`;
+      }
+
+      const pieceKanji = SYMBOLS_JP[p.type] || p.type;
+      const ownerSymbol = p.owner === 'S' ? '▲' : '△';
+      return `${ownerSymbol}${ZEN_NUM[toFile]}${KANJI_NUM[toRank]}${pieceKanji}${isPromote ? "成" : ""}(${fromFile}${fromRank})`;
+    }
+  }
+
+  // 1手をボードに適用してシミュレート
+  function simulateMove(board, usiMove, turn) {
+    const PROMOTE_MAP = { FU:'TO', KY:'NY', KE:'NK', GI:'NG', KA:'UM', HI:'RY' };
+    const CHAR_TO_TYPE = { 'P': 'FU', 'L': 'KY', 'N': 'KE', 'S': 'GI', 'G': 'KI', 'B': 'KA', 'R': 'HI' };
+
+    if (usiMove === "resign" || usiMove === "win") return;
+    if (usiMove.includes('*')) {
+      const [pieceChar, targetCoords] = usiMove.split('*');
+      const type = CHAR_TO_TYPE[pieceChar.toUpperCase()];
+      const toFile = parseInt(targetCoords[0]);
+      const toRank = targetCoords[1].charCodeAt(0) - 'a'.charCodeAt(0) + 1;
+      const toX = 9 - toFile;
+      const toY = toRank - 1;
+      if (board[toY]) {
+        board[toY][toX] = { type, owner: turn };
+      }
+    } else {
+      const fromFile = parseInt(usiMove[0]);
+      const fromRank = usiMove[1].charCodeAt(0) - 'a'.charCodeAt(0) + 1;
+      const toFile = parseInt(usiMove[2]);
+      const toRank = usiMove[3].charCodeAt(0) - 'a'.charCodeAt(0) + 1;
+      const isPromote = usiMove.endsWith('+');
+
+      const fromX = 9 - fromFile;
+      const fromY = fromRank - 1;
+      const toX = 9 - toFile;
+      const toY = toRank - 1;
+
+      const p = board[fromY] && board[fromY][fromX];
+      if (p) {
+        board[toY][toX] = {
+          type: isPromote ? (PROMOTE_MAP[p.type] || p.type) : p.type,
+          owner: p.owner
+        };
+        board[fromY][fromX] = null;
+      }
+    }
+  }
+
   const btnAiAnalyze = document.getElementById('btnAiAnalyze');
   if (btnAiAnalyze) {
-    btnAiAnalyze.onclick = async () => {
+    btnAiAnalyze.onclick = () => {
       const statusLabel = document.getElementById('ai-status-label');
       const evalArea = document.getElementById('ai-evaluation-area');
       const recommendedArea = document.getElementById('ai-recommended-area');
       const explanationBox = document.getElementById('ai-explanation-box');
-      
+
       btnAiAnalyze.disabled = true;
       btnAiAnalyze.style.background = "#ccc";
       btnAiAnalyze.textContent = "解析中...";
       if (statusLabel) {
-        statusLabel.textContent = "AI解析実行中...";
+        statusLabel.textContent = "解析開始...";
         statusLabel.style.color = "#2196f3";
       }
 
+      let worker = null;
+      let searchTimeout = null;
+
       try {
-        // 現在の局面データを動的に作成
-        let bText = "";
         const board = rvState ? rvState.board : state.board;
-        const SYMBOLS_JP = {
-          'FU': '歩', 'KY': '香', 'KE': '桂', 'GI': '銀', 'KI': '金', 'KA': '角', 'HI': '飛', 'OU': '玉',
-          'TO': 'と', 'NY': '成香', 'NK': '成桂', 'NG': '成銀', 'UM': '馬', 'RY': '竜'
-        };
-
-        for (let y = 0; y < 9; y++) {
-          let row = "";
-          for (let x = 0; x < 9; x++) {
-            const p = board[y][x];
-            if (!p) {
-              row += "・";
-            } else {
-              row += (p.owner === 'S' ? "▲" : "△") + (SYMBOLS_JP[p.type] || p.type);
-            }
-          }
-          bText += row + "\n";
-        }
-
-        const hs = rvState ? rvState.handS : state.handS;
-        const hsCount = {};
-        (hs || []).forEach(t => hsCount[t] = (hsCount[t] || 0) + 1);
-        const handSText = Object.keys(hsCount).length === 0 ? "なし" : 
-          Object.entries(hsCount).map(([type, count]) => `${SYMBOLS_JP[type]}${count > 1 ? count : ""}`).join(" ");
-
-        const hg = rvState ? rvState.handG : state.handG;
-        const hgCount = {};
-        (hg || []).forEach(t => hgCount[t] = (hgCount[t] || 0) + 1);
-        const handGText = Object.keys(hgCount).length === 0 ? "なし" : 
-          Object.entries(hgCount).map(([type, count]) => `${SYMBOLS_JP[type]}${count > 1 ? count : ""}`).join(" ");
-
-        const activeLine = buildActiveLine();
-        const activeLineText = activeLine.map((h, i) => {
-          if (i === 0) return "";
-          return formatKifuTextForBranch(h, i);
-        }).filter(Boolean).join(" → ");
-
         const turnText = rvState ? rvState.turn : state.turn;
+        const sfen = buildSfen();
 
-        let lastMoveText = "なし";
-        if (isReviewMode && viewIdx > 0 && activeLine[viewIdx]) {
-          lastMoveText = formatKifuTextForBranch(activeLine[viewIdx], viewIdx);
-        } else if (!isReviewMode && activeLine.length > 1) {
-          lastMoveText = formatKifuTextForBranch(activeLine[activeLine.length - 1], activeLine.length - 1);
-        }
-
-        const response = await fetch("/api/explain", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            boardText: bText,
-            handSText,
-            handGText,
-            activeLineText,
-            turnText,
-            lastMoveText
-          })
-        });
-
-        if (!response.ok) {
-          let errText = "APIエラーが発生しました";
-          try {
-            const errJson = await response.json();
-            if (errJson && errJson.error) {
-              errText = errJson.error;
+        // Cross-Origin Web Worker Loading Trick
+        const workerCode = `
+          self.Module = {
+            locateFile: function(path, prefix) {
+              if (path.endsWith('.wasm')) {
+                return "https://kurenaif.github.io/yaneuraou-wasm/" + path;
+              }
+              return prefix + path;
             }
-          } catch (e) {}
-          throw new Error(errText);
-        }
+          };
+          importScripts("https://kurenaif.github.io/yaneuraou-wasm/yaneuraou.js");
+        `;
 
-        const result = await response.json();
-        const explanation = result.explanation || "";
+        const blob = new Blob([workerCode], { type: "text/javascript" });
+        const workerUrl = URL.createObjectURL(blob);
+        worker = new Worker(workerUrl);
 
-        // パース処理
-        let evalVal = 0;
-        let recommendedMoves = [];
-        let cleanExplanation = explanation;
+        let engineState = 'init';
+        let currentScore = 0;
+        let currentDepth = 0;
+        let currentPv = [];
 
-        // ===EVAL=== のパース
-        const evalMatch = explanation.match(/===EVAL===\s*([\+\-]?\d+)/);
-        if (evalMatch) {
-          evalVal = parseInt(evalMatch[1]);
-        }
+        // Timeout fallback
+        searchTimeout = setTimeout(() => {
+          if (worker) {
+            try { worker.terminate(); } catch (e) {}
+          }
+          if (statusLabel) {
+            statusLabel.textContent = "解析タイムアウト";
+            statusLabel.style.color = "#d32f2f";
+          }
+          if (explanationBox) {
+            explanationBox.textContent = "将棋AIの起動または解析がタイムアウトしました。もう一度お試しください。";
+          }
+          if (btnAiAnalyze) {
+            btnAiAnalyze.disabled = false;
+            btnAiAnalyze.style.background = "#ff9800";
+            btnAiAnalyze.textContent = "この局面をAI解析する";
+          }
+        }, 12000);
 
-        // ===RECOMMENDED=== のパース
-        const recMatch = explanation.match(/===RECOMMENDED===([\s\S]*?)(===|$)/);
-        if (recMatch) {
-          const recText = recMatch[1];
-          recommendedMoves = recText.split("\n")
-            .map(line => line.trim())
-            .filter(line => /^[1-3]\./.test(line))
-            .map(line => line.replace(/^[1-3]\.\s*/, ""));
-        }
+        worker.onmessage = (e) => {
+          const line = e.data;
+          console.log("YaneuraOu USI:", line);
 
-        // ===EXPLANATION=== のパース
-        const expMatch = explanation.match(/===EXPLANATION===([\s\S]*)/);
-        if (expMatch) {
-          cleanExplanation = expMatch[1].trim();
-        } else {
-          // フォールバック: 各タグを取り除く
-          cleanExplanation = explanation
-            .replace(/===EVAL===[\s\S]*?===RECOMMENDED===/, "")
-            .replace(/===RECOMMENDED===[\s\S]*?===EXPLANATION===/, "")
-            .replace(/===EXPLANATION===/, "")
-            .trim();
-        }
+          if (line === "usiok" && engineState === 'init') {
+            engineState = 'ready_sent';
+            if (statusLabel) statusLabel.textContent = "形勢判断 準備中...";
+            worker.postMessage("isready");
+          } else if (line === "readyok" && engineState === 'ready_sent') {
+            engineState = 'searching';
+            if (statusLabel) statusLabel.textContent = "最善手を探索中...";
+            worker.postMessage(`position sfen ${sfen}`);
+            worker.postMessage("go depth 8");
+          } else if (line.startsWith("info ")) {
+            // Parse info
+            const depthMatch = line.match(/\bdepth\s+(\d+)/);
+            if (depthMatch) {
+              currentDepth = parseInt(depthMatch[1]);
+              if (statusLabel) statusLabel.textContent = `探索中 (深さ: ${currentDepth})`;
+            }
 
-        // UIへの反映
-        if (statusLabel) {
-          statusLabel.textContent = "解析完了";
-          statusLabel.style.color = "#4caf50";
-        }
+            const scoreCpMatch = line.match(/\bscore\s+cp\s+([\+\-]?\d+)/);
+            if (scoreCpMatch) {
+              currentScore = parseInt(scoreCpMatch[1]);
+            } else {
+              const scoreMateMatch = line.match(/\bscore\s+mate\s+([\+\-]?\d+|[a-zA-Z]+)/);
+              if (scoreMateMatch) {
+                const mateVal = scoreMateMatch[1];
+                if (mateVal === "+" || mateVal.startsWith("+")) {
+                  currentScore = 10000;
+                } else if (mateVal === "-" || mateVal.startsWith("-")) {
+                  currentScore = -10000;
+                } else {
+                  currentScore = 10000;
+                }
+              }
+            }
 
-        // 評価値表示
-        if (evalArea) {
-          evalArea.style.display = 'block';
-          const scoreEl = document.getElementById('ai-eval-score');
-          const barS = document.getElementById('ai-eval-bar-s');
-          const barG = document.getElementById('ai-eval-bar-g');
+            const pvMatch = line.match(/\bpv\s+([\s\S]+)/);
+            if (pvMatch) {
+              currentPv = pvMatch[1].trim().split(/\s+/);
+            }
+          } else if (line.startsWith("bestmove ")) {
+            if (searchTimeout) clearTimeout(searchTimeout);
+            if (worker) {
+              try { worker.terminate(); } catch (e) {}
+            }
 
-          // スコアテキストのフォーマット
-          let scoreText = "";
-          if (evalVal > 0) scoreText = `▲先手有利 (+${evalVal})`;
-          else if (evalVal < 0) scoreText = `△後手有利 (${evalVal})`;
-          else scoreText = "互角 (±0)";
-          if (scoreEl) scoreEl.textContent = scoreText;
+            const parts = line.split(" ");
+            const bestMove = parts[1];
 
-          // バー比率の計算 (-3000 〜 +3000 の範囲を 0% 〜 100% にマッピング)
-          // 0 のときに 50%/50%
-          let sPercent = 50 + (evalVal / 3000) * 50;
-          sPercent = Math.max(5, Math.min(95, sPercent)); // 極端な端にいきすぎないように
-          let gPercent = 100 - sPercent;
+            if (!bestMove || bestMove === "resign" || bestMove === "none") {
+              if (statusLabel) {
+                statusLabel.textContent = "解析完了";
+                statusLabel.style.color = "#4caf50";
+              }
+              if (explanationBox) {
+                explanationBox.textContent = "推奨する有効な指し手が見つかりません。詰み、または投了局面の可能性があります。";
+              }
+              if (btnAiAnalyze) {
+                btnAiAnalyze.disabled = false;
+                btnAiAnalyze.style.background = "#ff9800";
+                btnAiAnalyze.textContent = "この局面をAI解析する";
+              }
+              return;
+            }
 
-          if (barS) barS.style.width = `${sPercent}%`;
-          if (barG) barG.style.width = `${gPercent}%`;
-        }
+            // side-to-moveから先手/後手視点にスコアをマッピング
+            let evalVal = turnText === 'S' ? currentScore : -currentScore;
 
-        // 推奨手表示
-        if (recommendedArea) {
-          const listEl = document.getElementById('ai-recommended-list');
-          if (listEl) {
-            listEl.innerHTML = "";
-            if (recommendedMoves.length > 0) {
-              recommendedArea.style.display = 'block';
-              recommendedMoves.forEach((move, i) => {
+            // 解説レポートの生成
+            let scoreText = "";
+            if (evalVal > 1500) scoreText = `▲先手勝勢 (+${evalVal})`;
+            else if (evalVal > 500) scoreText = `▲先手有利 (+${evalVal})`;
+            else if (evalVal > 100) scoreText = `▲先手やや有利 (+${evalVal})`;
+            else if (evalVal < -1500) scoreText = `△後手勝勢 (${evalVal})`;
+            else if (evalVal < -500) scoreText = `△後手有利 (${evalVal})`;
+            else if (evalVal < -100) scoreText = `△後手やや有利 (${evalVal})`;
+            else scoreText = `互角 (${evalVal >= 0 ? '+' : ''}${evalVal})`;
+
+            // PV手順を日本語に変換
+            let tempTurn = turnText;
+            let tempBoard = JSON.parse(JSON.stringify(board));
+            const formattedPvMoves = [];
+
+            for (let i = 0; i < currentPv.length; i++) {
+              const usiMove = currentPv[i];
+              const jpMove = usiMoveToJapanese(usiMove, tempBoard);
+              formattedPvMoves.push(jpMove);
+              simulateMove(tempBoard, usiMove, tempTurn);
+              tempTurn = tempTurn === 'S' ? 'G' : 'S';
+            }
+
+            const primaryMove = formattedPvMoves[0] || usiMoveToJapanese(bestMove, board);
+
+            // 解説文の構築
+            let commentary = "";
+            if (Math.abs(evalVal) <= 100) {
+              commentary = "現在、局面は完全に互角（五分五分）です。互いに隙がなく、一手のミスが致命傷になり得る緊張感のある局面です。推奨手順に沿って慎重に駒を進めることをお勧めします。";
+            } else if (evalVal > 100 && evalVal <= 500) {
+              commentary = "先手（▲）がやや有利な局面です。先手が主動権を握りつつあり、攻めの足がかりを築いています。後手は受けに回りながら、相手の攻めの隙を突くカウンターを狙う展開になります。";
+            } else if (evalVal > 500 && evalVal <= 1500) {
+              commentary = "先手（▲）が有利です。駒の効率や配置、持ち駒のバランスにおいて先手が優位に立っています。このまま優位を拡大するために、推奨されている最善手から着実に攻めを継続してください。";
+            } else if (evalVal > 1500) {
+              commentary = "先手（▲）が勝勢です。先手の勝ち筋がはっきりと見えており、後手の玉頭や薄い箇所を正確に攻略できる状態です。攻め急がず、相手の受けを丁寧に潰していけば、勝利に近づきます。";
+            } else if (evalVal < -100 && evalVal >= -500) {
+              commentary = "後手（△）がやや有利な局面です。後手がうまく主動権を奪い、展開を有利に進めています。先手は不用意な攻めを避け、まずは自陣の整備や相手の攻め駒を責める受けの姿勢が求められます。";
+            } else if (evalVal < -500 && evalVal >= -1500) {
+              commentary = "後手（△）が有利です。後手の攻めが厳しく刺さっており、先手陣を圧倒しつつあります。先手にとっては厳しい辛抱の局面であり、粘り強く受けを繋いで相手のミスを誘う必要があります。";
+            } else {
+              commentary = "後手（△）が勝勢です。後手の優位は決定的で、先手陣の崩壊は避けられない状態です。後手は正確に詰めろをかけ、先手は望みを繋ぐために勝負手を放つ局面です。";
+            }
+
+            const pvSequence = formattedPvMoves.length > 0 ? formattedPvMoves.join(" → ") : primaryMove;
+
+            const finalReport = `【将棋AI 局面解析レポート】
+・解析深さ: ${currentDepth || 8} 手
+・評価値: ${scoreText}
+・推奨手順: ${pvSequence}
+
+【戦局概況】
+${commentary}`;
+
+            // UIへの反映
+            if (statusLabel) {
+              statusLabel.textContent = "解析完了";
+              statusLabel.style.color = "#4caf50";
+            }
+
+            // 評価値表示
+            if (evalArea) {
+              evalArea.style.display = 'block';
+              const scoreEl = document.getElementById('ai-eval-score');
+              const barS = document.getElementById('ai-eval-bar-s');
+              const barG = document.getElementById('ai-eval-bar-g');
+
+              if (scoreEl) scoreEl.textContent = scoreText;
+
+              // バー比率の計算 (-3000 〜 +3000 の範囲を 0% 〜 100% にマッピング)
+              let sPercent = 50 + (evalVal / 3000) * 50;
+              sPercent = Math.max(5, Math.min(95, sPercent));
+              let gPercent = 100 - sPercent;
+
+              if (barS) barS.style.width = `${sPercent}%`;
+              if (barG) barG.style.width = `${gPercent}%`;
+            }
+
+            // 推奨手表示
+            if (recommendedArea) {
+              const listEl = document.getElementById('ai-recommended-list');
+              if (listEl) {
+                listEl.innerHTML = "";
+                recommendedArea.style.display = 'block';
+                
                 const div = document.createElement('div');
                 div.style.padding = "2px 0";
-                div.style.borderBottom = i < recommendedMoves.length - 1 ? "1px dashed #e2eccd" : "none";
-                div.innerHTML = `<strong style="color:#33691e;">候補 ${i+1}:</strong> ${move}`;
+                div.innerHTML = `<strong style="color:#33691e;">推奨手 (最善手):</strong> ${primaryMove}`;
                 listEl.appendChild(div);
-              });
-            } else {
-              recommendedArea.style.display = 'none';
+              }
+            }
+
+            // 解説テキスト表示
+            if (explanationBox) {
+              explanationBox.textContent = finalReport;
+            }
+
+            if (btnAiAnalyze) {
+              btnAiAnalyze.disabled = false;
+              btnAiAnalyze.style.background = "#ff9800";
+              btnAiAnalyze.textContent = "この局面をAI解析する";
             }
           }
-        }
+        };
 
-        // 解説テキスト表示
-        if (explanationBox) {
-          explanationBox.textContent = cleanExplanation;
-        }
+        worker.postMessage("usi");
 
       } catch (err) {
         console.error(err);
+        if (searchTimeout) clearTimeout(searchTimeout);
+        if (worker) {
+          try { worker.terminate(); } catch (e) {}
+        }
         if (statusLabel) {
           statusLabel.textContent = "解析エラー";
           statusLabel.style.color = "#d32f2f";
         }
         if (explanationBox) {
-          explanationBox.textContent = "解析中にエラーが発生しました:\n" + (err.message || err) + "\n\n設定をご確認いただくか、時間を置いて再度お試しください。";
+          explanationBox.textContent = "解析中にエラーが発生しました:\n" + (err.message || err) + "\n\nWebAssemblyがご利用可能かご確認いただくか、ブラウザをリロードしてお試しください。";
         }
-      } finally {
         if (btnAiAnalyze) {
           btnAiAnalyze.disabled = false;
           btnAiAnalyze.style.background = "#ff9800";
