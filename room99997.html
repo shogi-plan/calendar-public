@@ -3328,11 +3328,11 @@
           const turnText = rvState ? rvState.turn : state.turn;
           const sfen = buildSfen();
 
-          // 1. yaneuraou.js を外部から fetch してローカルに取得 (CORS/CSP制限を完全に回避)
+          // 1. サーバーのプロキシ経由で yaneuraou.js を取得 (CORS/CSP、MIME制限を完全に回避)
           if (statusLabel) statusLabel.textContent = "将棋AI 起動中...";
-          const jsResponse = await fetch("https://kurenaif.github.io/yaneuraou-wasm/yaneuraou.js");
+          const jsResponse = await fetch("/yaneuraou.js");
           if (!jsResponse.ok) {
-            throw new Error("WASMエンジンの取得に失敗しました。ネットワーク状態を確認してください。");
+            throw new Error("ローカルWASMエンジンの取得に失敗しました。サーバーまたはファイルの配置を確認してください。");
           }
           const jsText = await jsResponse.text();
 
@@ -3341,7 +3341,7 @@
             self.Module = {
               locateFile: function(path, prefix) {
                 if (path.endsWith('.wasm')) {
-                  return "https://kurenaif.github.io/yaneuraou-wasm/" + path;
+                  return "/yaneuraou.wasm";
                 }
                 return prefix + path;
               }
