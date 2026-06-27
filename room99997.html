@@ -3319,171 +3319,180 @@
         statusLabel.style.color = "#2196f3";
       }
 
-      let worker = null;
-      let searchTimeout = null;
+      (async () => {
+        let worker = null;
+        let searchTimeout = null;
 
-      try {
-        const board = rvState ? rvState.board : state.board;
-        const turnText = rvState ? rvState.turn : state.turn;
-        const sfen = buildSfen();
+        try {
+          const board = rvState ? rvState.board : state.board;
+          const turnText = rvState ? rvState.turn : state.turn;
+          const sfen = buildSfen();
 
-        // Cross-Origin Web Worker Loading Trick
-        const workerCode = `
-          self.Module = {
-            locateFile: function(path, prefix) {
-              if (path.endsWith('.wasm')) {
-                return "https://kurenaif.github.io/yaneuraou-wasm/" + path;
-              }
-              return prefix + path;
-            }
-          };
-          importScripts("https://kurenaif.github.io/yaneuraou-wasm/yaneuraou.js");
-        `;
-
-        const blob = new Blob([workerCode], { type: "text/javascript" });
-        const workerUrl = URL.createObjectURL(blob);
-        worker = new Worker(workerUrl);
-
-        let engineState = 'init';
-        let currentScore = 0;
-        let currentDepth = 0;
-        let currentPv = [];
-
-        // Timeout fallback
-        searchTimeout = setTimeout(() => {
-          if (worker) {
-            try { worker.terminate(); } catch (e) {}
+          // 1. yaneuraou.js を外部から fetch してローカルに取得 (CORS/CSP制限を完全に回避)
+          if (statusLabel) statusLabel.textContent = "将棋AI 起動中...";
+          const jsResponse = await fetch("https://kurenaif.github.io/yaneuraou-wasm/yaneuraou.js");
+          if (!jsResponse.ok) {
+            throw new Error("WASMエンジンの取得に失敗しました。ネットワーク状態を確認してください。");
           }
-          if (statusLabel) {
-            statusLabel.textContent = "解析タイムアウト";
-            statusLabel.style.color = "#d32f2f";
-          }
-          if (explanationBox) {
-            explanationBox.textContent = "将棋AIの起動または解析がタイムアウトしました。もう一度お試しください。";
-          }
-          if (btnAiAnalyze) {
-            btnAiAnalyze.disabled = false;
-            btnAiAnalyze.style.background = "#ff9800";
-            btnAiAnalyze.textContent = "この局面をAI解析する";
-          }
-        }, 12000);
+          const jsText = await jsResponse.text();
 
-        worker.onmessage = (e) => {
-          const line = e.data;
-          console.log("YaneuraOu USI:", line);
-
-          if (line === "usiok" && engineState === 'init') {
-            engineState = 'ready_sent';
-            if (statusLabel) statusLabel.textContent = "形勢判断 準備中...";
-            worker.postMessage("isready");
-          } else if (line === "readyok" && engineState === 'ready_sent') {
-            engineState = 'searching';
-            if (statusLabel) statusLabel.textContent = "最善手を探索中...";
-            worker.postMessage(`position sfen ${sfen}`);
-            worker.postMessage("go depth 8");
-          } else if (line.startsWith("info ")) {
-            // Parse info
-            const depthMatch = line.match(/\bdepth\s+(\d+)/);
-            if (depthMatch) {
-              currentDepth = parseInt(depthMatch[1]);
-              if (statusLabel) statusLabel.textContent = `探索中 (深さ: ${currentDepth})`;
-            }
-
-            const scoreCpMatch = line.match(/\bscore\s+cp\s+([\+\-]?\d+)/);
-            if (scoreCpMatch) {
-              currentScore = parseInt(scoreCpMatch[1]);
-            } else {
-              const scoreMateMatch = line.match(/\bscore\s+mate\s+([\+\-]?\d+|[a-zA-Z]+)/);
-              if (scoreMateMatch) {
-                const mateVal = scoreMateMatch[1];
-                if (mateVal === "+" || mateVal.startsWith("+")) {
-                  currentScore = 10000;
-                } else if (mateVal === "-" || mateVal.startsWith("-")) {
-                  currentScore = -10000;
-                } else {
-                  currentScore = 10000;
+          // 2. 自前で Module 設定と yaneuraou.js コードをマージして CORS制限のない Inline Worker を生成
+          const workerCode = `
+            self.Module = {
+              locateFile: function(path, prefix) {
+                if (path.endsWith('.wasm')) {
+                  return "https://kurenaif.github.io/yaneuraou-wasm/" + path;
                 }
+                return prefix + path;
               }
-            }
+            };
+            ${jsText}
+          `;
 
-            const pvMatch = line.match(/\bpv\s+([\s\S]+)/);
-            if (pvMatch) {
-              currentPv = pvMatch[1].trim().split(/\s+/);
-            }
-          } else if (line.startsWith("bestmove ")) {
-            if (searchTimeout) clearTimeout(searchTimeout);
+          const blob = new Blob([workerCode], { type: "text/javascript" });
+          const workerUrl = URL.createObjectURL(blob);
+          worker = new Worker(workerUrl);
+
+          let engineState = 'init';
+          let currentScore = 0;
+          let currentDepth = 0;
+          let currentPv = [];
+
+          // Timeout fallback (起動・解析タイムアウトを長めの15秒に設定)
+          searchTimeout = setTimeout(() => {
             if (worker) {
               try { worker.terminate(); } catch (e) {}
             }
-
-            const parts = line.split(" ");
-            const bestMove = parts[1];
-
-            if (!bestMove || bestMove === "resign" || bestMove === "none") {
-              if (statusLabel) {
-                statusLabel.textContent = "解析完了";
-                statusLabel.style.color = "#4caf50";
-              }
-              if (explanationBox) {
-                explanationBox.textContent = "推奨する有効な指し手が見つかりません。詰み、または投了局面の可能性があります。";
-              }
-              if (btnAiAnalyze) {
-                btnAiAnalyze.disabled = false;
-                btnAiAnalyze.style.background = "#ff9800";
-                btnAiAnalyze.textContent = "この局面をAI解析する";
-              }
-              return;
+            if (statusLabel) {
+              statusLabel.textContent = "解析タイムアウト";
+              statusLabel.style.color = "#d32f2f";
             }
-
-            // side-to-moveから先手/後手視点にスコアをマッピング
-            let evalVal = turnText === 'S' ? currentScore : -currentScore;
-
-            // 解説レポートの生成
-            let scoreText = "";
-            if (evalVal > 1500) scoreText = `▲先手勝勢 (+${evalVal})`;
-            else if (evalVal > 500) scoreText = `▲先手有利 (+${evalVal})`;
-            else if (evalVal > 100) scoreText = `▲先手やや有利 (+${evalVal})`;
-            else if (evalVal < -1500) scoreText = `△後手勝勢 (${evalVal})`;
-            else if (evalVal < -500) scoreText = `△後手有利 (${evalVal})`;
-            else if (evalVal < -100) scoreText = `△後手やや有利 (${evalVal})`;
-            else scoreText = `互角 (${evalVal >= 0 ? '+' : ''}${evalVal})`;
-
-            // PV手順を日本語に変換
-            let tempTurn = turnText;
-            let tempBoard = JSON.parse(JSON.stringify(board));
-            const formattedPvMoves = [];
-
-            for (let i = 0; i < currentPv.length; i++) {
-              const usiMove = currentPv[i];
-              const jpMove = usiMoveToJapanese(usiMove, tempBoard);
-              formattedPvMoves.push(jpMove);
-              simulateMove(tempBoard, usiMove, tempTurn);
-              tempTurn = tempTurn === 'S' ? 'G' : 'S';
+            if (explanationBox) {
+              explanationBox.textContent = "将棋AIの起動または解析がタイムアウトしました。もう一度お試しください。";
             }
-
-            const primaryMove = formattedPvMoves[0] || usiMoveToJapanese(bestMove, board);
-
-            // 解説文の構築
-            let commentary = "";
-            if (Math.abs(evalVal) <= 100) {
-              commentary = "現在、局面は完全に互角（五分五分）です。互いに隙がなく、一手のミスが致命傷になり得る緊張感のある局面です。推奨手順に沿って慎重に駒を進めることをお勧めします。";
-            } else if (evalVal > 100 && evalVal <= 500) {
-              commentary = "先手（▲）がやや有利な局面です。先手が主動権を握りつつあり、攻めの足がかりを築いています。後手は受けに回りながら、相手の攻めの隙を突くカウンターを狙う展開になります。";
-            } else if (evalVal > 500 && evalVal <= 1500) {
-              commentary = "先手（▲）が有利です。駒の効率や配置、持ち駒のバランスにおいて先手が優位に立っています。このまま優位を拡大するために、推奨されている最善手から着実に攻めを継続してください。";
-            } else if (evalVal > 1500) {
-              commentary = "先手（▲）が勝勢です。先手の勝ち筋がはっきりと見えており、後手の玉頭や薄い箇所を正確に攻略できる状態です。攻め急がず、相手の受けを丁寧に潰していけば、勝利に近づきます。";
-            } else if (evalVal < -100 && evalVal >= -500) {
-              commentary = "後手（△）がやや有利な局面です。後手がうまく主動権を奪い、展開を有利に進めています。先手は不用意な攻めを避け、まずは自陣の整備や相手の攻め駒を責める受けの姿勢が求められます。";
-            } else if (evalVal < -500 && evalVal >= -1500) {
-              commentary = "後手（△）が有利です。後手の攻めが厳しく刺さっており、先手陣を圧倒しつつあります。先手にとっては厳しい辛抱の局面であり、粘り強く受けを繋いで相手のミスを誘う必要があります。";
-            } else {
-              commentary = "後手（△）が勝勢です。後手の優位は決定的で、先手陣の崩壊は避けられない状態です。後手は正確に詰めろをかけ、先手は望みを繋ぐために勝負手を放つ局面です。";
+            if (btnAiAnalyze) {
+              btnAiAnalyze.disabled = false;
+              btnAiAnalyze.style.background = "#ff9800";
+              btnAiAnalyze.textContent = "この局面をAI解析する";
             }
+          }, 15000);
 
-            const pvSequence = formattedPvMoves.length > 0 ? formattedPvMoves.join(" → ") : primaryMove;
+          worker.onmessage = (e) => {
+            const line = e.data;
+            console.log("Shogi AI USI:", line);
 
-            const finalReport = `【将棋AI 局面解析レポート】
+            if (line === "usiok" && engineState === 'init') {
+              engineState = 'ready_sent';
+              if (statusLabel) statusLabel.textContent = "形勢判断 準備中...";
+              worker.postMessage("isready");
+            } else if (line === "readyok" && engineState === 'ready_sent') {
+              engineState = 'searching';
+              if (statusLabel) statusLabel.textContent = "最善手を探索中...";
+              worker.postMessage(`position sfen ${sfen}`);
+              worker.postMessage("go depth 8");
+            } else if (line.startsWith("info ")) {
+              // Parse info
+              const depthMatch = line.match(/\bdepth\s+(\d+)/);
+              if (depthMatch) {
+                currentDepth = parseInt(depthMatch[1]);
+                if (statusLabel) statusLabel.textContent = `探索中 (深さ: ${currentDepth})`;
+              }
+
+              const scoreCpMatch = line.match(/\bscore\s+cp\s+([\+\-]?\d+)/);
+              if (scoreCpMatch) {
+                currentScore = parseInt(scoreCpMatch[1]);
+              } else {
+                const scoreMateMatch = line.match(/\bscore\s+mate\s+([\+\-]?\d+|[a-zA-Z]+)/);
+                if (scoreMateMatch) {
+                  const mateVal = scoreMateMatch[1];
+                  if (mateVal === "+" || mateVal.startsWith("+")) {
+                    currentScore = 10000;
+                  } else if (mateVal === "-" || mateVal.startsWith("-")) {
+                    currentScore = -10000;
+                  } else {
+                    currentScore = 10000;
+                  }
+                }
+              }
+
+              const pvMatch = line.match(/\bpv\s+([\s\S]+)/);
+              if (pvMatch) {
+                currentPv = pvMatch[1].trim().split(/\s+/);
+              }
+            } else if (line.startsWith("bestmove ")) {
+              if (searchTimeout) clearTimeout(searchTimeout);
+              if (worker) {
+                try { worker.terminate(); } catch (e) {}
+              }
+
+              const parts = line.split(" ");
+              const bestMove = parts[1];
+
+              if (!bestMove || bestMove === "resign" || bestMove === "none") {
+                if (statusLabel) {
+                  statusLabel.textContent = "解析完了";
+                  statusLabel.style.color = "#4caf50";
+                }
+                if (explanationBox) {
+                  explanationBox.textContent = "推奨する有効な指し手が見つかりません。詰み、または投了局面の可能性があります。";
+                }
+                if (btnAiAnalyze) {
+                  btnAiAnalyze.disabled = false;
+                  btnAiAnalyze.style.background = "#ff9800";
+                  btnAiAnalyze.textContent = "この局面をAI解析する";
+                }
+                return;
+              }
+
+              // side-to-moveから先手/後手視点にスコアをマッピング
+              let evalVal = turnText === 'S' ? currentScore : -currentScore;
+
+              // 解説レポートの生成
+              let scoreText = "";
+              if (evalVal > 1500) scoreText = `▲先手勝勢 (+${evalVal})`;
+              else if (evalVal > 500) scoreText = `▲先手有利 (+${evalVal})`;
+              else if (evalVal > 100) scoreText = `▲先手やや有利 (+${evalVal})`;
+              else if (evalVal < -1500) scoreText = `△後手勝勢 (${evalVal})`;
+              else if (evalVal < -500) scoreText = `△後手有利 (${evalVal})`;
+              else if (evalVal < -100) scoreText = `△後手やや有利 (${evalVal})`;
+              else scoreText = `互角 (${evalVal >= 0 ? '+' : ''}${evalVal})`;
+
+              // PV手順を日本語に変換
+              let tempTurn = turnText;
+              let tempBoard = JSON.parse(JSON.stringify(board));
+              const formattedPvMoves = [];
+
+              for (let i = 0; i < currentPv.length; i++) {
+                const usiMove = currentPv[i];
+                const jpMove = usiMoveToJapanese(usiMove, tempBoard);
+                formattedPvMoves.push(jpMove);
+                simulateMove(tempBoard, usiMove, tempTurn);
+                tempTurn = tempTurn === 'S' ? 'G' : 'S';
+              }
+
+              const primaryMove = formattedPvMoves[0] || usiMoveToJapanese(bestMove, board);
+
+              // 解説文の構築
+              let commentary = "";
+              if (Math.abs(evalVal) <= 100) {
+                commentary = "現在、局面は完全に互角（五分五分）です。互いに隙がなく、一手のミスが致命傷になり得る緊張感のある局面です。推奨手順に沿って慎重に駒を進めることをお勧めします。";
+              } else if (evalVal > 100 && evalVal <= 500) {
+                commentary = "先手（▲）がやや有利な局面です。先手が主動権を握りつつあり、攻めの足がかりを築いています。後手は受けに回りながら、相手の攻めの隙を突くカウンターを狙う展開になります。";
+              } else if (evalVal > 500 && evalVal <= 1500) {
+                commentary = "先手（▲）が有利です。駒の効率や配置、持ち駒のバランスにおいて先手が優位に立っています。このまま優位を拡大するために、推奨されている最善手から着実に攻めを継続してください。";
+              } else if (evalVal > 1500) {
+                commentary = "先手（▲）が勝勢です。先手の勝ち筋がはっきりと見えており、後手の玉頭や薄い箇所を正確に攻略できる状態です。攻め急がず、相手の受けを丁寧に潰していけば、勝利に近づきます。";
+              } else if (evalVal < -100 && evalVal >= -500) {
+                commentary = "後手（△）がやや有利な局面です。後手がうまく主動権を奪い、展開を有利に進めています。先手は不用意な攻めを避け、まずは自陣の整備や相手の攻め駒を責める受けの姿勢が求められます。";
+              } else if (evalVal < -500 && evalVal >= -1500) {
+                commentary = "後手（△）が有利です。後手の攻めが厳しく刺さっており、先手陣を圧倒しつつあります。先手にとっては厳しい辛抱の局面であり、粘り強く受けを繋いで相手のミスを誘う必要があります。";
+              } else {
+                commentary = "後手（△）が勝勢です。後手の優位は決定的で、先手陣の崩壊は避けられない状態です。後手は正確に詰めろをかけ、先手は望みを繋ぐために勝負手を放つ局面です。";
+              }
+
+              const pvSequence = formattedPvMoves.length > 0 ? formattedPvMoves.join(" → ") : primaryMove;
+
+              const finalReport = `【将棋AI 局面解析レポート】
 ・解析深さ: ${currentDepth || 8} 手
 ・評価値: ${scoreText}
 ・推奨手順: ${pvSequence}
@@ -3491,78 +3500,90 @@
 【戦局概況】
 ${commentary}`;
 
-            // UIへの反映
-            if (statusLabel) {
-              statusLabel.textContent = "解析完了";
-              statusLabel.style.color = "#4caf50";
-            }
+              // UIへの反映
+              if (statusLabel) {
+                statusLabel.textContent = "解析完了";
+                statusLabel.style.color = "#4caf50";
+              }
 
-            // 評価値表示
-            if (evalArea) {
-              evalArea.style.display = 'block';
-              const scoreEl = document.getElementById('ai-eval-score');
-              const barS = document.getElementById('ai-eval-bar-s');
-              const barG = document.getElementById('ai-eval-bar-g');
+              // 評価値表示
+              if (evalArea) {
+                evalArea.style.display = 'block';
+                const scoreEl = document.getElementById('ai-eval-score');
+                const barS = document.getElementById('ai-eval-bar-s');
+                const barG = document.getElementById('ai-eval-bar-g');
 
-              if (scoreEl) scoreEl.textContent = scoreText;
+                if (scoreEl) scoreEl.textContent = scoreText;
 
-              // バー比率の計算 (-3000 〜 +3000 の範囲を 0% 〜 100% にマッピング)
-              let sPercent = 50 + (evalVal / 3000) * 50;
-              sPercent = Math.max(5, Math.min(95, sPercent));
-              let gPercent = 100 - sPercent;
+                // バー比率の計算 (-3000 〜 +3000 の範囲を 0% 〜 100% にマッピング)
+                let sPercent = 50 + (evalVal / 3000) * 50;
+                sPercent = Math.max(5, Math.min(95, sPercent));
+                let gPercent = 100 - sPercent;
 
-              if (barS) barS.style.width = `${sPercent}%`;
-              if (barG) barG.style.width = `${gPercent}%`;
-            }
+                if (barS) barS.style.width = `${sPercent}%`;
+                if (barG) barG.style.width = `${gPercent}%`;
+              }
 
-            // 推奨手表示
-            if (recommendedArea) {
-              const listEl = document.getElementById('ai-recommended-list');
-              if (listEl) {
-                listEl.innerHTML = "";
-                recommendedArea.style.display = 'block';
-                
-                const div = document.createElement('div');
-                div.style.padding = "2px 0";
-                div.innerHTML = `<strong style="color:#33691e;">推奨手 (最善手):</strong> ${primaryMove}`;
-                listEl.appendChild(div);
+              // 推奨手表示
+              if (recommendedArea) {
+                const listEl = document.getElementById('ai-recommended-list');
+                if (listEl) {
+                  listEl.innerHTML = "";
+                  recommendedArea.style.display = 'block';
+                  
+                  const maxRecs = Math.min(3, formattedPvMoves.length);
+                  if (maxRecs > 0) {
+                    for (let i = 0; i < maxRecs; i++) {
+                      const div = document.createElement('div');
+                      div.style.padding = "2px 0";
+                      div.style.borderBottom = i < maxRecs - 1 ? "1px dashed #e2eccd" : "none";
+                      div.innerHTML = `<strong style="color:#33691e;">推奨手 ${i+1}:</strong> ${formattedPvMoves[i]}`;
+                      listEl.appendChild(div);
+                    }
+                  } else {
+                    const div = document.createElement('div');
+                    div.style.padding = "2px 0";
+                    div.innerHTML = `<strong style="color:#33691e;">推奨手 (最善手):</strong> ${primaryMove}`;
+                    listEl.appendChild(div);
+                  }
+                }
+              }
+
+              // 解説テキスト表示
+              if (explanationBox) {
+                explanationBox.textContent = finalReport;
+              }
+
+              if (btnAiAnalyze) {
+                btnAiAnalyze.disabled = false;
+                btnAiAnalyze.style.background = "#ff9800";
+                btnAiAnalyze.textContent = "この局面をAI解析する";
               }
             }
+          };
 
-            // 解説テキスト表示
-            if (explanationBox) {
-              explanationBox.textContent = finalReport;
-            }
+          worker.postMessage("usi");
 
-            if (btnAiAnalyze) {
-              btnAiAnalyze.disabled = false;
-              btnAiAnalyze.style.background = "#ff9800";
-              btnAiAnalyze.textContent = "この局面をAI解析する";
-            }
+        } catch (err) {
+          console.error(err);
+          if (searchTimeout) clearTimeout(searchTimeout);
+          if (worker) {
+            try { worker.terminate(); } catch (e) {}
           }
-        };
-
-        worker.postMessage("usi");
-
-      } catch (err) {
-        console.error(err);
-        if (searchTimeout) clearTimeout(searchTimeout);
-        if (worker) {
-          try { worker.terminate(); } catch (e) {}
+          if (statusLabel) {
+            statusLabel.textContent = "解析エラー";
+            statusLabel.style.color = "#d32f2f";
+          }
+          if (explanationBox) {
+            explanationBox.textContent = "解析中にエラーが発生しました:\n" + (err.message || err) + "\n\nブラウザをリロードするか、時間をおいて再度お試しください。";
+          }
+          if (btnAiAnalyze) {
+            btnAiAnalyze.disabled = false;
+            btnAiAnalyze.style.background = "#ff9800";
+            btnAiAnalyze.textContent = "この局面をAI解析する";
+          }
         }
-        if (statusLabel) {
-          statusLabel.textContent = "解析エラー";
-          statusLabel.style.color = "#d32f2f";
-        }
-        if (explanationBox) {
-          explanationBox.textContent = "解析中にエラーが発生しました:\n" + (err.message || err) + "\n\nWebAssemblyがご利用可能かご確認いただくか、ブラウザをリロードしてお試しください。";
-        }
-        if (btnAiAnalyze) {
-          btnAiAnalyze.disabled = false;
-          btnAiAnalyze.style.background = "#ff9800";
-          btnAiAnalyze.textContent = "この局面をAI解析する";
-        }
-      }
+      })();
     };
   }
 
