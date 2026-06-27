@@ -3328,30 +3328,12 @@
           const turnText = rvState ? rvState.turn : state.turn;
           const sfen = buildSfen();
 
-          // 1. サーバーのプロキシ経由で yaneuraou.js を取得 (CORS/CSP、MIME制限を完全に回避)
+          // 1. Same-Originの yaneuraou-worker.js を用いて Web Worker を起動 (CORS/CSP制限を完全に回避)
           if (statusLabel) statusLabel.textContent = "将棋AI 起動中...";
-          const jsResponse = await fetch("/yaneuraou.js");
-          if (!jsResponse.ok) {
-            throw new Error("ローカルWASMエンジンの取得に失敗しました。サーバーまたはファイルの配置を確認してください。");
-          }
-          const jsText = await jsResponse.text();
-
-          // 2. 自前で Module 設定と yaneuraou.js コードをマージして CORS制限のない Inline Worker を生成
-          const workerCode = `
-            self.Module = {
-              locateFile: function(path, prefix) {
-                if (path.endsWith('.wasm')) {
-                  return "/yaneuraou.wasm";
-                }
-                return prefix + path;
-              }
-            };
-            ${jsText}
-          `;
-
-          const blob = new Blob([workerCode], { type: "text/javascript" });
-          const workerUrl = URL.createObjectURL(blob);
-          worker = new Worker(workerUrl);
+          const workerPath = window.location.pathname.endsWith('/') 
+            ? window.location.pathname + "yaneuraou-worker.js"
+            : window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1) + "yaneuraou-worker.js";
+          worker = new Worker(workerPath);
 
           let engineState = 'init';
           let currentScore = 0;
