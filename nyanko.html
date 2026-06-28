@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>にゃんこ風ゲーム</title>
+<style>
+body{
+    margin:0;
+    background:#87ceeb;
+    font-family:sans-serif;
+    overflow:hidden;
+}
+#game{
+    position:relative;
+    width:100vw;
+    height:100vh;
+}
+.ground{
+    position:absolute;
+    bottom:0;
+    width:100%;
+    height:120px;
+    background:#6ab04c;
+}
+.castle{
+    position:absolute;
+    bottom:120px;
+    width:80px;
+    height:120px;
+    background:gray;
+}
+#playerCastle{ left:20px; }
+#enemyCastle{ right:20px; }
+
+.unit{
+    position:absolute;
+    bottom:120px;
+    width:40px;
+    height:40px;
+    border-radius:50%;
+}
+.cat{ background:white; border:2px solid black; }
+.enemy{ background:red; }
+
+#ui{
+    position:absolute;
+    top:10px;
+    left:10px;
+    background:white;
+    padding:10px;
+}
+button{
+    font-size:20px;
+}
+</style>
+</head>
+<body>
+<div id="game">
+    <div id="ui">
+        Money: <span id="money">0</span><br>
+        <button onclick="spawnCat()">ネコ (50)</button>
+    </div>
+    <div id="playerCastle" class="castle"></div>
+    <div id="enemyCastle" class="castle"></div>
+    <div class="ground"></div>
+</div>
+
+<script>
+let money = 100;
+let cats = [];
+let enemies = [];
+let game = document.getElementById("game");
+
+function updateMoney(){
+    money += 1;
+    document.getElementById("money").textContent = money;
+}
+setInterval(updateMoney,100);
+
+function spawnCat(){
+    if(money < 50) return;
+    money -= 50;
+    let el = document.createElement("div");
+    el.className = "unit cat";
+    game.appendChild(el);
+
+    let cat = {x:100, hp:30, el};
+    cats.push(cat);
+}
+
+function spawnEnemy(){
+    let el = document.createElement("div");
+    el.className = "unit enemy";
+    game.appendChild(el);
+
+    let enemy = {x:window.innerWidth-140, hp:30, el};
+    enemies.push(enemy);
+}
+setInterval(spawnEnemy,3000);
+
+function loop(){
+    cats.forEach(cat=>{
+        let fighting = false;
+
+        enemies.forEach(enemy=>{
+            if(Math.abs(cat.x-enemy.x)<45){
+                enemy.hp -= 0.2;
+                fighting = true;
+            }
+        });
+
+        if(!fighting) cat.x += 1;
+        cat.el.style.left = cat.x+"px";
+    });
+
+    enemies.forEach(enemy=>{
+        let fighting = false;
+
+        cats.forEach(cat=>{
+            if(Math.abs(cat.x-enemy.x)<45){
+                cat.hp -= 0.2;
+                fighting = true;
+            }
+        });
+
+        if(!fighting) enemy.x -= 1;
+        enemy.el.style.left = enemy.x+"px";
+    });
+
+    cats = cats.filter(cat=>{
+        if(cat.hp<=0){
+            cat.el.remove();
+            return false;
+        }
+        return true;
+    });
+
+    enemies = enemies.filter(enemy=>{
+        if(enemy.hp<=0){
+            enemy.el.remove();
+            return false;
+        }
+        return true;
+    });
+
+    requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
