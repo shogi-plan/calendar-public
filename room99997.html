@@ -335,7 +335,7 @@
       <button id="btnImportFile" style="background: #ff9800; color: white; padding: 8px 12px; font-size: 11px;">KIFファイルの取り込み</button>
       <button id="btnImportCancel" style="background: #ccc; color: #333; padding: 8px 12px; font-size: 11px; font-weight: normal;">閉じる</button>
     </div>
-    <input type="file" id="kifFileInput" accept=".kif,.txt" style="display: none;">
+    <input type="file" id="kifFileInput" accept=".kif" style="display: none;">
   </div>
 
   <div id="setting-dialog">
@@ -3328,46 +3328,21 @@
           const turnText = rvState ? rvState.turn : state.turn;
           const sfen = buildSfen();
 
-          // SharedArrayBuffer Support Check (Spectre protection / Multithreading requirement)
-          if (typeof SharedArrayBuffer === "undefined") {
-            throw new Error("ブラウザのセキュリティ制限（SharedArrayBufferが無効）により、マルチスレッド将棋AIエンジンを起動できません。\n\n【解決方法】:\n1. 画面右上またはブラウザの別タブ（「新しいタブで開く」など）から、アプリを直接開いてみてください。iframe内ではセキュリティ制限により動作しない場合があります。\n2. Chrome、Edge、Firefox などの最新ブラウザをご利用ください。");
-          }
-
           // 1. Same-Originの yaneuraou-worker.js を用いて Web Worker を起動 (CORS/CSP制限を完全に回避)
-          console.log("Creating Worker...");
           if (statusLabel) statusLabel.textContent = "将棋AI 起動中...";
           const workerPath = window.location.pathname.endsWith('/') 
             ? window.location.pathname + "yaneuraou-worker.js"
             : window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1) + "yaneuraou-worker.js";
           worker = new Worker(workerPath);
-          console.log("Worker created at", workerPath);
-
-          worker.onerror = (err) => {
-            console.error("Worker Error:", err);
-            if (searchTimeout) clearTimeout(searchTimeout);
-            if (statusLabel) {
-              statusLabel.textContent = "解析エラー";
-              statusLabel.style.color = "#d32f2f";
-            }
-            if (explanationBox) {
-              explanationBox.textContent = `将棋AI（Worker内部）でエラーが発生しました:\n${err.message || 'スレッドの初期化、またはSharedArrayBufferの割り当てに失敗しました。'}\n\n【解決策】:\n1. 画面右上またはブラウザの別タブ（「新しいタブで開く」など）から、アプリを直接開いてみてください。iframe内ではセキュリティ制限により動作しない場合があります。\n2. ブラウザのキャッシュをクリアするか、シークレットタブで再度お試しください。`;
-            }
-            if (btnAiAnalyze) {
-              btnAiAnalyze.disabled = false;
-              btnAiAnalyze.style.background = "#ff9800";
-              btnAiAnalyze.textContent = "この局面をAI解析する";
-            }
-          };
 
           let engineState = 'init';
           let currentScore = 0;
           let currentDepth = 0;
           let currentPv = [];
 
-          // Timeout fallback (起動・解析タイムアウトを長めの30秒に設定)
+          // Timeout fallback (起動・解析タイムアウトを長めの15秒に設定)
           searchTimeout = setTimeout(() => {
             if (worker) {
-              console.log("Worker timeout reached, terminating...");
               try { worker.terminate(); } catch (e) {}
             }
             if (statusLabel) {
@@ -3382,7 +3357,7 @@
               btnAiAnalyze.style.background = "#ff9800";
               btnAiAnalyze.textContent = "この局面をAI解析する";
             }
-          }, 30000);
+          }, 15000);
 
           worker.onmessage = (e) => {
             const line = e.data;
