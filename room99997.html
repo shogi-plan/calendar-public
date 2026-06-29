@@ -335,7 +335,7 @@
       <button id="btnImportFile" style="background: #ff9800; color: white; padding: 8px 12px; font-size: 11px;">KIFファイルの取り込み</button>
       <button id="btnImportCancel" style="background: #ccc; color: #333; padding: 8px 12px; font-size: 11px; font-weight: normal;">閉じる</button>
     </div>
-    <input type="file" id="kifFileInput" accept=".kif" style="display: none;">
+    <input type="file" id="kifFileInput" accept=".kif,.txt" style="display: none;">
   </div>
 
   <div id="setting-dialog">
@@ -2634,8 +2634,8 @@
     
     const hasMoveLine = lines.some(line => /^\s*[0-9]+\s+[▲△▽▼同同]?[１-９一-九]+/.test(line));
 
-    if (!hasKifKeywords && !hasMoveLine) {
-      throw new Error("KIF形式のデータではありません");
+    if (!hasKifKeywords || !hasMoveLine) {
+      throw new Error("KIF形式の正しいデータ（指し手・キーワード）が見つかりません。");
     }
 
     let handicapType = "平手";
@@ -2929,6 +2929,10 @@
     // 1. 本線を動かす
     const mainResult = parseMoves(mainSec.lines, board, handS, handG, firstTurn, 1);
     
+    if (!mainResult.history || mainResult.history.length === 0) {
+      throw new Error("有効な指し手（棋譜データ）が見つかりませんでした。");
+    }
+    
     const history = [];
     const mainStates = []; // インデックスを保持した局面遷移配列
 
@@ -3001,8 +3005,8 @@
   }
 
   async function loadImportedKif(parsed) {
-    if (!parsed || !parsed.history || parsed.history.length === 0) {
-      alert("取り込めませんでした");
+    if (!parsed || !parsed.history || parsed.history.length <= 1) {
+      alert("取り込めませんでした。有効な指し手が含まれるKIF形式のファイルを選択してください。");
       return;
     }
 
@@ -3082,7 +3086,7 @@
         await loadImportedKif(parsed);
       } catch (err) {
         console.error("Clipboard Parse Error:", err);
-        alert("取り込めませんでした");
+        alert("取り込めませんでした。" + (err.message || "KIF形式の正しいデータか確認してください。"));
       }
     };
   }
@@ -3117,7 +3121,7 @@
               await loadImportedKif(parsed);
             } catch (err) {
               console.error("File Parse (Shift_JIS) Error:", err);
-              alert("取り込めませんでした。文字コードまたはファイル形式が正しいか確認してください。");
+              alert("取り込めませんでした。" + (err.message || "文字コードまたはファイル形式が正しいか確認してください。"));
             }
           };
           sjisReader.readAsText(file, "Shift_JIS");
@@ -3136,7 +3140,7 @@
                 await loadImportedKif(parsed);
               } catch (err2) {
                 console.error("File Parse (Shift_JIS fallback) Error:", err2);
-                alert("取り込めませんでした。文字コードまたはファイル形式が正しいか確認してください。");
+                alert("取り込めませんでした。" + (err2.message || "文字コードまたはファイル形式が正しいか確認してください。"));
               }
             };
             sjisReader.readAsText(file, "Shift_JIS");
@@ -3340,25 +3344,6 @@
           let currentDepth = 0;
           let currentPv = [];
 
-          // Timeout fallback (起動・解析タイムアウトを長めの15秒に設定)
-          searchTimeout = setTimeout(() => {
-            if (worker) {
-              try { worker.terminate(); } catch (e) {}
-            }
-            if (statusLabel) {
-              statusLabel.textContent = "解析タイムアウト";
-              statusLabel.style.color = "#d32f2f";
-            }
-            if (explanationBox) {
-              explanationBox.textContent = "将棋AIの起動または解析がタイムアウトしました。もう一度お試しください。";
-            }
-            if (btnAiAnalyze) {
-              btnAiAnalyze.disabled = false;
-              btnAiAnalyze.style.background = "#ff9800";
-              btnAiAnalyze.textContent = "この局面をAI解析する";
-            }
-          }, 15000);
-
           worker.onmessage = (e) => {
             const line = e.data;
             console.log("Shogi AI USI:", line);
@@ -3402,7 +3387,6 @@
                 currentPv = pvMatch[1].trim().split(/\s+/);
               }
             } else if (line.startsWith("bestmove ")) {
-              if (searchTimeout) clearTimeout(searchTimeout);
               if (worker) {
                 try { worker.terminate(); } catch (e) {}
               }
