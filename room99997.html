@@ -3327,33 +3327,175 @@
       const turnText = rvState ? rvState.turn : state.turn;
       const sfen = buildSfen();
 
-      // Cloud/Express server-side Gemini analysis function
-      const analyzeWithGeminiServer = async () => {
+      // 100%クライアントサイド・完全に通信不要なローカル将棋解析エンジン
+      const analyzeWithLocalEngine = () => {
         try {
-          if (statusLabel) statusLabel.textContent = "AI分析中 (Gemini)...";
-          const res = await fetch("/api/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sfen, turnText })
+          if (statusLabel) statusLabel.textContent = "ローカルAI分析中...";
+          
+          const currentBoard = rvState ? rvState.board : state.board;
+          const currentHandS = rvState ? rvState.handS : state.handS;
+          const currentHandG = rvState ? rvState.handG : state.handG;
+          const turn = rvState ? rvState.turn : state.turn;
+
+          const PIECE_VALUES = {
+            'FU': 100, 'KY': 430, 'KE': 450, 'GI': 640, 'KI': 690, 'KA': 890, 'HI': 990, 'OU': 15000,
+            'TO': 720, 'NY': 720, 'NK': 720, 'NG': 720, 'UM': 1150, 'RY': 1260
+          };
+
+          // 局面評価関数（簡易駒割 ＋ 盤上位置評価）
+          const evaluatePosition = (b, hs, hg) => {
+            let score = 0;
+            
+            // 1. 盤上の駒の価値
+            for (let y = 0; y < 9; y++) {
+              for (let x = 0; x < 9; x++) {
+                const p = b[y][x];
+                if (p) {
+                  const val = PIECE_VALUES[p.type] || 0;
+                  const sign = p.owner === 'S' ? 1 : -1;
+                  score += val * sign;
+
+                  // 簡易的な位置ボーナス（中央支配・歩や桂馬の前進）
+                  if (p.type === 'FU') {
+                    score += p.owner === 'S' ? (8 - y) * 5 : -(y * 5);
+                  } else if (p.type === 'KE') {
+                    score += p.owner === 'S' ? (8 - y) * 10 : -(y * 10);
+                  } else if (p.type === 'KI' || p.type === 'GI') {
+                    const centerDist = Math.abs(x - 4) + Math.abs(y - 4);
+                    score += p.owner === 'S' ? (8 - centerDist) * 3 : -((8 - centerDist) * 3);
+                  }
+                }
+              }
+            }
+
+            // 2. 持ち駒の価値（持ち駒は若干使いやすいため高めに評価）
+            if (hs) {
+              hs.forEach(type => { score += (PIECE_VALUES[type] || 0) * 1.05; });
+            }
+            if (hg) {
+              hg.forEach(type => { score -= (PIECE_VALUES[type] || 0) * 1.05; });
+            }
+
+            return score;
+          };
+
+          const baseScore = evaluatePosition(currentBoard, currentHandS, currentHandG);
+
+          // 3. すべての合法手を列挙し、1手先の盤面評価を計算（1手読みの最善手探索）
+          const legalMoves = [];
+
+          // 盤上の駒の移動
+          for (let y = 0; y < 9; y++) {
+            for (let x = 0; x < 9; x++) {
+              const p = currentBoard[y][x];
+              if (p && p.owner === turn) {
+                const moves = getLegalMoves(x, y, currentBoard, turn);
+                moves.forEach(m => {
+                  legalMoves.push({
+                    fromX: x, fromY: y, toX: m.x, toY: m.y,
+                    type: p.type, isDrop: false, isPromoted: false
+                  });
+                  // 成れる場合は、成る手も候補とする
+                  const promLine = (turn === 'S') ? [0, 1, 2] : [6, 7, 8];
+                  const canProm = PROMOTE_MAP[p.type] && (promLine.includes(m.y) || promLine.includes(y));
+                  if (canProm) {
+                    legalMoves.push({
+                      fromX: x, fromY: y, toX: m.x, toY: m.y,
+                      type: PROMOTE_MAP[p.type], isDrop: false, isPromoted: true
+                    });
+                  }
+                });
+              }
+            }
+          }
+
+          // 持ち駒を打つ手
+          const handList = turn === 'S' ? currentHandS : currentHandG;
+          const uniqueHandPieces = [...new Set(handList)];
+          uniqueHandPieces.forEach(type => {
+            const drops = getLegalDrops(type, turn, currentBoard, currentHandS, currentHandG);
+            drops.forEach(d => {
+              legalMoves.push({
+                fromX: -1, fromY: -1, toX: d.x, toY: d.y,
+                type: type, isDrop: true, isPromoted: false
+              });
+            });
           });
 
-          if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
+          // 全ての手をシミュレート
+          const scoredMoves = [];
+          legalMoves.forEach(m => {
+            const nextBoard = JSON.parse(JSON.stringify(currentBoard));
+            const nextHandS = [...(currentHandS || [])];
+            const nextHandG = [...(currentHandG || [])];
+
+            if (m.isDrop) {
+              nextBoard[m.toY][m.toX] = { type: m.type, owner: turn };
+              const targetHand = turn === 'S' ? nextHandS : nextHandG;
+              const idx = targetHand.indexOf(m.type);
+              if (idx !== -1) targetHand.splice(idx, 1);
+            } else {
+              const target = nextBoard[m.toY][m.toX];
+              if (target) {
+                const capturedType = UNPROMOTE_MAP[target.type] || target.type;
+                (turn === 'S' ? nextHandS : nextHandG).push(capturedType);
+              }
+              nextBoard[m.toY][m.toX] = { type: m.type, owner: turn };
+              nextBoard[m.fromY][m.fromX] = null;
+            }
+
+            const scoreAfter = evaluatePosition(nextBoard, nextHandS, nextHandG);
+            scoredMoves.push({ move: m, score: scoreAfter });
+          });
+
+          // 手番に応じてソート（先手：高い順、後手：低い順）
+          if (turn === 'S') {
+            scoredMoves.sort((a, b) => b.score - a.score);
+          } else {
+            scoredMoves.sort((a, b) => a.score - b.score);
           }
 
-          const data = await res.json();
-          if (!data.success) {
-            throw new Error(data.error || "Gemini analysis returned failure status.");
+          const recommendedMoves = [];
+          const maxRecs = Math.min(3, scoredMoves.length);
+
+          const getMoveJpName = (m) => {
+            const sideStr = turn === 'S' ? '▲' : '△';
+            const fileKanji = ZEN_NUM[9 - m.toX];
+            const rankKanji = KANJI_NUM[m.toY + 1];
+            const pieceKanji = SYMBOLS_JP[m.type] || m.type;
+            const actionStr = m.isDrop ? '打' : (m.isPromoted ? '成' : '');
+            const fromStr = m.isDrop ? '' : `(${9 - m.fromX}${m.fromY + 1})`;
+            return `${sideStr}${fileKanji}${rankKanji}${pieceKanji}${actionStr}${fromStr}`;
+          };
+
+          for (let i = 0; i < maxRecs; i++) {
+            recommendedMoves.push(getMoveJpName(scoredMoves[i].move));
           }
 
-          const { evalVal, scoreText, recommendedMoves, commentary, finalReport } = data;
+          const evalVal = baseScore;
+          let scoreText = "";
+          if (Math.abs(evalVal) < 150) {
+            scoreText = `互角 (${evalVal >= 0 ? '+' : ''}${evalVal})`;
+          } else if (evalVal >= 150 && evalVal < 800) {
+            scoreText = `▲先手やや有利 (+${evalVal})`;
+          } else if (evalVal >= 800 && evalVal < 2000) {
+            scoreText = `▲先手有利 (+${evalVal})`;
+          } else if (evalVal >= 2000) {
+            scoreText = `▲先手勝勢 (+${evalVal})`;
+          } else if (evalVal <= -150 && evalVal > -800) {
+            scoreText = `△後手やや有利 (${evalVal})`;
+          } else if (evalVal <= -800 && evalVal > -2000) {
+            scoreText = `△後手有利 (${evalVal})`;
+          } else if (evalVal <= -2000) {
+            scoreText = `△後手勝勢 (${evalVal})`;
+          }
 
           if (statusLabel) {
             statusLabel.textContent = "解析完了";
             statusLabel.style.color = "#4caf50";
           }
 
-          // Show evaluation bar
+          // 評価値表示
           if (evalArea) {
             evalArea.style.display = 'block';
             const scoreEl = document.getElementById('ai-eval-score');
@@ -3362,7 +3504,6 @@
 
             if (scoreEl) scoreEl.textContent = scoreText;
 
-            // Map evalVal (-3000 to +3000) to 5% to 95%
             let sPercent = 50 + (evalVal / 3000) * 50;
             sPercent = Math.max(5, Math.min(95, sPercent));
             let gPercent = 100 - sPercent;
@@ -3371,33 +3512,92 @@
             if (barG) barG.style.width = `${gPercent}%`;
           }
 
-          // Show recommended moves
+          // 推奨手表示
           if (recommendedArea) {
             const listEl = document.getElementById('ai-recommended-list');
             if (listEl) {
               listEl.innerHTML = "";
               recommendedArea.style.display = 'block';
-              const maxRecs = Math.min(3, recommendedMoves.length);
-              if (maxRecs > 0) {
-                for (let i = 0; i < maxRecs; i++) {
+              if (recommendedMoves.length > 0) {
+                recommendedMoves.forEach((mv, idx) => {
                   const div = document.createElement('div');
-                  div.style.padding = "2px 0";
-                  div.style.borderBottom = i < maxRecs - 1 ? "1px dashed #e2eccd" : "none";
-                  div.innerHTML = `<strong style="color:#33691e;">推奨手 ${i+1}:</strong> ${recommendedMoves[i]}`;
+                  div.style.padding = "4px 0";
+                  div.style.borderBottom = idx < recommendedMoves.length - 1 ? "1px dashed #e2eccd" : "none";
+                  div.innerHTML = `<strong style="color:#33691e;">推奨手 ${idx+1}:</strong> ${mv}`;
                   listEl.appendChild(div);
-                }
+                });
               } else {
                 const div = document.createElement('div');
-                div.style.padding = "2px 0";
-                div.innerHTML = `<strong style="color:#33691e;">推奨手 (最善手):</strong> 見つかりません`;
+                div.style.padding = "4px 0";
+                div.innerHTML = `<strong style="color:#33691e;">推奨手:</strong> 指せる手がありません`;
                 listEl.appendChild(div);
               }
             }
           }
 
-          // Show explanation report
+          let commentary = "";
+          const turnJp = turn === 'S' ? '先手▲' : '後手△';
+          const bestMove = recommendedMoves[0] || 'なし';
+
+          if (Math.abs(evalVal) < 150) {
+            commentary = `【局面の評価：互角】
+現在、局面の均衡が綺麗に保たれており、お互いに一歩も譲らない緊迫した戦況です。
+大局観として、急激な攻め合いを起こすよりも、じっくりと自陣の耐久力を高めつつ隙を伺う段階と言えます。
+現在の手番である ${turnJp} の次の一手としては、最善候補である「${bestMove}」が考えられます。
+陣形のバランスや駒の利きを意識し、中央での主導権争いに向けて慎重に駒を配置することが望まれます。`;
+          } else if (evalVal >= 150 && evalVal < 800) {
+            commentary = `【局面の評価：先手やや有利】
+先手が盤上の主導権を握り、わずかに好調な展開となっています。
+先手の駒の活用度が後手を上回っており、陣形の引き締まり具合も良好です。
+手番の ${turnJp} としては、先手であれば「${bestMove}」などでリードを確実に広げにいきたいところです。
+後手であれば、攻めのいなしを狙う冷静な守備構築、またはカウンターを視野に入れた戦術プランが求められます。`;
+          } else if (evalVal >= 800 && evalVal < 2000) {
+            commentary = `【局面の評価：先手有利】
+先手の攻撃が形を作りつつあり、有利な戦況を確立しています。
+駒得、あるいは玉頭への圧力で先手が決定的なアドバンテージを得ています。
+現在の手番である ${turnJp} からの次の一手は「${bestMove}」が最有力です。
+先手は攻めの速度を緩めず、寄せの形を組み立てることが可能です。
+後手は守備陣を立て直し、頑強な粘りから先手の攻めの暴発を誘う戦略が必要になります。`;
+          } else if (evalVal >= 2000) {
+            commentary = `【局面の評価：先手勝勢】
+先手が勝勢を築いています。攻守ともに隙がなく、寄せの段階に入っています。
+先手は「${bestMove}」などを指すことで、後手玉を一気に追い詰めることができます。
+後手は受けが非常に難しく、粘り強い抵抗を試みつつも、先手にミスがない限りは厳しい局面です。
+正確な着手による終盤戦の寄せを意識してください。`;
+          } else if (evalVal <= -150 && evalVal > -800) {
+            commentary = `【局面の評価：後手やや有利】
+後手が陣形の効率性、あるいは部分的な戦術アドバンテージにより、ややペースを掴んでいる局面です。
+後手は「${bestMove}」などを通じて、さらなる攻勢を組み立てることが可能です。
+手番である ${turnJp} としては、先手であれば焦って無理な攻めを仕掛けるのではなく、粘り強い受けで形勢の挽回を図る必要があります。`;
+          } else if (evalVal <= -800 && evalVal > -2000) {
+            commentary = `【局面の評価：後手有利】
+後手が盤面全体に主導権を確保し、かなり優位に立っている状況です。
+後手の攻めが厳しく刺さっており、先手陣を圧倒しつつあります。
+現在の手番である ${turnJp} にとっての推奨着手は「${bestMove}」です。
+後手は安全かつ確実に先手を追い詰めるルートを選択でき、先手は防戦一方を強いられているため、局面の耐久力のみが頼みの綱となります。`;
+          } else if (evalVal <= -2000) {
+            commentary = `【局面の評価：後手勝勢】
+後手が圧倒的な勝利への道筋を描いており、勝勢の局面です。
+後手玉は安全で、先手玉に対する決定的な寄せが秒読みとなっています。
+「${bestMove}」を軸とした的確な収束によって、後手の勝利が極めて濃厚です。
+先手は一発逆転をかけた罠や受けを狙うしかありませんが、厳しい戦況が続いています。`;
+          }
+
+          const reportText = `【将棋AI 局面解析レポート】
+--------------------------------------------------
+■ 現在の形勢判断：
+   ${scoreText}
+
+■ 推奨する候補手：
+   ${recommendedMoves.join('  /  ') || 'なし'}
+
+■ 戦況解説：
+${commentary}
+
+※ 100%ローカル（オフライン）なクライアントサイド解析エンジンにより、外部への通信を行わず安全に、瞬時に解析を実行しています。`;
+
           if (explanationBox) {
-            explanationBox.textContent = finalReport;
+            explanationBox.textContent = reportText;
           }
 
           if (btnAiAnalyze) {
@@ -3405,14 +3605,14 @@
             btnAiAnalyze.style.background = "#ff9800";
             btnAiAnalyze.textContent = "この局面をAI解析する";
           }
-        } catch (err) {
-          console.error("Gemini server analysis failed:", err);
+        } catch (localErr) {
+          console.error("Local analysis error:", localErr);
           if (statusLabel) {
             statusLabel.textContent = "解析エラー";
             statusLabel.style.color = "#d32f2f";
           }
           if (explanationBox) {
-            explanationBox.textContent = "解析中にエラーが発生しました:\n" + (err.message || err) + "\n\n時間をおいて再度お試しください。";
+            explanationBox.textContent = "ローカル解析中にエラーが発生しました:\n" + (localErr.message || localErr);
           }
           if (btnAiAnalyze) {
             btnAiAnalyze.disabled = false;
@@ -3422,11 +3622,11 @@
         }
       };
 
-      // Check if browser does not support SharedArrayBuffer (typical for iframes) or if the worker doesn't start.
-      // If it's not supported, bypass the worker entirely and use Gemini Server directly!
+      // SharedArrayBufferがブラウザのセキュリティ制限(iframe、COOP/COEP未設定など)で使えない場合は、
+      // 外部通信する代わりに、安全に100%クライアントサイドで動くローカル解析エンジンを起動します。
       if (typeof window.SharedArrayBuffer === 'undefined') {
-        console.log("SharedArrayBuffer is undefined. Bypassing Web Worker and using Gemini Server directly.");
-        analyzeWithGeminiServer();
+        console.log("SharedArrayBuffer is undefined. Using pure offline client-side Shogi engine directly.");
+        analyzeWithLocalEngine();
         return;
       }
 
@@ -3435,15 +3635,15 @@
         let searchTimeout = null;
         let hasTimedOut = false;
 
-        // Fallback timer: if the Web Worker doesn't respond or transition states in 1.5 seconds,
-        // we automatically terminate it and use Gemini Server!
+        // フォールバックタイマー：Web Workerが1.5秒以内に応答、または起動を完了しない場合、
+        // 自動で完全にオフラインなローカル解析エンジンに切り替えます。
         searchTimeout = setTimeout(() => {
           hasTimedOut = true;
-          console.warn("Shogi AI worker startup timed out. Falling back to Gemini server analysis...");
+          console.warn("Shogi AI worker startup timed out. Falling back to local offline analysis...");
           if (worker) {
             try { worker.terminate(); } catch (e) {}
           }
-          analyzeWithGeminiServer();
+          analyzeWithLocalEngine();
         }, 1500);
 
         try {
@@ -3458,19 +3658,18 @@
           let currentDepth = 0;
           let currentPv = [];
 
-          // Also set up onerror handler in case worker fails to load scripts / throws WebAssembly error
           worker.onerror = (err) => {
             console.error("Worker error encountered:", err);
             if (!hasTimedOut) {
               clearTimeout(searchTimeout);
               hasTimedOut = true;
               try { worker.terminate(); } catch (e) {}
-              analyzeWithGeminiServer();
+              analyzeWithLocalEngine();
             }
           };
 
           worker.onmessage = (e) => {
-            if (hasTimedOut) return; // Ignore messages if we already fell back
+            if (hasTimedOut) return;
             const line = e.data;
             console.log("Shogi AI USI:", line);
 
@@ -3479,14 +3678,12 @@
               if (statusLabel) statusLabel.textContent = "形勢判断 準備中...";
               worker.postMessage("isready");
             } else if (line === "readyok" && engineState === 'ready_sent') {
-              // Now we have successfully verified the worker starts! Clear the fallback timeout.
               clearTimeout(searchTimeout);
               engineState = 'searching';
               if (statusLabel) statusLabel.textContent = "最善手を探索中...";
               worker.postMessage(`position sfen ${sfen}`);
               worker.postMessage("go depth 8");
             } else if (line.startsWith("info ")) {
-              // Parse info
               const depthMatch = line.match(/\bdepth\s+(\d+)/);
               if (depthMatch) {
                 currentDepth = parseInt(depthMatch[1]);
@@ -3538,10 +3735,8 @@
                 return;
               }
 
-              // side-to-moveから先手/後手視点にスコアをマッピング
               let evalVal = turnText === 'S' ? currentScore : -currentScore;
 
-              // 解説レポートの生成
               let scoreText = "";
               if (evalVal > 1500) scoreText = `▲先手勝勢 (+${evalVal})`;
               else if (evalVal > 500) scoreText = `▲先手有利 (+${evalVal})`;
@@ -3551,7 +3746,6 @@
               else if (evalVal < -100) scoreText = `△後手やや有利 (${evalVal})`;
               else scoreText = `互角 (${evalVal >= 0 ? '+' : ''}${evalVal})`;
 
-              // PV手順を日本語に変換
               let tempTurn = turnText;
               let tempBoard = JSON.parse(JSON.stringify(board));
               const formattedPvMoves = [];
@@ -3566,7 +3760,6 @@
 
               const primaryMove = formattedPvMoves[0] || usiMoveToJapanese(bestMove, board);
 
-              // 解説文の構築
               let commentary = "";
               if (Math.abs(evalVal) <= 100) {
                 commentary = "現在、局面は完全に互角（五分五分）です。互いに隙がなく、一手のミスが致命傷になり得る緊張感のある局面です。推奨手順に沿って慎重に駒を進めることをお勧めします。";
@@ -3592,15 +3785,15 @@
 ・推奨手順: ${pvSequence}
 
 【戦局概況】
-${commentary}`;
+${commentary}
 
-              // UIへの反映
+※ ローカルのやねうら王AIエンジンにより、外部への通信を行わず安全に解析を実行しています。`;
+
               if (statusLabel) {
                 statusLabel.textContent = "解析完了";
                 statusLabel.style.color = "#4caf50";
               }
 
-              // 評価値表示
               if (evalArea) {
                 evalArea.style.display = 'block';
                 const scoreEl = document.getElementById('ai-eval-score');
@@ -3609,7 +3802,6 @@ ${commentary}`;
 
                 if (scoreEl) scoreEl.textContent = scoreText;
 
-                // バー比率の計算 (-3000 〜 +3000 の範囲を 0% 〜 100% にマッピング)
                 let sPercent = 50 + (evalVal / 3000) * 50;
                 sPercent = Math.max(5, Math.min(95, sPercent));
                 let gPercent = 100 - sPercent;
@@ -3618,7 +3810,6 @@ ${commentary}`;
                 if (barG) barG.style.width = `${gPercent}%`;
               }
 
-              // 推奨手表示
               if (recommendedArea) {
                 const listEl = document.getElementById('ai-recommended-list');
                 if (listEl) {
@@ -3643,7 +3834,6 @@ ${commentary}`;
                 }
               }
 
-              // 解説テキスト表示
               if (explanationBox) {
                 explanationBox.textContent = finalReport;
               }
@@ -3659,13 +3849,12 @@ ${commentary}`;
           worker.postMessage("usi");
 
         } catch (err) {
-          console.error("Worker setup failed, falling back to Gemini server:", err);
+          console.error("Worker setup failed, falling back to local analysis:", err);
           if (searchTimeout) clearTimeout(searchTimeout);
           if (worker) {
             try { worker.terminate(); } catch (e) {}
           }
-          // Worker crashed during instantiation (e.g. Content-Security-Policy or Sandbox). Fall back to Gemini!
-          analyzeWithGeminiServer();
+          analyzeWithLocalEngine();
         }
       })();
     };
