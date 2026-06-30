@@ -1654,7 +1654,23 @@
     }
   }
 
+  let aiAnalysisActive = false;
+  let activeWorker = null;
+  let activeTimeout = null;
+  let lastAnalyzedSfen = "";
+
   function resetAiAnalysisUI() {
+    aiAnalysisActive = false;
+    lastAnalyzedSfen = "";
+    if (activeWorker) {
+      try { activeWorker.terminate(); } catch (e) {}
+      activeWorker = null;
+    }
+    if (activeTimeout) {
+      clearTimeout(activeTimeout);
+      activeTimeout = null;
+    }
+
     const statusLabel = document.getElementById('ai-status-label');
     const evalArea = document.getElementById('ai-evaluation-area');
     const recommendedArea = document.getElementById('ai-recommended-area');
@@ -2093,6 +2109,10 @@
     const aiPanel = document.getElementById('ai-analysis-panel');
     if (aiPanel) {
       aiPanel.style.display = isReviewMode ? 'block' : 'none';
+    }
+
+    if (isReviewMode && aiAnalysisActive) {
+      triggerAiAnalysis();
     }
   }
 
@@ -3307,27 +3327,70 @@
     }
   }
 
-  const btnAiAnalyze = document.getElementById('btnAiAnalyze');
-  if (btnAiAnalyze) {
-    btnAiAnalyze.onclick = () => {
-      const statusLabel = document.getElementById('ai-status-label');
-      const evalArea = document.getElementById('ai-evaluation-area');
-      const recommendedArea = document.getElementById('ai-recommended-area');
-      const explanationBox = document.getElementById('ai-explanation-box');
+  function cancelAiAnalysis() {
+    aiAnalysisActive = false;
+    lastAnalyzedSfen = "";
+    if (activeWorker) {
+      try { activeWorker.terminate(); } catch (e) {}
+      activeWorker = null;
+    }
+    if (activeTimeout) {
+      clearTimeout(activeTimeout);
+      activeTimeout = null;
+    }
+    
+    const statusLabel = document.getElementById('ai-status-label');
+    const btnAiAnalyze = document.getElementById('btnAiAnalyze');
+    
+    if (statusLabel) {
+      statusLabel.textContent = "解析中断";
+      statusLabel.style.color = "#d32f2f";
+    }
+    if (btnAiAnalyze) {
+      btnAiAnalyze.disabled = false;
+      btnAiAnalyze.style.background = "#ff9800";
+      btnAiAnalyze.textContent = "この局面をAI解析する";
+    }
+  }
 
-      btnAiAnalyze.disabled = true;
-      btnAiAnalyze.style.background = "#ccc";
-      btnAiAnalyze.textContent = "解析中...";
-      if (statusLabel) {
-        statusLabel.textContent = "解析開始...";
-        statusLabel.style.color = "#2196f3";
-      }
+  function triggerAiAnalysis() {
+    const btnAiAnalyze = document.getElementById('btnAiAnalyze');
+    if (!btnAiAnalyze) return;
 
-      const board = rvState ? rvState.board : state.board;
-      const turnText = rvState ? rvState.turn : state.turn;
-      const sfen = buildSfen();
+    const board = rvState ? rvState.board : state.board;
+    const turnText = rvState ? rvState.turn : state.turn;
+    const sfen = buildSfen();
 
-      // 100%クライアントサイド・完全に通信不要なローカル将棋解析エンジン
+    const currentSfenKey = sfen + "_" + turnText;
+    if (currentSfenKey === lastAnalyzedSfen) {
+      return;
+    }
+    lastAnalyzedSfen = currentSfenKey;
+
+    if (activeWorker) {
+      try { activeWorker.terminate(); } catch (e) {}
+      activeWorker = null;
+    }
+    if (activeTimeout) {
+      clearTimeout(activeTimeout);
+      activeTimeout = null;
+    }
+
+    btnAiAnalyze.disabled = false;
+    btnAiAnalyze.style.background = "#d32f2f";
+    btnAiAnalyze.textContent = "解析を中断する";
+
+    const statusLabel = document.getElementById('ai-status-label');
+    const evalArea = document.getElementById('ai-evaluation-area');
+    const recommendedArea = document.getElementById('ai-recommended-area');
+    const explanationBox = document.getElementById('ai-explanation-box');
+
+    if (statusLabel) {
+      statusLabel.textContent = "解析開始...";
+      statusLabel.style.color = "#2196f3";
+    }
+
+    // 100%クライアントサイド・完全に通信不要なローカル将棋解析エンジン
       const analyzeWithLocalEngine = () => {
         try {
           if (statusLabel) statusLabel.textContent = "ローカルAI分析中...";
@@ -3597,9 +3660,7 @@
    ${recommendedMoves.join('  /  ') || 'なし'}
 
 ■ 戦況解説：
-${commentary}
-
-※ 100%ローカル（オフライン）なクライアントサイド解析エンジンにより、外部への通信を行わず安全に、瞬時に解析を実行しています。`;
+${commentary}`;
 
           if (explanationBox) {
             explanationBox.textContent = reportText;
@@ -3607,8 +3668,13 @@ ${commentary}
 
           if (btnAiAnalyze) {
             btnAiAnalyze.disabled = false;
-            btnAiAnalyze.style.background = "#ff9800";
-            btnAiAnalyze.textContent = "この局面をAI解析する";
+            if (aiAnalysisActive) {
+              btnAiAnalyze.style.background = "#d32f2f";
+              btnAiAnalyze.textContent = "解析を中断する";
+            } else {
+              btnAiAnalyze.style.background = "#ff9800";
+              btnAiAnalyze.textContent = "この局面をAI解析する";
+            }
           }
         } catch (localErr) {
           console.error("Local analysis error:", localErr);
@@ -3621,8 +3687,13 @@ ${commentary}
           }
           if (btnAiAnalyze) {
             btnAiAnalyze.disabled = false;
-            btnAiAnalyze.style.background = "#ff9800";
-            btnAiAnalyze.textContent = "この局面をAI解析する";
+            if (aiAnalysisActive) {
+              btnAiAnalyze.style.background = "#d32f2f";
+              btnAiAnalyze.textContent = "解析を中断する";
+            } else {
+              btnAiAnalyze.style.background = "#ff9800";
+              btnAiAnalyze.textContent = "この局面をAI解析する";
+            }
           }
         }
       };
@@ -3734,8 +3805,13 @@ ${commentary}
                 }
                 if (btnAiAnalyze) {
                   btnAiAnalyze.disabled = false;
-                  btnAiAnalyze.style.background = "#ff9800";
-                  btnAiAnalyze.textContent = "この局面をAI解析する";
+                  if (aiAnalysisActive) {
+                    btnAiAnalyze.style.background = "#d32f2f";
+                    btnAiAnalyze.textContent = "解析を中断する";
+                  } else {
+                    btnAiAnalyze.style.background = "#ff9800";
+                    btnAiAnalyze.textContent = "この局面をAI解析する";
+                  }
                 }
                 return;
               }
@@ -3790,9 +3866,7 @@ ${commentary}
 ・推奨手順: ${pvSequence}
 
 【戦局概況】
-${commentary}
-
-※ ローカルのやねうら王AIエンジンにより、外部への通信を行わず安全に解析を実行しています。`;
+${commentary}`;
 
               if (statusLabel) {
                 statusLabel.textContent = "解析完了";
@@ -3845,8 +3919,13 @@ ${commentary}
 
               if (btnAiAnalyze) {
                 btnAiAnalyze.disabled = false;
-                btnAiAnalyze.style.background = "#ff9800";
-                btnAiAnalyze.textContent = "この局面をAI解析する";
+                if (aiAnalysisActive) {
+                  btnAiAnalyze.style.background = "#d32f2f";
+                  btnAiAnalyze.textContent = "解析を中断する";
+                } else {
+                  btnAiAnalyze.style.background = "#ff9800";
+                  btnAiAnalyze.textContent = "この局面をAI解析する";
+                }
               }
             }
           };
@@ -3862,6 +3941,17 @@ ${commentary}
           analyzeWithLocalEngine();
         }
       })();
+  }
+
+  const btnAiAnalyze = document.getElementById('btnAiAnalyze');
+  if (btnAiAnalyze) {
+    btnAiAnalyze.onclick = () => {
+      if (aiAnalysisActive) {
+        cancelAiAnalysis();
+      } else {
+        aiAnalysisActive = true;
+        triggerAiAnalysis();
+      }
     };
   }
 
