@@ -3323,16 +3323,130 @@
         statusLabel.style.color = "#2196f3";
       }
 
+      const board = rvState ? rvState.board : state.board;
+      const turnText = rvState ? rvState.turn : state.turn;
+      const sfen = buildSfen();
+
+      // Cloud/Express server-side Gemini analysis function
+      const analyzeWithGeminiServer = async () => {
+        try {
+          if (statusLabel) statusLabel.textContent = "AI分析中 (Gemini)...";
+          const res = await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sfen, turnText })
+          });
+
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+
+          const data = await res.json();
+          if (!data.success) {
+            throw new Error(data.error || "Gemini analysis returned failure status.");
+          }
+
+          const { evalVal, scoreText, recommendedMoves, commentary, finalReport } = data;
+
+          if (statusLabel) {
+            statusLabel.textContent = "解析完了";
+            statusLabel.style.color = "#4caf50";
+          }
+
+          // Show evaluation bar
+          if (evalArea) {
+            evalArea.style.display = 'block';
+            const scoreEl = document.getElementById('ai-eval-score');
+            const barS = document.getElementById('ai-eval-bar-s');
+            const barG = document.getElementById('ai-eval-bar-g');
+
+            if (scoreEl) scoreEl.textContent = scoreText;
+
+            // Map evalVal (-3000 to +3000) to 5% to 95%
+            let sPercent = 50 + (evalVal / 3000) * 50;
+            sPercent = Math.max(5, Math.min(95, sPercent));
+            let gPercent = 100 - sPercent;
+
+            if (barS) barS.style.width = `${sPercent}%`;
+            if (barG) barG.style.width = `${gPercent}%`;
+          }
+
+          // Show recommended moves
+          if (recommendedArea) {
+            const listEl = document.getElementById('ai-recommended-list');
+            if (listEl) {
+              listEl.innerHTML = "";
+              recommendedArea.style.display = 'block';
+              const maxRecs = Math.min(3, recommendedMoves.length);
+              if (maxRecs > 0) {
+                for (let i = 0; i < maxRecs; i++) {
+                  const div = document.createElement('div');
+                  div.style.padding = "2px 0";
+                  div.style.borderBottom = i < maxRecs - 1 ? "1px dashed #e2eccd" : "none";
+                  div.innerHTML = `<strong style="color:#33691e;">推奨手 ${i+1}:</strong> ${recommendedMoves[i]}`;
+                  listEl.appendChild(div);
+                }
+              } else {
+                const div = document.createElement('div');
+                div.style.padding = "2px 0";
+                div.innerHTML = `<strong style="color:#33691e;">推奨手 (最善手):</strong> 見つかりません`;
+                listEl.appendChild(div);
+              }
+            }
+          }
+
+          // Show explanation report
+          if (explanationBox) {
+            explanationBox.textContent = finalReport;
+          }
+
+          if (btnAiAnalyze) {
+            btnAiAnalyze.disabled = false;
+            btnAiAnalyze.style.background = "#ff9800";
+            btnAiAnalyze.textContent = "この局面をAI解析する";
+          }
+        } catch (err) {
+          console.error("Gemini server analysis failed:", err);
+          if (statusLabel) {
+            statusLabel.textContent = "解析エラー";
+            statusLabel.style.color = "#d32f2f";
+          }
+          if (explanationBox) {
+            explanationBox.textContent = "解析中にエラーが発生しました:\n" + (err.message || err) + "\n\n時間をおいて再度お試しください。";
+          }
+          if (btnAiAnalyze) {
+            btnAiAnalyze.disabled = false;
+            btnAiAnalyze.style.background = "#ff9800";
+            btnAiAnalyze.textContent = "この局面をAI解析する";
+          }
+        }
+      };
+
+      // Check if browser does not support SharedArrayBuffer (typical for iframes) or if the worker doesn't start.
+      // If it's not supported, bypass the worker entirely and use Gemini Server directly!
+      if (typeof window.SharedArrayBuffer === 'undefined') {
+        console.log("SharedArrayBuffer is undefined. Bypassing Web Worker and using Gemini Server directly.");
+        analyzeWithGeminiServer();
+        return;
+      }
+
       (async () => {
         let worker = null;
         let searchTimeout = null;
+        let hasTimedOut = false;
+
+        // Fallback timer: if the Web Worker doesn't respond or transition states in 1.5 seconds,
+        // we automatically terminate it and use Gemini Server!
+        searchTimeout = setTimeout(() => {
+          hasTimedOut = true;
+          console.warn("Shogi AI worker startup timed out. Falling back to Gemini server analysis...");
+          if (worker) {
+            try { worker.terminate(); } catch (e) {}
+          }
+          analyzeWithGeminiServer();
+        }, 1500);
 
         try {
-          const board = rvState ? rvState.board : state.board;
-          const turnText = rvState ? rvState.turn : state.turn;
-          const sfen = buildSfen();
-
-          // 1. Same-Originの yaneuraou-worker.js を用いて Web Worker を起動 (CORS/CSP制限を完全に回避)
           if (statusLabel) statusLabel.textContent = "将棋AI 起動中...";
           const workerPath = window.location.pathname.endsWith('/') 
             ? window.location.pathname + "yaneuraou-worker.js"
@@ -3344,7 +3458,19 @@
           let currentDepth = 0;
           let currentPv = [];
 
+          // Also set up onerror handler in case worker fails to load scripts / throws WebAssembly error
+          worker.onerror = (err) => {
+            console.error("Worker error encountered:", err);
+            if (!hasTimedOut) {
+              clearTimeout(searchTimeout);
+              hasTimedOut = true;
+              try { worker.terminate(); } catch (e) {}
+              analyzeWithGeminiServer();
+            }
+          };
+
           worker.onmessage = (e) => {
+            if (hasTimedOut) return; // Ignore messages if we already fell back
             const line = e.data;
             console.log("Shogi AI USI:", line);
 
@@ -3353,6 +3479,8 @@
               if (statusLabel) statusLabel.textContent = "形勢判断 準備中...";
               worker.postMessage("isready");
             } else if (line === "readyok" && engineState === 'ready_sent') {
+              // Now we have successfully verified the worker starts! Clear the fallback timeout.
+              clearTimeout(searchTimeout);
               engineState = 'searching';
               if (statusLabel) statusLabel.textContent = "最善手を探索中...";
               worker.postMessage(`position sfen ${sfen}`);
@@ -3531,23 +3659,13 @@ ${commentary}`;
           worker.postMessage("usi");
 
         } catch (err) {
-          console.error(err);
+          console.error("Worker setup failed, falling back to Gemini server:", err);
           if (searchTimeout) clearTimeout(searchTimeout);
           if (worker) {
             try { worker.terminate(); } catch (e) {}
           }
-          if (statusLabel) {
-            statusLabel.textContent = "解析エラー";
-            statusLabel.style.color = "#d32f2f";
-          }
-          if (explanationBox) {
-            explanationBox.textContent = "解析中にエラーが発生しました:\n" + (err.message || err) + "\n\nブラウザをリロードするか、時間をおいて再度お試しください。";
-          }
-          if (btnAiAnalyze) {
-            btnAiAnalyze.disabled = false;
-            btnAiAnalyze.style.background = "#ff9800";
-            btnAiAnalyze.textContent = "この局面をAI解析する";
-          }
+          // Worker crashed during instantiation (e.g. Content-Security-Policy or Sandbox). Fall back to Gemini!
+          analyzeWithGeminiServer();
         }
       })();
     };
