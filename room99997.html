@@ -3337,6 +3337,11 @@
           const currentHandG = rvState ? rvState.handG : state.handG;
           const turn = rvState ? rvState.turn : state.turn;
 
+          const SYMBOLS_JP = {
+            'FU': '歩', 'KY': '香', 'KE': '桂', 'GI': '銀', 'KI': '金', 'KA': '角', 'HI': '飛', 'OU': '玉',
+            'TO': 'と', 'NY': '成香', 'NK': '成桂', 'NG': '成銀', 'UM': '馬', 'RY': '竜'
+          };
+
           const PIECE_VALUES = {
             'FU': 100, 'KY': 430, 'KE': 450, 'GI': 640, 'KI': 690, 'KA': 890, 'HI': 990, 'OU': 15000,
             'TO': 720, 'NY': 720, 'NK': 720, 'NG': 720, 'UM': 1150, 'RY': 1260
