@@ -462,16 +462,15 @@
   </div>
   
   <div style="padding: 12px; display: flex; flex-direction: column; gap: 10px;">
-    <!-- 形勢評価バー -->
+    <!-- 形勢評価エリア（波線グラフ） -->
     <div id="ai-evaluation-area" style="display: none; background: #fafafa; border: 1px solid #eee; border-radius: 4px; padding: 8px;">
       <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; margin-bottom: 6px;">
         <span style="color: #2196f3;">▲ 先手</span>
-        <span id="ai-eval-score" style="color: #333; font-family: monospace;">評価中...</span>
+        <span id="ai-eval-score" style="color: #333; font-family: monospace;">未解析</span>
         <span style="color: #4caf50;">後手 △</span>
       </div>
-      <div style="width: 100%; height: 10px; background: #e0e0e0; border-radius: 5px; overflow: hidden; display: flex; border: 1px solid #ccc;">
-        <div id="ai-eval-bar-s" style="width: 50%; height: 100%; background: #2196f3; transition: width 0.5s;"></div>
-        <div id="ai-eval-bar-g" style="width: 50%; height: 100%; background: #4caf50; transition: width 0.5s;"></div>
+      <div id="ai-chart-canvas-container" style="position: relative; width: 100%; height: 120px; background: #fff; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="text-align: center; color: #aaa; font-size: 11px; padding-top: 50px;">任意の局面をタップするか、下のボタンで解析を開始してください</div>
       </div>
     </div>
 
@@ -2115,8 +2114,11 @@
       aiPanel.style.display = isReviewMode ? 'block' : 'none';
     }
 
-    if (isReviewMode && aiAnalysisActive) {
-      triggerAiAnalysis();
+    if (isReviewMode) {
+      updateAiAnalysisView();
+      if (aiAnalysisActive) {
+        triggerAiAnalysis();
+      }
     }
   }
 
@@ -2158,8 +2160,7 @@
       textSpan.textContent = formatKifuText(h, i, currentLine);
       textSpan.style.cursor = 'pointer';
       textSpan.onclick = () => { 
-        if (!isReviewMode) setReviewMode(true); 
-        viewIdx = i; syncReviewStateLocally(); pushReviewUpdate(); render(); updateKifuList(); 
+        window.jumpToKifuMove(i);
       };
       div.appendChild(textSpan);
 
@@ -3332,8 +3333,6 @@
   }
 
   function cancelAiAnalysis() {
-    aiAnalysisActive = false;
-    lastAnalyzedSfen = "";
     if (activeWorker) {
       try { activeWorker.terminate(); } catch (e) {}
       activeWorker = null;
@@ -3343,8 +3342,10 @@
       activeTimeout = null;
     }
     
+    aiAnalysisActive = false;
+    lastAnalyzedSfen = "";
+    
     const statusLabel = document.getElementById('ai-status-label');
-    const evalArea = document.getElementById('ai-evaluation-area');
     const recommendedArea = document.getElementById('ai-recommended-area');
     const explanationBox = document.getElementById('ai-explanation-box');
     const btnAiAnalyze = document.getElementById('btnAiAnalyze');
@@ -3352,9 +3353,6 @@
     if (statusLabel) {
       statusLabel.textContent = "解析中断";
       statusLabel.style.color = "#d32f2f";
-    }
-    if (evalArea) {
-      evalArea.style.display = 'none';
     }
     if (recommendedArea) {
       recommendedArea.style.display = 'none';
@@ -3367,7 +3365,224 @@
       btnAiAnalyze.style.background = "#ff9800";
       btnAiAnalyze.textContent = "この局面をAI解析する";
     }
+
+    updateAiAnalysisView();
   }
+
+  function drawAiEvaluationChart() {
+    const container = document.getElementById('ai-chart-canvas-container');
+    if (!container) return;
+
+    const currentLine = buildActiveLine();
+    if (currentLine.length === 0) {
+      container.innerHTML = `<div style="text-align: center; color: #aaa; font-size: 11px; padding-top: 50px;">棋譜がありません</div>`;
+      return;
+    }
+
+    const width = 500;
+    const height = 120;
+    const paddingX = 20;
+    const paddingY = 15;
+    const chartW = width - paddingX * 2;
+    const chartH = height - paddingY * 2;
+    const centerY = height / 2; // 60
+
+    // Build points
+    const points = currentLine.map((h, i) => {
+      let score = 0;
+      let isEvaluated = false;
+      if (i === 0) {
+        score = 0;
+        isEvaluated = true; // Start position is always 0
+      } else if (typeof h.evalVal === 'number') {
+        score = h.evalVal;
+        isEvaluated = true;
+      }
+
+      // Map score to Y: cap at -3000 to +3000
+      const capped = Math.max(-3000, Math.min(3000, score));
+      // S is + (upwards, smaller Y), G is - (downwards, larger Y)
+      const y = centerY - (capped / 3000) * (chartH / 2);
+
+      const x = currentLine.length > 1 
+        ? paddingX + (i / (currentLine.length - 1)) * chartW 
+        : width / 2;
+
+      return {
+        index: i,
+        x: x,
+        y: y,
+        score: score,
+        isEvaluated: isEvaluated,
+        moveText: i === 0 ? "開始" : formatKifuTextForBranch(h, i)
+      };
+    });
+
+    // Build SVG elements
+    let svgHtml = `<svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: 100%; display: block; background: #fafafa;">`;
+
+    // 1. Grid / Background lines
+    // Center line (0)
+    svgHtml += `<line x1="${paddingX}" y1="${centerY}" x2="${width - paddingX}" y2="${centerY}" stroke="#ccc" stroke-dasharray="3,3" stroke-width="1.5" />`;
+    // +1500 line (S Favored)
+    svgHtml += `<line x1="${paddingX}" y1="${centerY - 1500/3000 * (chartH/2)}" x2="${width - paddingX}" y2="${centerY - 1500/3000 * (chartH/2)}" stroke="#e0e0e0" stroke-dasharray="2,4" stroke-width="1" />`;
+    // -1500 line (G Favored)
+    svgHtml += `<line x1="${paddingX}" y1="${centerY + 1500/3000 * (chartH/2)}" x2="${width - paddingX}" y2="${centerY + 1500/3000 * (chartH/2)}" stroke="#e0e0e0" stroke-dasharray="2,4" stroke-width="1" />`;
+
+    // 2. Draw lines connecting the points
+    if (points.length > 1) {
+      let d = "";
+      points.forEach((p, i) => {
+        if (i === 0) d += `M ${p.x} ${p.y}`;
+        else d += ` L ${p.x} ${p.y}`;
+      });
+      svgHtml += `<path d="${d}" fill="none" stroke="#ff9800" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />`;
+    }
+
+    // 3. Draw points / interaction areas
+    points.forEach((p) => {
+      const isCurrent = p.index === viewIdx;
+      let dotColor = "#9e9e9e"; // default unevaluated
+      let radius = 3;
+
+      if (p.isEvaluated) {
+        if (p.score > 100) {
+          dotColor = "#2196f3"; // S favored
+        } else if (p.score < -100) {
+          dotColor = "#4caf50"; // G favored
+        } else {
+          dotColor = "#9c27b0"; // balanced
+        }
+        radius = 4;
+      }
+
+      if (isCurrent) {
+        svgHtml += `<circle cx="${p.x}" cy="${p.y}" r="8" fill="rgba(244, 67, 54, 0.3)" stroke="#f44336" stroke-width="1.5" />`;
+        svgHtml += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#f44336" />`;
+      } else {
+        svgHtml += `<circle cx="${p.x}" cy="${p.y}" r="${radius}" fill="${dotColor}" stroke="#fff" stroke-width="1" />`;
+      }
+
+      // Touch / Tap target area
+      svgHtml += `<circle cx="${p.x}" cy="${p.y}" r="15" fill="transparent" style="cursor: pointer;" onclick="window.jumpToKifuMove(${p.index})" />`;
+    });
+
+    svgHtml += `</svg>`;
+    container.innerHTML = svgHtml;
+  }
+
+  function updateAiEvaluationHeader() {
+    const currentLine = buildActiveLine();
+    if (viewIdx >= 0 && viewIdx < currentLine.length) {
+      const h = currentLine[viewIdx];
+      const scoreEl = document.getElementById('ai-eval-score');
+      if (scoreEl) {
+        if (viewIdx === 0) {
+          scoreEl.textContent = "互角 (0)";
+        } else if (typeof h.evalVal === 'number') {
+          const val = h.evalVal;
+          if (val > 1500) {
+            scoreEl.textContent = `▲先手勝勢 (${val})`;
+          } else if (val > 500) {
+            scoreEl.textContent = `▲先手有利 (${val})`;
+          } else if (val > 100) {
+            scoreEl.textContent = `▲先手やや有利 (${val})`;
+          } else if (val < -1500) {
+            scoreEl.textContent = `△後手勝勢 (${val})`;
+          } else if (val < -500) {
+            scoreEl.textContent = `△後手有利 (${val})`;
+          } else if (val < -100) {
+            scoreEl.textContent = `△後手やや有利 (${val})`;
+          } else {
+            scoreEl.textContent = `互角 (${val})`;
+          }
+        } else {
+          scoreEl.textContent = "未解析";
+        }
+      }
+    }
+  }
+
+  function updateAiAnalysisView() {
+    const currentLine = buildActiveLine();
+    if (viewIdx < 0 || viewIdx >= currentLine.length) return;
+    const h = currentLine[viewIdx];
+
+    const statusLabel = document.getElementById('ai-status-label');
+    const evalArea = document.getElementById('ai-evaluation-area');
+    const recommendedArea = document.getElementById('ai-recommended-area');
+    const listEl = document.getElementById('ai-recommended-list');
+    const explanationBox = document.getElementById('ai-explanation-box');
+
+    if (evalArea) {
+      evalArea.style.display = 'block';
+    }
+
+    updateAiEvaluationHeader();
+    drawAiEvaluationChart();
+
+    if (h && typeof h.evalVal === 'number') {
+      if (statusLabel) {
+        statusLabel.textContent = "解析完了 (キャッシュ)";
+        statusLabel.style.color = "#4caf50";
+      }
+      if (recommendedArea && listEl && h.recommendedMoves && h.recommendedMoves.length > 0) {
+        recommendedArea.style.display = 'block';
+        listEl.innerHTML = "";
+        h.recommendedMoves.forEach((mv) => {
+          const mvDiv = document.createElement('div');
+          mvDiv.style.padding = '4px 0';
+          mvDiv.style.borderBottom = '1px dashed #e2eccd';
+          mvDiv.style.fontWeight = 'bold';
+          mvDiv.textContent = mv;
+          listEl.appendChild(mvDiv);
+        });
+      } else if (recommendedArea) {
+        recommendedArea.style.display = 'none';
+      }
+
+      if (explanationBox && h.commentary) {
+        explanationBox.textContent = h.commentary;
+      }
+    } else {
+      if (statusLabel) {
+        if (aiAnalysisActive) {
+          statusLabel.textContent = "解析中...";
+          statusLabel.style.color = "#ff9800";
+        } else {
+          statusLabel.textContent = "未解析";
+          statusLabel.style.color = "#e65100";
+        }
+      }
+      if (recommendedArea) {
+        recommendedArea.style.display = 'none';
+      }
+      if (explanationBox) {
+        if (aiAnalysisActive) {
+          explanationBox.textContent = "AIが現在の局面を詳細に分析中です。しばらくお待ちください...";
+        } else {
+          explanationBox.textContent = "現在の局面について、AIが形勢判断、推奨手、今後の指し針などを詳細に分析・解説します。下の「この局面をAI解析する」ボタンを押すと、解析を実行します。";
+        }
+      }
+    }
+  }
+
+  window.jumpToKifuMove = (index) => {
+    const currentLine = buildActiveLine();
+    if (index < 0 || index >= currentLine.length) return;
+    
+    if (!isReviewMode) setReviewMode(true);
+    viewIdx = index;
+    syncReviewStateLocally();
+    pushReviewUpdate();
+    render();
+    updateKifuList();
+
+    const h = currentLine[viewIdx];
+    if (aiAnalysisActive && h && typeof h.evalVal !== 'number') {
+      triggerAiAnalysis();
+    }
+  };
 
   function triggerAiAnalysis() {
     const btnAiAnalyze = document.getElementById('btnAiAnalyze');
@@ -3688,6 +3903,15 @@ ${commentary}`;
             explanationBox.textContent = reportText;
           }
 
+          // Save local analysis result to history node
+          const currentLine = buildActiveLine();
+          if (viewIdx >= 0 && viewIdx < currentLine.length) {
+            currentLine[viewIdx].evalVal = evalVal;
+            currentLine[viewIdx].recommendedMoves = [...recommendedMoves];
+            currentLine[viewIdx].commentary = reportText;
+            set(ref(db, `${roomName}/shogiData/history`), state.history);
+          }
+
           if (btnAiAnalyze) {
             btnAiAnalyze.disabled = false;
             if (aiAnalysisActive) {
@@ -3907,49 +4131,27 @@ ${commentary}`;
                 statusLabel.style.color = "#4caf50";
               }
 
-              if (evalArea) {
-                evalArea.style.display = 'block';
-                const scoreEl = document.getElementById('ai-eval-score');
-                const barS = document.getElementById('ai-eval-bar-s');
-                const barG = document.getElementById('ai-eval-bar-g');
-
-                if (scoreEl) scoreEl.textContent = scoreText;
-
-                let sPercent = 50 + (evalVal / 3000) * 50;
-                sPercent = Math.max(5, Math.min(95, sPercent));
-                let gPercent = 100 - sPercent;
-
-                if (barS) barS.style.width = `${sPercent}%`;
-                if (barG) barG.style.width = `${gPercent}%`;
-              }
-
-              if (recommendedArea) {
-                const listEl = document.getElementById('ai-recommended-list');
-                if (listEl) {
-                  listEl.innerHTML = "";
-                  recommendedArea.style.display = 'block';
-                  
-                  const maxRecs = Math.min(3, formattedPvMoves.length);
-                  if (maxRecs > 0) {
-                    for (let i = 0; i < maxRecs; i++) {
-                      const div = document.createElement('div');
-                      div.style.padding = "2px 0";
-                      div.style.borderBottom = i < maxRecs - 1 ? "1px dashed #e2eccd" : "none";
-                      div.innerHTML = `<strong style="color:#33691e;">推奨手 ${i+1}:</strong> ${formattedPvMoves[i]}`;
-                      listEl.appendChild(div);
-                    }
-                  } else {
-                    const div = document.createElement('div');
-                    div.style.padding = "2px 0";
-                    div.innerHTML = `<strong style="color:#33691e;">推奨手 (最善手):</strong> ${primaryMove}`;
-                    listEl.appendChild(div);
-                  }
+              // Build recommended moves list to save
+              const recMovesToSave = [];
+              const maxRecs = Math.min(3, formattedPvMoves.length);
+              if (maxRecs > 0) {
+                for (let i = 0; i < maxRecs; i++) {
+                  recMovesToSave.push(`推奨手 ${i+1}: ${formattedPvMoves[i]}`);
                 }
+              } else if (primaryMove) {
+                recMovesToSave.push(`推奨手 (最善手): ${primaryMove}`);
               }
 
-              if (explanationBox) {
-                explanationBox.textContent = finalReport;
+              // Save the worker analysis result to history node
+              const currentLine = buildActiveLine();
+              if (viewIdx >= 0 && viewIdx < currentLine.length) {
+                currentLine[viewIdx].evalVal = evalVal;
+                currentLine[viewIdx].recommendedMoves = recMovesToSave;
+                currentLine[viewIdx].commentary = finalReport;
+                set(ref(db, `${roomName}/shogiData/history`), state.history);
               }
+
+              updateAiAnalysisView();
 
               if (btnAiAnalyze) {
                 btnAiAnalyze.disabled = false;
