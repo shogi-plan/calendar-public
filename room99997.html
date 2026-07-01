@@ -3393,9 +3393,25 @@
       statusLabel.textContent = "解析開始...";
       statusLabel.style.color = "#2196f3";
     }
-    if (evalArea) evalArea.textContent = "-";
-    if (recommendedArea) recommendedArea.textContent = "解析中...";
-    if (explanationBox) explanationBox.textContent = "解析中...";
+    if (evalArea) {
+      evalArea.style.display = 'block';
+      const scoreEl = document.getElementById('ai-eval-score');
+      if (scoreEl) scoreEl.textContent = "解析中...";
+      const barS = document.getElementById('ai-eval-bar-s');
+      const barG = document.getElementById('ai-eval-bar-g');
+      if (barS) barS.style.width = `50%`;
+      if (barG) barG.style.width = `50%`;
+    }
+    if (recommendedArea) {
+      recommendedArea.style.display = 'block';
+      const listEl = document.getElementById('ai-recommended-list');
+      if (listEl) {
+        listEl.innerHTML = '<div style="padding: 4px 0; color: #777;">解析中...</div>';
+      }
+    }
+    if (explanationBox) {
+      explanationBox.textContent = "解析中...";
+    }
 
     // 100%クライアントサイド・完全に通信不要なローカル将棋解析エンジン
       const analyzeWithLocalEngine = () => {
