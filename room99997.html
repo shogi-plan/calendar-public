@@ -3344,11 +3344,23 @@
     }
     
     const statusLabel = document.getElementById('ai-status-label');
+    const evalArea = document.getElementById('ai-evaluation-area');
+    const recommendedArea = document.getElementById('ai-recommended-area');
+    const explanationBox = document.getElementById('ai-explanation-box');
     const btnAiAnalyze = document.getElementById('btnAiAnalyze');
     
     if (statusLabel) {
       statusLabel.textContent = "解析中断";
       statusLabel.style.color = "#d32f2f";
+    }
+    if (evalArea) {
+      evalArea.style.display = 'none';
+    }
+    if (recommendedArea) {
+      recommendedArea.style.display = 'none';
+    }
+    if (explanationBox) {
+      explanationBox.textContent = "現在の局面について、AIが形勢判断、推奨手、今後の指し針などを詳細に分析・解説します。";
     }
     if (btnAiAnalyze) {
       btnAiAnalyze.disabled = false;
