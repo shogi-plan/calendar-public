@@ -3719,8 +3719,12 @@ ${commentary}`;
           if (worker) {
             try { worker.terminate(); } catch (e) {}
           }
+          if (activeWorker === worker) {
+            activeWorker = null;
+          }
           analyzeWithLocalEngine();
         }, 1500);
+        activeTimeout = searchTimeout;
 
         try {
           if (statusLabel) statusLabel.textContent = "将棋AI 起動中...";
@@ -3728,6 +3732,7 @@ ${commentary}`;
             ? window.location.pathname + "yaneuraou-worker.js"
             : window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1) + "yaneuraou-worker.js";
           worker = new Worker(workerPath);
+          activeWorker = worker;
 
           let engineState = 'init';
           let currentScore = 0;
@@ -3738,8 +3743,14 @@ ${commentary}`;
             console.error("Worker error encountered:", err);
             if (!hasTimedOut) {
               clearTimeout(searchTimeout);
+              if (activeTimeout === searchTimeout) {
+                activeTimeout = null;
+              }
               hasTimedOut = true;
               try { worker.terminate(); } catch (e) {}
+              if (activeWorker === worker) {
+                activeWorker = null;
+              }
               analyzeWithLocalEngine();
             }
           };
@@ -3790,6 +3801,9 @@ ${commentary}`;
             } else if (line.startsWith("bestmove ")) {
               if (worker) {
                 try { worker.terminate(); } catch (e) {}
+                if (activeWorker === worker) {
+                  activeWorker = null;
+                }
               }
 
               const parts = line.split(" ");
@@ -3935,8 +3949,14 @@ ${commentary}`;
         } catch (err) {
           console.error("Worker setup failed, falling back to local analysis:", err);
           if (searchTimeout) clearTimeout(searchTimeout);
+          if (activeTimeout === searchTimeout) {
+            activeTimeout = null;
+          }
           if (worker) {
             try { worker.terminate(); } catch (e) {}
+            if (activeWorker === worker) {
+              activeWorker = null;
+            }
           }
           analyzeWithLocalEngine();
         }
