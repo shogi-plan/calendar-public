@@ -1378,7 +1378,11 @@
     updateDisplayRotation(currentFlip);
     updateReadyButton();
     
-    if (bool) pushReviewUpdate();
+    if (bool) {
+      pushReviewUpdate();
+    } else {
+      cancelAiAnalysis();
+    }
   }
 
   const cells = [];
@@ -1649,7 +1653,7 @@
       turn: t
     }; 
     sel = null; selH = null; possibleMoves = []; 
-    if (typeof resetAiAnalysisUI === 'function') {
+    if (typeof resetAiAnalysisUI === 'function' && !aiAnalysisActive) {
       resetAiAnalysisUI();
     }
   }
@@ -3389,6 +3393,9 @@
       statusLabel.textContent = "解析開始...";
       statusLabel.style.color = "#2196f3";
     }
+    if (evalArea) evalArea.textContent = "-";
+    if (recommendedArea) recommendedArea.textContent = "解析中...";
+    if (explanationBox) explanationBox.textContent = "解析中...";
 
     // 100%クライアントサイド・完全に通信不要なローカル将棋解析エンジン
       const analyzeWithLocalEngine = () => {
