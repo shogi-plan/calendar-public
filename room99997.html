@@ -3484,13 +3484,13 @@
     const width = 500;
     const height = 120;
     const paddingX = 20;
-    const paddingY = 15;
+    const paddingY = 6;
     const chartW = width - paddingX * 2;
     const chartH = height - paddingY * 2;
     const centerY = height / 2; // 60
 
     // Calculate dynamic vertical scale based on the maximum absolute score found
-    let maxAbsScore = 1000; // sensible default minimum
+    let maxAbsScore = 300; // sensible default minimum to show fluctuations clearly
     currentLine.forEach((h, i) => {
       if (i > 0 && typeof h.evalVal === 'number') {
         const abs = Math.abs(h.evalVal);
@@ -3502,8 +3502,12 @@
       }
     });
 
-    // Round maxAbsScore up to nearest 500 for clean scale
-    maxAbsScore = Math.ceil(maxAbsScore / 500) * 500;
+    // Round maxAbsScore up to nearest 100 for tighter fit
+    if (maxAbsScore <= 1000) {
+      maxAbsScore = Math.ceil(maxAbsScore / 100) * 100;
+    } else {
+      maxAbsScore = Math.ceil(maxAbsScore / 500) * 500;
+    }
 
     // Build points
     const points = currentLine.map((h, i) => {
@@ -3797,11 +3801,34 @@
             'TO': 720, 'NY': 720, 'NK': 720, 'NG': 720, 'UM': 1150, 'RY': 1260
           };
 
-          // 局面評価関数（簡易駒割 ＋ 盤上位置評価）
+          // 盤上の全マスの利き（Control）テーブルを計算
+          const computeControlMap = (b) => {
+            const controlS = Array(9).fill(null).map(() => Array(9).fill(0));
+            const controlG = Array(9).fill(null).map(() => Array(9).fill(0));
+
+            for (let y = 0; y < 9; y++) {
+              for (let x = 0; x < 9; x++) {
+                const p = b[y][x];
+                if (p) {
+                  const rawMoves = getRawMoves(x, y, b, p.owner);
+                  const map = p.owner === 'S' ? controlS : controlG;
+                  rawMoves.forEach(m => {
+                    map[m.y][m.x]++;
+                  });
+                }
+              }
+            }
+            return { controlS, controlG };
+          };
+
+          // 局面評価関数（高度な駒割 ＋ 利き・危険度 ＋ 玉の安全度 ＋ 位置評価）
           const evaluatePosition = (b, hs, hg) => {
             let score = 0;
             
-            // 1. 盤上の駒の価値
+            // 全マスの利きを計算
+            const { controlS, controlG } = computeControlMap(b);
+            
+            // 1. 盤上の駒の価値と状態評価
             for (let y = 0; y < 9; y++) {
               for (let x = 0; x < 9; x++) {
                 const p = b[y][x];
@@ -3819,16 +3846,60 @@
                     const centerDist = Math.abs(x - 4) + Math.abs(y - 4);
                     score += p.owner === 'S' ? (8 - centerDist) * 3 : -((8 - centerDist) * 3);
                   }
+
+                  // --- 利き（安全度・当たり）の評価 ---
+                  if (p.type !== 'OU') {
+                    const myCtrl = p.owner === 'S' ? controlS[y][x] : controlG[y][x];
+                    const oppCtrl = p.owner === 'S' ? controlG[y][x] : controlS[y][x];
+
+                    if (oppCtrl > 0) {
+                      if (myCtrl === 0) {
+                        // 相手の利きがあり、味方の守りがない ＝ ただ取りされる危険（駒の価値の60%をマイナス評価）
+                        score += p.owner === 'S' ? -val * 0.6 : val * 0.6;
+                      } else if (myCtrl < oppCtrl) {
+                        // 相手の利きの方が多く、数で負けている ＝ 突破・駒損の危険（価値の30%をマイナス評価）
+                        score += p.owner === 'S' ? -val * 0.3 : val * 0.3;
+                      } else {
+                        // 利き数は同じだが、当たっているだけで緊張状態（価値の10%を損失リスク評価）
+                        score += p.owner === 'S' ? -val * 0.1 : val * 0.1;
+                      }
+                    }
+                  } else {
+                    // 玉（OU）自体の安全度（周囲3x3マスの敵の利き数と味方の守り）
+                    for (let dy = -1; dy <= 1; dy++) {
+                      for (let dx = -1; dx <= 1; dx++) {
+                        const tx = x + dx;
+                        const ty = y + dy;
+                        if (tx >= 0 && tx < 9 && ty >= 0 && ty < 9) {
+                          const oppCtrl = p.owner === 'S' ? controlG[ty][tx] : controlS[ty][tx];
+                          const myCtrl = p.owner === 'S' ? controlS[ty][tx] : controlG[ty][tx];
+                          // 玉の周囲に敵の利きがある場合はマイナス
+                          if (oppCtrl > 0) {
+                            score += p.owner === 'S' ? -oppCtrl * 35 : oppCtrl * 35;
+                          }
+                          // 玉の周囲に味方の守りがある場合はプラス
+                          if (myCtrl > 0) {
+                            score += p.owner === 'S' ? myCtrl * 15 : -myCtrl * 15;
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
+
+                // 支配力（マスへの利き数）による小さな加点（大局的な盤面支配）
+                const sCtrl = controlS[y][x];
+                const gCtrl = controlG[y][x];
+                score += (sCtrl * 2) - (gCtrl * 2);
               }
             }
 
-            // 2. 持ち駒の価値（持ち駒は若干使いやすいため高めに評価）
+            // 2. 持ち駒の価値（持ち駒は使いやすいため1.1倍に評価）
             if (hs) {
-              hs.forEach(type => { score += (PIECE_VALUES[type] || 0) * 1.05; });
+              hs.forEach(type => { score += (PIECE_VALUES[type] || 0) * 1.1; });
             }
             if (hg) {
-              hg.forEach(type => { score -= (PIECE_VALUES[type] || 0) * 1.05; });
+              hg.forEach(type => { score -= (PIECE_VALUES[type] || 0) * 1.1; });
             }
 
             return score;
@@ -3929,15 +4000,15 @@
 
           const evalVal = baseScore;
           let scoreText = "";
-          if (Math.abs(evalVal) < 150) {
+          if (Math.abs(evalVal) < 120) {
             scoreText = `互角 (${evalVal >= 0 ? '+' : ''}${evalVal})`;
-          } else if (evalVal >= 150 && evalVal < 800) {
+          } else if (evalVal >= 120 && evalVal < 800) {
             scoreText = `▲先手やや有利 (+${evalVal})`;
           } else if (evalVal >= 800 && evalVal < 2000) {
             scoreText = `▲先手有利 (+${evalVal})`;
           } else if (evalVal >= 2000) {
             scoreText = `▲先手勝勢 (+${evalVal})`;
-          } else if (evalVal <= -150 && evalVal > -800) {
+          } else if (evalVal <= -120 && evalVal > -800) {
             scoreText = `△後手やや有利 (${evalVal})`;
           } else if (evalVal <= -800 && evalVal > -2000) {
             scoreText = `△後手有利 (${evalVal})`;
@@ -3994,12 +4065,12 @@
           const turnJp = turn === 'S' ? '先手▲' : '後手△';
           const bestMove = recommendedMoves[0] || 'なし';
 
-          if (Math.abs(evalVal) < 150) {
+          if (Math.abs(evalVal) < 120) {
             commentary = `現在、局面の均衡が綺麗に保たれており、お互いに一歩も譲らない緊迫した戦況です。
 大局観として、急激な攻め合いを起こすよりも、じっくりと自陣の耐久力を高めつつ隙を伺う段階と言えます。
 現在の手番である ${turnJp} の次の一手としては、最善候補である「${bestMove}」が考えられます。
 陣形のバランスや駒の利きを意識し、中央での主導権争いに向けて慎重に駒を配置することが望まれます。`;
-          } else if (evalVal >= 150 && evalVal < 800) {
+          } else if (evalVal >= 120 && evalVal < 800) {
             commentary = `先手が盤上の主導権を握り、わずかに好調な展開となっています。
 先手の駒の活用度が後手を上回っており、陣形の引き締まり具合も良好です。
 手番の ${turnJp} としては、先手であれば「${bestMove}」などでリードを確実に広げにいきたいところです。
@@ -4015,7 +4086,7 @@
 先手は「${bestMove}」などを指すことで、後手玉を一気に追い詰めることができます。
 後手は受けが非常に難しく、粘り強い抵抗を試みつつも、先手にミスがない限りは厳しい局面です。
 正確な着手による終盤戦の寄せを意識してください。`;
-          } else if (evalVal <= -150 && evalVal > -800) {
+          } else if (evalVal <= -120 && evalVal > -800) {
             commentary = `後手が陣形の効率性、あるいは部分的な戦術アドバンテージにより、ややペースを掴んでいる局面です。
 後手は「${bestMove}」などを通じて、さらなる攻勢を組み立てることが可能です。
 手番である ${turnJp} としては、先手であれば焦って無理な攻めを仕掛けるのではないか、粘り強い受けで形勢の挽回を図る必要があります。`;
