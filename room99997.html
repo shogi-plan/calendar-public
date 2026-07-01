@@ -469,8 +469,8 @@
         <span id="ai-eval-score" style="color: #333; font-family: monospace;">未解析</span>
         <span style="color: #4caf50;">後手 △</span>
       </div>
-      <div id="ai-chart-canvas-container" style="position: relative; width: 100%; height: 120px; background: #fff; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);">
-        <div style="text-align: center; color: #aaa; font-size: 11px; padding-top: 50px;">任意の局面をタップするか、下のボタンで解析を開始してください</div>
+      <div id="ai-chart-canvas-container" style="position: relative; width: 100%; height: 180px; background: #fff; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="text-align: center; color: #aaa; font-size: 11px; padding-top: 80px;">任意の局面をタップするか、下のボタンで解析を開始してください</div>
       </div>
     </div>
 
@@ -3477,20 +3477,20 @@
 
     const currentLine = buildActiveLine();
     if (currentLine.length === 0) {
-      container.innerHTML = `<div style="text-align: center; color: #aaa; font-size: 11px; padding-top: 50px;">棋譜がありません</div>`;
+      container.innerHTML = `<div style="text-align: center; color: #aaa; font-size: 11px; padding-top: 80px;">棋譜がありません</div>`;
       return;
     }
 
     const width = 500;
-    const height = 120;
+    const height = 180; // 親コンテナにあわせて高さを180に拡張
     const paddingX = 20;
-    const paddingY = 1; // 極限まで余白を削減 (vertical padding to minimum)
+    const paddingY = 12; // プロットやラベルが切れない最小パディング
     const chartW = width - paddingX * 2;
     const chartH = height - paddingY * 2;
-    const centerY = height / 2; // 60
+    const centerY = height / 2; // 90
 
     // Calculate dynamic vertical scale based on the maximum absolute score found
-    let maxAbsScore = 300; // sensible default minimum to show fluctuations clearly
+    let maxAbsScore = 100; // 序盤の微細な変動を大きく表示させるため、300から100へ引き下げ
     currentLine.forEach((h, i) => {
       if (i > 0 && typeof h.evalVal === 'number') {
         const abs = Math.abs(h.evalVal);
@@ -3502,11 +3502,13 @@
       }
     });
 
-    // Round maxAbsScore up to nearest 100 for tighter fit
-    if (maxAbsScore <= 1000) {
-      maxAbsScore = Math.ceil(maxAbsScore / 100) * 100;
+    // 縦余白を一切出さないために、丸めを極限まで細かくします (Tight Fitting)
+    if (maxAbsScore <= 500) {
+      maxAbsScore = Math.ceil(maxAbsScore / 20) * 20; // 20刻みでピッタリ合わせる
+    } else if (maxAbsScore <= 2000) {
+      maxAbsScore = Math.ceil(maxAbsScore / 100) * 100; // 100刻み
     } else {
-      maxAbsScore = Math.ceil(maxAbsScore / 500) * 500;
+      maxAbsScore = Math.ceil(maxAbsScore / 500) * 500; // 500刻み
     }
 
     // Build points
@@ -3517,7 +3519,7 @@
         score = 0;
         isEvaluated = true; // Start position is always 0
       } else if (typeof h.evalVal === 'number') {
-        score = h.evalVal;
+        score = Math.round(h.evalVal);
         isEvaluated = true;
       }
 
@@ -3534,7 +3536,7 @@
         index: i,
         x: x,
         y: y,
-        score: score,
+        score: Math.round(score),
         isEvaluated: isEvaluated,
         moveText: i === 0 ? "開始" : formatKifuTextForBranch(h, i)
       };
@@ -3548,14 +3550,14 @@
     svgHtml += `<line x1="${paddingX}" y1="${centerY}" x2="${width - paddingX}" y2="${centerY}" stroke="#ccc" stroke-dasharray="3,3" stroke-width="1.5" />`;
     
     // Dynamic +halfScore and -halfScore guide lines
-    const halfScore = maxAbsScore / 2;
+    const halfScore = Math.round(maxAbsScore / 2);
     const yUpper = centerY - (halfScore / maxAbsScore) * (chartH / 2);
     const yLower = centerY + (halfScore / maxAbsScore) * (chartH / 2);
     
     svgHtml += `<line x1="${paddingX}" y1="${yUpper}" x2="${width - paddingX}" y2="${yUpper}" stroke="#e0e0e0" stroke-dasharray="2,4" stroke-width="1" />`;
     svgHtml += `<line x1="${paddingX}" y1="${yLower}" x2="${width - paddingX}" y2="${yLower}" stroke="#e0e0e0" stroke-dasharray="2,4" stroke-width="1" />`;
 
-    // Scale labels
+    // Scale labels (Ensure Math.round to strictly avoid decimals)
     svgHtml += `<text x="${paddingX}" y="${yUpper - 3}" font-size="9px" fill="#9e9e9e" font-family="monospace" font-weight="bold">+${Math.round(halfScore)}</text>`;
     svgHtml += `<text x="${paddingX}" y="${yLower + 10}" font-size="9px" fill="#9e9e9e" font-family="monospace" font-weight="bold">-${Math.round(halfScore)}</text>`;
 
@@ -3782,27 +3784,42 @@
     }
 
     // 100%クライアントサイド・完全に通信不要なローカル将棋解析エンジン
-      const analyzeWithLocalEngine = () => {
-        try {
-          if (statusLabel) statusLabel.textContent = "ローカルAI分析中...";
-          
-          const currentBoard = rvState ? rvState.board : state.board;
-          const currentHandS = rvState ? rvState.handS : state.handS;
-          const currentHandG = rvState ? rvState.handG : state.handG;
-          const turn = rvState ? rvState.turn : state.turn;
+    const analyzeWithLocalEngine = () => {
+      try {
+        if (statusLabel) statusLabel.textContent = "ローカルAI分析中...";
+        
+        const currentBoard = rvState ? rvState.board : state.board;
+        const currentHandS = rvState ? rvState.handS : state.handS;
+        const currentHandG = rvState ? rvState.handG : state.handG;
+        const turn = rvState ? rvState.turn : state.turn;
 
-          const SYMBOLS_JP = {
-            'FU': '歩', 'KY': '香', 'KE': '桂', 'GI': '銀', 'KI': '金', 'KA': '角', 'HI': '飛', 'OU': '玉',
-            'TO': 'と', 'NY': '成香', 'NK': '成桂', 'NG': '成銀', 'UM': '馬', 'RY': '竜'
-          };
+        const SYMBOLS_JP = {
+          'FU': '歩', 'KY': '香', 'KE': '桂', 'GI': '銀', 'KI': '金', 'KA': '角', 'HI': '飛', 'OU': '玉',
+          'TO': 'と', 'NY': '成香', 'NK': '成桂', 'NG': '成銀', 'UM': '馬', 'RY': '竜'
+        };
 
-          const PIECE_VALUES = {
-            'FU': 100, 'KY': 430, 'KE': 450, 'GI': 640, 'KI': 690, 'KA': 890, 'HI': 990, 'OU': 15000,
-            'TO': 720, 'NY': 720, 'NK': 720, 'NG': 720, 'UM': 1150, 'RY': 1260
-          };
+        const PIECE_VALUES = {
+          'FU': 100, 'KY': 430, 'KE': 450, 'GI': 640, 'KI': 690, 'KA': 890, 'HI': 990, 'OU': 15000,
+          'TO': 720, 'NY': 720, 'NK': 720, 'NG': 720, 'UM': 1150, 'RY': 1260
+        };
 
-          const PROMOTE_MAP = { FU:'TO', KY:'NY', KE:'NK', GI:'NG', KA:'UM', HI:'RY' };
-          const UNPROMOTE_MAP = { TO:'FU', NY:'KY', NK:'KE', NG:'GI', UM:'KA', RY:'HI' };
+        const PROMOTE_MAP = { FU:'TO', KY:'NY', KE:'NK', GI:'NG', KA:'UM', HI:'RY' };
+        const UNPROMOTE_MAP = { TO:'FU', NY:'KY', NK:'KE', NG:'GI', UM:'KA', RY:'HI' };
+
+        // 盤面のハッシュキー（置換表キャッシュ用）を生成
+        const getBoardKey = (b, hS, hG, side) => {
+          let key = side + ":";
+          for (let y = 0; y < 9; y++) {
+            for (let x = 0; x < 9; x++) {
+              const p = b[y][x];
+              if (p) {
+                key += `${x}${y}${p.type}${p.owner},`;
+              }
+            }
+          }
+          key += "H:" + (hS || []).join("") + "/" + (hG || []).join("");
+          return key;
+        };
 
           // 盤上の全マスの利き（Control）テーブルを計算
           const computeControlMap = (b) => {
@@ -3824,7 +3841,7 @@
             return { controlS, controlG };
           };
 
-          // 局面評価関数（高度な駒割 ＋ 利き・危険度 ＋ 玉の安全度 ＋ 位置・城・王の距離・大駒の機動力評価）
+          // 局面評価関数（駒割 ＋ 利き・危険度 ＋ 玉の安全度 ＋ 位置・城（囲い）・王の距離・大駒の機動力評価）
           const evaluatePosition = (b, hs, hg) => {
             let score = 0;
             
@@ -3918,7 +3935,6 @@
                   if (p.type !== 'OU') {
                     const myCtrl = p.owner === 'S' ? controlS[y][x] : controlG[y][x];
                     const oppCtrl = p.owner === 'S' ? controlG[y][x] : controlS[y][x];
-
                     if (oppCtrl > 0) {
                       if (myCtrl === 0) {
                         score += p.owner === 'S' ? -val * 0.5 : val * 0.5; // タダ取り危険性
@@ -3956,25 +3972,78 @@
               }
             }
 
-            // 3. 王の位置（囲い・退避安全性）ボーナス
-            if (skx !== -1) {
+            // 3. 王の位置（囲い・退避安全性）ボーナス（やねうら王の陣形・城配置を緻密に再現）
+            if (skx !== -1 && sky !== -1) {
               if (sky >= 7 && skx !== 4) {
                 score += 80; // 囲い・居玉回避ボーナス
               } else if (skx === 4) {
-                score -= 40; // 居玉ペナルティ
+                score -= 60; // 居玉ペナルティを強化
               }
               if (sky <= 5) {
                 score -= 150; // 王が前に出過ぎる危険
               }
+
+              // 【城（囲い）判定】
+              // 穴熊 (先手)
+              if (skx === 0 && sky === 8) {
+                let count = 0;
+                if (b[7][0]?.type === 'KY' && b[7][0]?.owner === 'S') count++;
+                if (b[7][1]?.type === 'GI' && b[7][1]?.owner === 'S') count++;
+                if (b[8][1]?.type === 'KI' && b[8][1]?.owner === 'S') count++;
+                if (b[8][2]?.type === 'KI' && b[8][2]?.owner === 'S') count++;
+                score += count * 60;
+              }
+              // 美濃囲い (先手)
+              else if ((skx === 1 || skx === 2) && sky === 7) {
+                let count = 0;
+                if (b[8][1]?.type === 'GI' && b[8][1]?.owner === 'S') count++;
+                if (b[8][2]?.type === 'KI' && b[8][2]?.owner === 'S') count++;
+                if (b[8][3]?.type === 'KI' && b[8][3]?.owner === 'S') count++;
+                score += count * 45;
+              }
+              // 矢倉 (先手)
+              else if ((skx === 1 || skx === 2) && sky === 7) {
+                let count = 0;
+                if (b[6][2]?.type === 'GI' && b[6][2]?.owner === 'S') count++;
+                if (b[6][3]?.type === 'KI' && b[6][3]?.owner === 'S') count++;
+                if (b[7][2]?.type === 'KI' && b[7][2]?.owner === 'S') count++;
+                score += count * 40;
+              }
             }
-            if (gkx !== -1) {
+            if (gkx !== -1 && gky !== -1) {
               if (gky <= 1 && gkx !== 4) {
                 score -= 80;
               } else if (gkx === 4) {
-                score += 40;
+                score += 60;
               }
               if (gky >= 3) {
                 score += 150;
+              }
+
+              // 穴熊 (後手)
+              if (gkx === 0 && gky === 0) {
+                let count = 0;
+                if (b[1][0]?.type === 'KY' && b[1][0]?.owner === 'G') count++;
+                if (b[1][1]?.type === 'GI' && b[1][1]?.owner === 'G') count++;
+                if (b[0][1]?.type === 'KI' && b[0][1]?.owner === 'G') count++;
+                if (b[0][2]?.type === 'KI' && b[0][2]?.owner === 'G') count++;
+                score -= count * 60;
+              }
+              // 美濃囲い (後手)
+              else if ((gkx === 1 || gkx === 2) && gky === 1) {
+                let count = 0;
+                if (b[0][1]?.type === 'GI' && b[0][1]?.owner === 'G') count++;
+                if (b[0][2]?.type === 'KI' && b[0][2]?.owner === 'G') count++;
+                if (b[0][3]?.type === 'KI' && b[0][3]?.owner === 'G') count++;
+                score -= count * 45;
+              }
+              // 矢倉 (後手)
+              else if ((gkx === 1 || gkx === 2) && gky === 1) {
+                let count = 0;
+                if (b[2][2]?.type === 'GI' && b[2][2]?.owner === 'G') count++;
+                if (b[2][3]?.type === 'KI' && b[2][3]?.owner === 'G') count++;
+                if (b[1][2]?.type === 'KI' && b[1][2]?.owner === 'G') count++;
+                score -= count * 40;
               }
             }
 
@@ -3986,7 +4055,7 @@
               hg.forEach(type => { score -= (PIECE_VALUES[type] || 0) * 1.15; });
             }
 
-            return Math.round(score);
+            return Math.round(score); // 確実に四捨五入して整数値にする
           };
 
           // 合法手一覧を列挙
@@ -4067,7 +4136,7 @@
                 }
               }
               if (kingY !== -1 && Math.abs(m.toX - kingX) <= 2 && Math.abs(m.toY - kingY) <= 2) {
-                return 200 + (PIECE_VALUES[m.type] || 0) * 0.1; // 敵王周囲への打
+                return Math.round(200 + (PIECE_VALUES[m.type] || 0) * 0.1); // 敵王周囲への打
               }
               return 100;
             } else {
@@ -4079,23 +4148,42 @@
               if (m.isPromoted) {
                 score += 500; // 成り駒
               }
-              return score;
+              return Math.round(score);
             }
           };
 
           let nodesEvaluated = 0;
-          const MAX_NODES = 4500; // 応答性と快適性を保つためのノード数上限
+          const MAX_NODES = 6000; // 置換表導入により探索ノード制限を効率的に拡大
+          const transpositionTable = new Map(); // 置換表
 
-          // アルファベータ法による探索（深さ制限 ＋ 高速枝刈り）
+          // アルファベータ法による探索（置換表キャッシュ＋深さ制限3（計4手読み）＋高速枝刈り）
           const alphaBeta = (b, hS, hG, depth, alpha, beta, side) => {
             nodesEvaluated++;
-            if (depth === 0 || nodesEvaluated >= MAX_NODES) {
-              return evaluatePosition(b, hS, hG);
+            if (nodesEvaluated >= MAX_NODES) {
+              return Math.round(evaluatePosition(b, hS, hG));
+            }
+
+            const stateKey = getBoardKey(b, hS, hG, side);
+            if (transpositionTable.has(stateKey)) {
+              const cached = transpositionTable.get(stateKey);
+              if (cached.depth >= depth) {
+                return Math.round(cached.score);
+              }
+            }
+
+            if (depth === 0) {
+              const scoreVal = Math.round(evaluatePosition(b, hS, hG));
+              transpositionTable.set(stateKey, { depth, score: scoreVal });
+              return scoreVal;
             }
 
             const moves = generateAllLegalMoves(b, hS, hG, side);
             if (moves.length === 0) {
-              return side === 'S' ? -15000 + (3 - depth) : 15000 - (3 - depth); // 詰み
+              const scoreVal = side === 'S' 
+                ? Math.round(-15000 + (4 - depth)) 
+                : Math.round(15000 - (4 - depth)); // 詰み
+              transpositionTable.set(stateKey, { depth, score: scoreVal });
+              return scoreVal;
             }
 
             moves.forEach(m => {
@@ -4112,7 +4200,9 @@
                 alpha = Math.max(alpha, scoreVal);
                 if (beta <= alpha) break; // β枝刈り
               }
-              return maxEval;
+              const finalEval = Math.round(maxEval);
+              transpositionTable.set(stateKey, { depth, score: finalEval });
+              return finalEval;
             } else {
               let minEval = Infinity;
               for (let i = 0; i < moves.length; i++) {
@@ -4122,23 +4212,29 @@
                 beta = Math.min(beta, scoreVal);
                 if (beta <= alpha) break; // α枝刈り
               }
-              return minEval;
+              const finalEval = Math.round(minEval);
+              transpositionTable.set(stateKey, { depth, score: finalEval });
+              return finalEval;
             }
           };
 
           // 1手目のすべての合法手を生成
           const legalMoves = generateAllLegalMoves(currentBoard, currentHandS, currentHandG, turn);
 
-          // すべての合法手に対し、1手進めた上で深さ2の先読み（計3手読み）を実行
+          // すべての合法手に対し、1手進めた上で深さ3の先読み（計4手読み）を実行
           const scoredMoves = [];
+          transpositionTable.clear(); // 新たな局面解析が開始されるたびにキャッシュを新鮮に
+          
           legalMoves.forEach(m => {
             const { nextBoard, nextHandS, nextHandG } = makeMove(currentBoard, currentHandS, currentHandG, m, turn);
             nodesEvaluated = 0; // 各ブランチごとにカウントリセットし、均等かつ最深の探索を担保
             
-            // 相手番から開始する深さ2のα-β探索（自身の指し手 ＋ 相手の全応手への最善予測）
-            const scoreAfter = alphaBeta(nextBoard, nextHandS, nextHandG, 2, -Infinity, Infinity, turn === 'S' ? 'G' : 'S');
-            scoredMoves.push({ move: m, score: scoreAfter });
+            // 相手番から開始する深さ3のα-β探索（自身の指し手 ＋ 相手の全応手への最善予測 ＝ 合計4手読み）
+            const scoreAfter = alphaBeta(nextBoard, nextHandS, nextHandG, 3, -Infinity, Infinity, turn === 'S' ? 'G' : 'S');
+            scoredMoves.push({ move: m, score: Math.round(scoreAfter) });
           });
+
+
 
           // 手番に応じてソート（先手：高い順、後手：低い順）
           if (turn === 'S') {
